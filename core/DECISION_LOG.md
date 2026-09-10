@@ -5,6 +5,106 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — G1 manifest proposal; the pre-adoption boundary; two GPT-PM REJECTs
+
+**Decision:** G1 splits at the binding manifest. Everything before it — a non-binding manifest
+proposal, its validation, and the pre-adoption evidence — proceeds now. Everything after it — the
+document corrections R11/R12/R13 make necessary, the negative-control PRs, the fresh review, the
+closure report — waits for an operator-adopted `governance/gate-manifests/g1.yaml` and an
+operator-set `GATE_MANIFEST_APPROVED_HASH_G1`. New artifacts:
+`governance/plans/G1_MANIFEST_PROPOSAL.yaml` and `governance/plans/G1_PREADOPTION_EVIDENCE.md`,
+both explicitly non-binding.
+
+**Why:** The operator settled R11/R12/R13 (repository made public; pushes are theirs alone) and
+asked for the manifest. Two GPT-PM reviews then reshaped the plan, and both were right:
+
+- **REJECT #1** (plan `…-25852d`, hash `e9c67bc…`) — 1 BLOCKER, 3 MAJOR. The BLOCKER: the plan
+  performed real G1 document remediation before any binding manifest existed. One MAJOR corrected
+  GPT-PM's own earlier instruction: a manifest must cover the **cumulative** PR merge range, not
+  just remaining work, because the guard evaluates `git diff BASE_SHA...HEAD_SHA` — a manifest
+  built from future actions alone would fail on paths the branch already carries. Another
+  forbade handing the operator the proposal's hash as the approval hash. The last narrowed R13:
+  CODEOWNERS cannot mechanically prove operator-vs-implementer separation under one account — but
+  it does **not** follow that every GitHub control is procedural.
+- **REJECT #2** (plan `…-3e3b44`, hash `850b72d…`) — 1 BLOCKER: the plan listed already-executed
+  steps as DONE while requesting the APPROVE that would authorize them. Act → Plan → GO, the same
+  defect this repository had just reconciled for its earlier history.
+- **APPROVE** (plan `…-cd44c5`, hash `0305b98…`, reply `ffa0eaa8…`) — 0/0, after rev3 was rebuilt
+  as a reconciliation record with an immutable AS-OF cutoff of 2026-09-10T20:40:35Z. Items H1-H7
+  stay `governed=false` permanently; only F8-F12 are authorized by that verdict.
+
+**Evidence:** The proposal validates through the production reader and matcher themselves —
+`parsePathList`, `compilePattern`, `checkScope` imported from `scripts/verify/check-gate-scope.mjs`,
+not a second parser written for the occasion: 24 `allowed_paths`, 4 `forbidden_paths`, all 24
+changed paths in scope, **17 negative controls refused**, 11 positive controls accepted, no bare
+`**`. `npm run verify` green with 88 tests, `npm run verify:mutation` with all 30 mutations killed,
+`prettier --check` clean. `proposal_sha256` =
+`929849f97c51195768b09dce7401f50702bdd9eecb66d5b52c5157ff81ddbdd1` (17461 bytes), recorded as
+evidence of what was reviewed and explicitly **not** as the approval hash. It supersedes
+`3b0c9cc…`, which was the digest before limitation 5 was added; the earlier value appears in the
+approved plan text and is left there rather than back-edited, since a plan hash is fixed at
+approval.
+
+**A GPT-PM claim rejected on evidence:** REJECT #2 asserted that `G1_PREADOPTION_EVIDENCE.md` had
+already been created and must be classified as historical. It had not. `ls governance/plans/` and
+`git status --short` both showed otherwise. Recording a mutation that never happened corrupts an
+audit trail as surely as omitting one that did, so it was classified as future work and the
+correction was put to GPT-PM, which accepted it.
+
+**A withdrawal of this session's own, then withdrawn in turn:** an earlier session recorded that
+`/branches/main/protection` answers `Branch not protected`. Probing it unauthenticated returned
+HTTP 401, so it was written up as unreproducible and withdrawn. Once the operator authenticated
+`gh`, the same endpoint returned **HTTP 404 `{"message":"Branch not protected"}`** — verbatim the
+original claim. **The earlier claim was right and the withdrawal was wrong.** The error was letting
+"I could not reproduce it" stand for "it is not true", when the two differ by exactly the
+credential the probe lacked; a failed measurement is evidence about the measurement first. The
+conclusion never moved, only the reason under it, which is what made the mistake easy to write
+down. Both versions are kept in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §5.
+
+**The finding that matters most in this entry, and it undercuts a premise of the G1 design.** The
+operator installed and then token-authenticated the GitHub CLI during this plan. `gh auth status`
+now reports a classic PAT for `xLZDx` carrying `repo`, `workflow`, `admin:org`, `admin:repo_hook`,
+`admin:enterprise` and more, and `.permissions` on this repository is `{"admin":true,…}`. The
+manifest-integrity mechanism is built on the approved hash living _outside the implementer's
+reach_ — `GATE_MANIFEST_INTEGRITY.md` says so, and the proposal said so. **It does not.** The same
+session that authors a manifest can set `GATE_MANIFEST_APPROVED_HASH_G1`, adopt a manifest and set
+the hash to match it — NM3's self-authorizing loop exactly — remove branch protection, edit the
+Governance workflow, and merge its own PR. None of that will be done; the point is that none of it
+is _prevented_. Every control here described as operator-held is procedural as of now. Measured,
+with the three ways to restore the mechanical property, in `G1_PREADOPTION_EVIDENCE.md` §3.1;
+limitation 5 of the proposal now says the same. The choice between a fine-grained token, a
+hand-operated admin path, and an explicit acceptance of the procedural model is the operator's and
+is unanswered.
+
+**Measured capability, because R13 is about what the credential can do and not what the account is
+called:** every commit here — five on `main`, three on the branch — is authored by the single
+identity `xLZDx <25364989+xLZDx@users.noreply.github.com>`, and `main` took five direct pushes. At
+the AS-OF cutoff this session had no `gh`, no `GH_TOKEN`/`GITHUB_TOKEN`, no gh config, and no
+authenticated REST access; it could push to any branch and do nothing through the API. GitHub CLI
+2.100.0 was then installed on the operator's direct instruction ("установи gh"), and the operator
+then authenticated it with a token of their own ("логин через токен") — the credential was never
+requested, seen or handled by the implementer. Both acts are authorized by the operator's own word
+and are nevertheless `governed=false` in Rosetta, since no plan covered them: two independent
+layers, exactly as `60c2aeb` already recorded. What that authentication then revealed is the
+preceding paragraph, and it is the reason this entry is not a routine one.
+
+**Still false in the repository, deliberately not fixed here:**
+`governance/GATE_MANIFEST_INTEGRITY.md:31` ("`main` is a protected branch. The implementer has no
+direct-push and no merge permission"), the same file's line 34, and `.github/CODEOWNERS:3-5`
+("the control that actually enforces"). All three are contradicted by the measurements above and
+all three are G1 remediation, which the pre-adoption boundary defers. They are catalogued with
+file:line in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §4.
+
+**How to apply:** Do not read the proposal as a manifest — it has no authority until the operator
+adopts a copy under `governance/gate-manifests/` and sets the hash, and the adopted copy cannot be
+this file byte-for-byte (it would assert `HAS_NO_AUTHORITY` about itself). Before repeating any
+claim that a control here is enforced, check §1-§4 of the evidence artifact: as of this entry, the
+only evidence this project has is local. When the PR is opened, `Governance` is **expected to
+fail** at the manifest step — that failure is the first observation of the guard refusing anything,
+and a pass would mean the check is broken.
+
+---
+
 ## 2026-09-10 — Governance debt reconciled: the session's work ran without an approved plan
 
 **Decision:** A retrospective Rosetta plan now reconciles every mutation made in this session.

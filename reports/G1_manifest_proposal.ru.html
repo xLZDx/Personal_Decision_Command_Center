@@ -1,0 +1,896 @@
+<title>Преадопционная граница G1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Гейт G1 · Преадопция</p>
+    <h1>Манифест G1: предложение, а не полномочие</h1>
+    <p class="standfirst">
+      Манифест написан, проверен тем же кодом, что исполняет CI, и намеренно оставлен
+      необязывающим. Попутно выяснилось, что механизм, который он обслуживает, опирается на
+      предпосылку, которая на этой машине больше не выполняется.
+    </p>
+    <div class="masthead-meta">
+      <span>10 сентября 2026</span>
+      <span>ветка gate/g1-remediation</span>
+      <span>24 пути · 17 отрицательных контролей</span>
+      <span>G1 НЕ закрыт</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 60c2aeb</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Копировать страницу" data-done="Скопировано"
+          data-fail="Выделите вручную">Копировать страницу</button>
+</div>
+<!-- report-conform:end -->
+
+  <div class="verdict">
+    <span class="stamp">VERDICT: APPROVE</span>
+    <p>
+      0 BLOCKER, 0 MAJOR — на третьей редакции плана. Первые две получили
+      <strong>REJECT</strong>, и оба были по делу: первая делала настоящую ремедиацию документов
+      G1 до того, как появился обязывающий манифест; вторая просила APPROVE на шаги, которые уже
+      были выполнены.
+    </p>
+    <p class="who">
+      GPT-PM · план personal-decision-os-2026-09-10T20-41-20-095Z-cd44c5 · хеш 0305b98… · ответ
+      ffa0eaa8…
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">01</span>
+      <div><h2>Что именно сделано</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Создан <code>governance/plans/G1_MANIFEST_PROPOSAL.yaml</code> — черновик манифеста гейта,
+        написанный исполнителем. Он лежит в <code>plans/</code>, а не в
+        <code>gate-manifests/</code>, и это не мелочь оформления: манифест, который исполнитель
+        может свободно править в своей же ветке, не имеет полномочий вообще (INV-28). Файл несёт
+        маркеры <code>NON_BINDING_PROPOSAL</code>, <code>IMPLEMENTER_AUTHORED</code>,
+        <code>HAS_NO_AUTHORITY</code> и продиктованный GPT-PM заголовок.
+      </p>
+      <p>
+        <strong>24 записи <code>allowed_paths</code>, 4 записи <code>forbidden_paths</code>, ни
+        одного голого <code>**</code>.</strong> Каждая запись помечена, откуда она взялась:
+        <code>[CUMULATIVE]</code> — путь уже есть в diff ветки, <code>[REMAINING]</code> — нужен
+        оставшемуся действию закрытия, <code>[BOTH]</code> — и то и другое.
+      </p>
+      <div class="note">
+        <strong>Почему кумулятивно, а не «только то, что осталось».</strong> Страж считает
+        <code>git diff BASE_SHA...HEAD_SHA</code>, то есть проверяет весь диапазон слияния PR, а не
+        последний коммит. Манифест, перечисляющий одни будущие действия, провалил бы проверку на
+        путях, которые ветка уже несёт — ровно в тот момент, когда его приняли бы. Это поправка
+        GPT-PM к своей же более ранней инструкции, и она верная.
+      </div>
+      <p class="kicker">Валидация — тем же кодом, который исполняет CI</p>
+      <p>
+        Проверка импортирует <code>parsePathList</code>, <code>compilePattern</code> и
+        <code>checkScope</code> прямо из
+        <code>scripts/verify/check-gate-scope.mjs</code>, а не повторяет их более снисходительной
+        копией «для случая». Дефект в настоящем стороже обязан всплыть здесь, а не спрятаться.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Результаты прогона предложения через продакшн-парсер и матчер.</caption>
+          <thead>
+            <tr><th>Проверка</th><th class="num-col">Результат</th><th>Что это доказывает</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Пути ветки против scope</td>
+              <td class="num-col">24 / 24</td>
+              <td>Ни один существующий путь не выпадает из предложенного диапазона слияния</td>
+            </tr>
+            <tr>
+              <td>Отрицательные контроли</td>
+              <td class="num-col">17 отклонено</td>
+              <td>Scope <em>действительно отказывает</em>: сам обязывающий манифест, записи
+                одобрений оператора, замороженный TDD, контракты, ADR, артефакты G0 — и случаи,
+                где <code>*</code> не должен пересекать <code>/</code></td>
+            </tr>
+            <tr>
+              <td>Положительные контроли</td>
+              <td class="num-col">11 принято</td>
+              <td>Каждый путь, нужный оставшейся работе по закрытию G1, проходит</td>
+            </tr>
+            <tr>
+              <td><code>npm run verify</code></td>
+              <td class="num-col">88 тестов</td>
+              <td>Зелено; prettier, eslint, tsc чисты</td>
+            </tr>
+            <tr>
+              <td><code>npm run verify:mutation</code></td>
+              <td class="num-col">30 / 30</td>
+              <td>Все мутации убиты — стражи кусаются</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>proposal_sha256</code> =
+        <code>929849f97c51195768b09dce7401f50702bdd9eecb66d5b52c5157ff81ddbdd1</code> (17461 байт).
+        Это <strong>свидетельство того, что было прочитано, и не хеш одобрения</strong>. Хеш
+        одобрения обязан считаться с того файла, который вы реально примете, а этот файл им быть не
+        может: скопированный дословно, он утверждал бы про себя <code>HAS_NO_AUTHORITY</code>.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02</span>
+      <div><h2>Находка, которая важнее самого манифеста</h2></div>
+    </div>
+    <div class="flow">
+      <div class="alarm">
+        <h3>Хеш одобрения не находится вне досягаемости исполнителя</h3>
+        <p>
+          Весь механизм целостности манифеста построен на том, что одобренный хеш живёт
+          <em>вне</em> досягаемости исполнителя. Так написано в
+          <code>GATE_MANIFEST_INTEGRITY.md</code>, так было написано и в самом предложении.
+          <strong>Это не так.</strong>
+        </p>
+        <p>
+          После вашего входа в <code>gh</code> измерено: классический PAT аккаунта
+          <code>xLZDx</code> со scope <code>repo</code>, <code>workflow</code>,
+          <code>admin:org</code>, <code>admin:repo_hook</code>, <code>admin:enterprise</code> и
+          другими; <code>.permissions</code> на этом репозитории — <code>{"admin":true,…}</code>.
+          Та же сессия, что пишет манифест, может:
+        </p>
+        <ul>
+          <li>установить <code>GATE_MANIFEST_APPROVED_HASH_G1</code>;</li>
+          <li>принять манифест и подогнать хеш под него — это ровно самоавторизующая петля NM3,
+            ради которой механизм и существует;</li>
+          <li>снять или ослабить защиту ветки;</li>
+          <li>отредактировать workflow <code>Governance</code>, который её же и полицейски
+            проверяет;</li>
+          <li>смержить собственный PR.</li>
+        </ul>
+        <p>
+          Ничего из этого сделано не будет. Смысл в другом: ничего из этого не
+          <strong>предотвращено</strong>. Всякий контроль, описанный здесь как «удерживаемый
+          оператором», на сегодня <strong>процедурный</strong> — он держится на том, что
+          исполнитель не делает то, что вполне может.
+        </p>
+      </div>
+      <p>
+        Токен классический, а не fine-grained, поэтому границы по репозиториям у него нет: то же
+        верно для любого другого репозитория, до которого дотягивается аккаунт. Это уже за
+        пределами G1, но знать это вам стоит.
+      </p>
+      <p class="kicker">Три способа вернуть механическое свойство — выбор ваш</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Ни один из вариантов не выбирается исполнителем.</caption>
+          <thead>
+            <tr><th>Вариант</th><th>Что даёт</th><th>Чем платите</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Fine-grained токен на этот репозиторий</td>
+              <td>Без <code>administration</code> и без записи в <code>variables</code>/
+                <code>secrets</code>. Хеш снова недосягаем; <code>contents</code> и
+                <code>pull_requests</code> остаются</td>
+              <td>Административные операции придётся делать вручную</td>
+            </tr>
+            <tr>
+              <td>Широкий токен вне окружения агента</td>
+              <td>Те же гарантии, без перевыпуска токена</td>
+              <td>Каждый админ-шаг — ваш, вручную</td>
+            </tr>
+            <tr>
+              <td>Явно принять процедурную модель</td>
+              <td>Ничего не менять в доступах</td>
+              <td>Документы обязаны перестать называть эти контроли механическими</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Третий вариант — то, что документы репозитория сегодня фактически делают, не признавая
+        этого. Первый и второй — то, что они <em>описывают</em>.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">03</span>
+      <div><h2>Измеренные факты по R11 / R12 / R13</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>Всё получено из первичных источников в этой сессии, а не из пересказа.</caption>
+          <thead>
+            <tr><th>Риск</th><th>Состояние</th><th>Чем подтверждено</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>R11</strong><br>биллинг Actions</td>
+              <td><span class="chip part">открыт</span></td>
+              <td>Во всей истории репозитория <strong>два</strong> прогона, оба
+                <code>steps: 0</code>, 3–4 секунды, оба <em>до</em> публикации. Ни один шаг не
+                исполнялся никогда. Публичность <em>должна</em> была снять блок, но это
+                <strong>не проверено</strong>: с публикации не возникло ни одного события,
+                запускающего прогон. Закрывает его один PR — в этом весь тест</td>
+            </tr>
+            <tr>
+              <td><strong>R12</strong><br>защита ветки</td>
+              <td><span class="chip part">доступна, не включена</span></td>
+              <td><code>private: false</code>, <code>visibility: public</code> — успех
+                <em>неаутентифицированного</em> запроса сам по себе это и доказывает. <code>/branches</code>
+                даёт <code>protected: false</code> и для <code>main</code>, и для ветки гейта.
+                Прежняя предпосылка R12 (нужен платный план) отпала</td>
+            </tr>
+            <tr>
+              <td><strong>R13</strong><br>идентичность исполнителя</td>
+              <td><span class="chip block">подтверждён</span></td>
+              <td>Все восемь коммитов — пять на <code>main</code>, три на ветке — подписаны одной
+                идентичностью <code>xLZDx &lt;25364989+xLZDx@users.noreply.github.com&gt;</code>, и
+                <code>main</code> принял пять прямых пушей</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <strong>R13 сформулирован узко, и это принципиально.</strong> Верно: CODEOWNERS не может
+        механически доказать разделение оператора и исполнителя, когда оба — <code>xLZDx</code>;
+        GitHub запрещает автору одобрять собственный PR, поэтому «требовать ревью code owner» плюс
+        один аккаунт — это тупик, а не контроль. <strong>Неверно</strong> выводить отсюда, что
+        GitHub вообще ничего не может: требовать PR, требовать зелёные проверки, запрещать
+        force-push и удаление и распространять это на администратора он умеет, и ни одно из этого
+        не зависит от различения двух людей.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">04</span>
+      <div><h2>Две поправки к уже сказанному</h2></div>
+    </div>
+    <div class="defects">
+      <div class="defect">
+        <span class="idx">1</span>
+        <div>
+          <h3>Утверждение GPT-PM, отклонённое по фактам</h3>
+          <p>
+            Во втором REJECT сказано, что <code>G1_PREADOPTION_EVIDENCE.md</code> уже создан и его
+            надо отнести к историческим действиям. Он не был создан.
+            <code>git status --short</code> показывал ровно один неотслеживаемый путь, и это был
+            не он.
+          </p>
+          <p class="why">
+            Записать мутацию, которой не было, портит аудит так же надёжно, как умолчать о
+            бывшей. Файл отнесён к будущим шагам, поправка передана GPT-PM, и оно её приняло.
+          </p>
+        </div>
+      </div>
+      <div class="defect">
+        <span class="idx">2</span>
+        <div>
+          <h3>Собственная отмена, которую пришлось отменить</h3>
+          <p>
+            Более ранняя запись сессии утверждала, что
+            <code>/branches/main/protection</code> отвечает <code>Branch not protected</code>.
+            Неаутентифицированная проверка дала <strong>HTTP 401</strong>, и я записал это как
+            невоспроизводимое и отозвал. После вашего входа в <code>gh</code> тот же эндпоинт
+            ответил <strong>HTTP 404 <code>{"message":"Branch not protected"}</code></strong> —
+            дословно то, что там и было. <strong>Изначальное утверждение верно, отмена — нет.</strong>
+          </p>
+          <p class="why">
+            Ошибка в том, что «не смог воспроизвести» подменило собой «неправда», хотя эти вещи
+            различаются ровно на те права, которых у пробы не было. Неудачное измерение — это
+            прежде всего свидетельство о самом измерении. Вывод при этом не менялся ни разу,
+            менялось только основание под ним, — потому ошибку и было легко записать.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">05</span>
+      <div><h2>План и что по нему вышло</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Шаги H1–H7 выполнены <em>до</em> одобрения и остаются <code>governed=false</code>
+        навсегда: APPROVE их не легализует задним числом. Это и есть смысл рубежа AS-OF
+        <code>2026-09-10T20:40:35Z</code>.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Definition of Done в каждой строке — критерий GPT-PM, не мой.</caption>
+          <thead>
+            <tr><th>Шаг</th><th>Definition of Done</th><th>Статус</th><th>Хвост</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>H1 · перепроверка фактов GitHub</td>
+              <td>Первичные источники, не пересказ</td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">сделано</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>H2–H3 · манифест-предложение</td>
+              <td>Маркеры на месте, заголовок GPT-PM, кумулятивный scope, без голого <code>**</code></td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">сделано</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>H4–H5 · валидация и sha256</td>
+              <td>Продакшн-парсер, контроли, хеш только как свидетельство</td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">сделано</span></td>
+              <td>Хеш пересчитан после добавления ограничения 5</td>
+            </tr>
+            <tr>
+              <td>H6 · закрыть отменённый план</td>
+              <td>Статус <code>rejected</code>, без эвиденса</td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">сделано</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>H7 · установка <code>gh</code></td>
+              <td>Прямое указание оператора</td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">сделано</span></td>
+              <td>Вход выполнили вы; это и вскрыло находку §02</td>
+            </tr>
+            <tr>
+              <td>F8 · артефакт доказательств</td>
+              <td>Первичный источник под каждым фактом, устаревшие утверждения записаны, а не исправлены</td>
+              <td><span class="chip done">сделано</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>F9 · журнал решений</td>
+              <td>Оба REJECT, граница, поправки</td>
+              <td><span class="chip done">сделано</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>F10 · отчёт</td>
+              <td>Пара файлов, conform, публикация русского</td>
+              <td><span class="chip done">сделано</span></td>
+              <td>Это он</td>
+            </tr>
+            <tr>
+              <td>F11 · коммит и пуш</td>
+              <td>Ветка на remote соответствует локальной</td>
+              <td><span class="chip done">сделано</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>F12 · остановка</td>
+              <td>Не продолжать G1 самостоятельно</td>
+              <td><span class="chip block">граница</span></td>
+              <td>Всё из §06</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">Устаревшие утверждения — записаны, намеренно НЕ исправлены</p>
+      <p>
+        Исправление документов — это настоящая ремедиация G1, а она ждёт обязывающего манифеста.
+        Это BLOCKER GPT-PM, и он в силе. Найдено с точностью до строки:
+        <code>GATE_MANIFEST_INTEGRITY.md:31</code> («<code>main</code> — защищённая ветка, у
+        исполнителя нет ни прямого пуша, ни права мержа» — опровергнуто пятью прямыми пушами),
+        строка 34 там же и <code>.github/CODEOWNERS:3-5</code> («контроль, который реально
+        обеспечивает»).
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">06</span>
+      <div><h2>Что теперь за вами</h2></div>
+    </div>
+    <div class="ask">
+      <h3>Шесть решений, ни одно из них не моё</h3>
+      <ol>
+        <li>
+          Прочитать и <strong>отредактировать</strong> предложение. Сузить — всегда безопасно;
+          подозрительным должно быть расширение.
+        </li>
+        <li>
+          Записать результат в <code>governance/gate-manifests/g1.yaml</code>, заменив заголовок и
+          блок <code>status</code> на маркеры принятия. <strong>Отдельным коммитом в
+          <code>main</code></strong>, не внутри PR гейта: этот путь в <code>forbidden_paths</code>,
+          и PR, несущий его, обязан упасть — и это правильно.
+        </li>
+        <li>
+          Посчитать sha256 <em>принятого файла</em>:
+          <code>Get-FileHash -Algorithm SHA256 governance\gate-manifests\g1.yaml</code>.
+        </li>
+        <li>Поставить это значение в переменную репозитория <code>GATE_MANIFEST_APPROVED_HASH_G1</code>.</li>
+        <li>Решить и применить защиту ветки — конфигурация под один аккаунт лежит в артефакте
+          доказательств, §6: PR обязателен, обе проверки обязательны, одобрений <strong>0</strong>,
+          ревью code owner <strong>выключено</strong> (иначе тупик самоапрува), действует на
+          администратора, force-push и удаление запрещены.</li>
+        <li>
+          <strong>Решить модель доступа из §02.</strong> Fine-grained токен, ручной админ-путь или
+          явное признание процедурной модели. Что бы вы ни выбрали, документы должны в итоге
+          говорить ровно то, что реально позволяет токен.
+        </li>
+      </ol>
+      <p>
+        <strong>PR я теперь технически могу открыть</strong> — <code>gh</code> установлен и
+        авторизован. Не открыл: одобренный план заканчивается остановкой, а открытие PR — это шаг 6
+        последовательности GPT-PM и требует собственного GO. Скажете «открывай» — запрошу его.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">07</span>
+      <div><h2>Предсказание, в котором я готов ошибиться</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Заявлено <em>до</em> прогона, чтобы результат был свидетельством в любую сторону. Когда PR
+        откроется:
+      </p>
+      <ul>
+        <li><strong><code>CI</code> должен пройти.</strong> Локально 88 тестов зелены и все 30
+          мутаций убиты. Падение здесь означало бы дефект workflow, а не кода.</li>
+        <li><strong><code>Governance</code> должен УПАСТЬ на шаге манифеста.</strong> Принятого
+          манифеста нет, переменная не установлена. Это падение и есть свидетельство: первое
+          наблюдение того, как страж кому-то отказывает.</li>
+        <li><strong>Если <code>Governance</code> пройдёт — проверка сломана</strong>, и G1 на ней
+          закрыть нельзя.</li>
+      </ul>
+      <p>Контроль, который ни разу не видели отказывающим, не считается работающим.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      G1 не закрыт. G2 не начинается. Предложение манифеста остаётся предложением до вашего
+      принятия и установки хеша; вся имеющаяся у проекта доказательная база на этот момент —
+      локальная.
+    </p>
+  </footer>
+</div>
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
