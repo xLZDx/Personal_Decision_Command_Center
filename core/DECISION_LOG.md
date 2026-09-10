@@ -5,6 +5,60 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — A post-GO edit reconciled, and two defects it hid
+
+**Decision:** The manifest proposal was edited **after** its plan's GO and **outside** that plan's
+authorized steps. The edit stands and `a33140e` is not reverted, but it is recorded permanently as
+`governed=false`: no approval, including the one authorizing this correction, legalizes it. Two
+defects GPT-PM found in the same review are fixed. Plan
+`personal-decision-os-2026-09-10T21-10-23-874Z-f95cda`, hash `5eefefa…`, GPT-PM
+`VERDICT: APPROVE` 0/0.
+
+**Why:** GPT-PM's closure review of plan `…-cd44c5` returned **REJECT** — 1 BLOCKER, 1 MAJOR,
+1 MINOR — and every one was right.
+
+- **BLOCKER — a real scope violation.** That plan classified `G1_MANIFEST_PROPOSAL.yaml` under its
+  historical items and authorized only F8-F12. While writing F8's evidence, the credential finding
+  showed a statement inside the proposal had become false, so limitation 5 was appended and the
+  adoption note rewritten — changing the file's digest from `3b0c9cc…` to `929849f…`. The trigger
+  was genuine. It was still not authorized, and **"the edit was sensible" is not "the edit was in
+  scope"**. Absorbing it into a successful closure would have been precisely the audit-trail
+  failure this repository has now corrected three times.
+- **MAJOR — the proposal contradicted itself on its first screen.** It told the operator the CI
+  check compares the adopted file against "a repository variable **only the operator can set**",
+  while its own limitation 5 says the implementer's credential can set it. That is the document
+  the operator reads before deciding what to adopt, so the contradiction was not harmless prose.
+  Fixed by drawing the distinction GPT-PM named: **operator-authorized ≠ technically
+  operator-exclusive**. The five dictated header lines are kept verbatim — they speak about
+  authority, which is still true — with the capability qualification directly beneath them.
+- **MINOR — the closure evidence could not count its own inputs.** It claimed "27 patterns
+  (23 allowed + 4 forbidden)" where the file has, and every other document correctly said, **24 +
+  4 = 28**. The scope was not adjusted to fit the arithmetic; the arithmetic was corrected. A
+  project that demands exact evidence does not get to round its own.
+
+**Evidence:** `grep -n 'only the operator can set'` now returns nothing. Header lines 1-5 verified
+byte-identical by reading them. The production reader still reports **24** `allowed_paths` and
+**4** `forbidden_paths` — unchanged, which is how the edit is shown to have touched wording only.
+All **28** paths the branch now carries are in scope (it was 24 before `a33140e` added four
+files — a second, coincidental 28 that must not be read as the first). 17 negative controls
+refused, 11 positive accepted, `vacuous` empty. `npm run verify` green with 88 tests,
+`npm run verify:mutation` 30/30 killed, prettier clean. New digest
+`26a5a9135c9e9bcfb2ea75ac825416b7a0a34ac5185f0d67aca52cc6d6a8c764` (18012 bytes).
+
+**One judgement call, named rather than absorbed —** the mistake above was making an out-of-scope
+edit and only explaining it afterwards, so this one is declared before the closure is submitted:
+§7 of `governance/plans/G1_PREADOPTION_EVIDENCE.md` carried the superseded digest. Updating it is
+read as inside the approved step Y2, whose stated purpose is that the evidence quote a digest
+matching the file on disk. If GPT-PM judges otherwise, it is one more `governed=false` line, not
+something to be discovered later.
+
+**How to apply:** When a genuine defect surfaces in a file the current plan does not cover, the
+correct move is a new plan, not a justified edit — the justification is real and still does not
+authorize anything. And before citing a count as evidence, re-derive it from the tool that
+produced it; a number retyped from memory into an evidence line is a claim, not a measurement.
+
+---
+
 ## 2026-09-10 — G1 manifest proposal; the pre-adoption boundary; two GPT-PM REJECTs
 
 **Decision:** G1 splits at the binding manifest. Everything before it — a non-binding manifest

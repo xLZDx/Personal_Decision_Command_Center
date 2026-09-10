@@ -4,6 +4,14 @@
 # governance/gate-manifests/g1.yaml plus the
 # operator-controlled approved hash has authority.
 #
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL
+# EXCLUSIVITY. The current authenticated implementation session is technically
+# capable of changing that repository variable and the repository's admin
+# settings; therefore this separation is procedural until the credential model
+# in limitation 5 is resolved.
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
 # ---------------------------------------------------------------------------
 # WHAT THIS FILE IS, AND WHAT IT IS NOT
 #
@@ -13,7 +21,9 @@
 # in their own branch has no authority at all (INV-28). Copying this file into
 # the binding directory is an operator action; the implementer must never do it,
 # and doing it would not create authority anyway -- the CI check compares the
-# adopted file's sha256 against a repository variable only the operator can set.
+# adopted file's sha256 against a repository variable that only the operator is
+# AUTHORIZED to set. Whether the implementer is technically PREVENTED from
+# setting it is a separate question, and today the answer is no: limitation 5.
 #
 # The name is G1_MANIFEST_PROPOSAL.yaml rather than g1.yaml so that an
 # implementer draft can never be mistaken for the authoritative manifest, even

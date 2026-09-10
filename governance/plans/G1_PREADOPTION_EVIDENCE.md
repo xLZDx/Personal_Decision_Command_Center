@@ -234,14 +234,22 @@ of merges over red checks — real controls that do not depend on identity separ
   `compilePattern`, `checkScope` imported from `../../scripts/verify/check-gate-scope.mjs`, never a
   second more forgiving parser: all 24 changed paths in scope, **17** negative controls refused,
   **11** positive controls accepted, every pattern compiles, `vacuous` empty.
-- `proposal_sha256` = `929849f97c51195768b09dce7401f50702bdd9eecb66d5b52c5157ff81ddbdd1`
-  (17461 bytes) — **evidence of what was reviewed, and not the approval hash.** The approval hash
+- `proposal_sha256` = `26a5a9135c9e9bcfb2ea75ac825416b7a0a34ac5185f0d67aca52cc6d6a8c764`
+  (18012 bytes) — **evidence of what was reviewed, and not the approval hash.** The approval hash
   must be computed from the file the operator actually adopts, which cannot be this one
   byte-for-byte; the proposal's own "HOW TO ADOPT" section explains why.
-- The approved plan text quotes an earlier digest, `3b0c9cc…` (16346 bytes). That was the file
-  before §3.1's finding required limitation 5 to be added to it. The plan's own hash is fixed at
-  approval and is not back-edited; this line is the reconciliation. Recompute rather than trust
-  either value: `node -e "…createHash('sha256')…"` over the file as it stands.
+- **Digest history, because three documents quoting three digests is its own defect.** `3b0c9cc…`
+  (16346 bytes) is the file as the approved plan text quotes it. `929849f…` (17461 bytes) added
+  limitation 5, after §3.1's finding made a statement in the file false. `26a5a91…` (18012 bytes)
+  is the current one: it narrowed the authority claim on the first screen, which said the approval
+  hash lived behind "a repository variable only the operator can set" — an absolute that §3.1
+  disproves. A plan's hash is fixed at approval and is never back-edited, so the older value stays
+  in the plan and this line is the reconciliation. Recompute rather than trust any of them.
+- **Two counts that both read 28, and are not the same 28.** The manifest declares **28 patterns**
+  (24 `allowed_paths` + 4 `forbidden_paths`). The branch happens to touch **28 changed paths**
+  since `a33140e` added four files. The coincidence is noted here so a later reader does not take
+  one number as evidence for the other; an earlier version of this project's closure evidence
+  reported "27 patterns (23 + 4)", which was simply wrong and was caught in review.
 
 ## 8. The prediction this plan is willing to be wrong about
 
