@@ -54,7 +54,7 @@ Re-fetching Cloudflare's live docs did not resolve NB1. It is now **three-way** 
 URLs in `docs/architecture/EXTERNAL_ASSUMPTIONS.md` §C):
 
 1. The Workers limits CPU table has **no Queue-consumer row at all** — only HTTP request (10 ms
-   Free) and Cron Trigger (10 ms Free). Queue consumers appear only in the *wall time* table
+   Free) and Cron Trigger (10 ms Free). Queue consumers appear only in the _wall time_ table
    (15 minutes, which is not a CPU figure).
 2. The Queues limits page still says 30 s default / 5 min configurable, under a blanket "applies
    to both Paid and Free" header.
@@ -70,7 +70,7 @@ empirical probe is the answer of record.
 **Two corrections to this ADR's own premises, from the same pass:**
 
 - **D1 Free allows only 50 queries per Worker invocation** (Paid: 1,000). The consumer is bound by
-  *two* ceilings, not one: ~10 ms CPU **and** ≤50 D1 queries. Fetching `MAX_TOPIC_CANDIDATES = 20`
+  _two_ ceilings, not one: ~10 ms CPU **and** ≤50 D1 queries. Fetching `MAX_TOPIC_CANDIDATES = 20`
   candidates must be a single batched query, never a per-candidate loop, or the query ceiling is
   hit before the CPU ceiling ever matters. Binding on G2.
 - **Whether HTTP pull consumers are available on the Free plan is not documented anywhere.** This

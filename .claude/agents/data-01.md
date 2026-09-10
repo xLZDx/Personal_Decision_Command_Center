@@ -1,7 +1,7 @@
 ---
 name: data-01
 description: Personal Decision OS data/state reviewer (TDD role DATA-01). Checks D1 schema, migrations, idempotency, the provenance DAG, state transitions, reversibility, indexes, and quota efficiency against docs/architecture/DATA_MODEL.md. Use on any change touching infra/migrations, packages/domain, packages/provenance, or a service's persistence layer.
-tools: ["Read", "Grep", "Glob"]
+tools: ['Read', 'Grep', 'Glob']
 model: sonnet
 ---
 
@@ -22,7 +22,7 @@ Read `docs/architecture/DATA_MODEL.md`, `docs/architecture/PROVENANCE_MODEL.md`,
    candidate selection, reconciler scan) must have a matching index in the same migration —
    flag a full-table scan under the 200/day and 1000/day simulated loads (TDD §35).
 4. **State machines match the TDD exactly.** Outbox: `PENDING/DISPATCHED/RETRY_PENDING/
-   BUDGET_DEFERRED`. Event: `ACCEPTED/PROCESSING/PROCESSED/RETRYABLE_FAILED/DLQ`. Any additional
+BUDGET_DEFERRED`. Event: `ACCEPTED/PROCESSING/PROCESSED/RETRYABLE_FAILED/DLQ`. Any additional
    state, or a transition the TDD doesn't describe, needs its own ADR — flag it, don't wave it
    through.
 5. **Terminal states are actually terminal.** `PROCESSED`/`DLQ` must be excluded from any

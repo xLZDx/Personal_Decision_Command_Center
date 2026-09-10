@@ -1,0 +1,100 @@
+name: Gate scope
+
+# Enforces that a PR only touches paths its gate manifest allows (TDD 57(10)).
+#
+# Runs only after policy-integrity has confirmed the manifest is the operator-approved one --
+# otherwise this check validates a diff against a document the same diff could have rewritten,
+# which is the circularity NM3 identified.
+#
+# HONEST LIMITATION: this is a `pull_request` workflow, so it does not run on a direct push to
+# `main`. Scope enforcement therefore exists only on the PR path. That is an argument for the PR
+# flow, not a claim that direct pushes are checked -- see governance/GATE_MANIFEST_INTEGRITY.md.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    needs: []
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the gate this PR belongs to
+        id: gate
+        env:
+          BRANCH: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          gate=""
+          if [[ "$BRANCH" =~ ^gate/([gG][0-9]+) ]]; then
+            gate="${BASH_REMATCH[1]}"
+          elif [[ "$PR_BODY" =~ [Gg]ate:[[:space:]]*([gG][0-9]+) ]]; then
+            gate="${BASH_REMATCH[1]}"
+          fi
+          echo "gate=${gate^^}" >> "$GITHUB_OUTPUT"
+
+      - name: Check changed paths against the manifest
+        env:
+          GATE: ${{ steps.gate.outputs.gate }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$GATE" ]]; then
+            echo "::error::PR declares no gate; see policy-integrity for how to declare one."
+            exit 1
+          fi
+
+          manifest="governance/gate-manifests/${GATE,,}.yaml"
+          if [[ ! -f "$manifest" ]]; then
+            echo "::error::No manifest at $manifest -- cannot determine approved scope."
+            exit 1
+          fi
+
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          echo "Changed paths:"; echo "$changed" | sed 's/^/  /'
+
+          # yq is preinstalled on ubuntu-latest runners.
+          mapfile -t allowed < <(yq -r '.allowed_paths[]' "$manifest")
+          mapfile -t forbidden < <(yq -r '.forbidden_paths[] // empty' "$manifest")
+
+          violations=0
+
+          while IFS= read -r path; do
+            [[ -z "$path" ]] && continue
+
+            for pattern in "${forbidden[@]:-}"; do
+              [[ -z "$pattern" ]] && continue
+              if [[ "$path" == $pattern ]]; then
+                echo "::error file=$path::forbidden by ${GATE} manifest (pattern: $pattern)"
+                violations=$((violations + 1))
+                continue 2
+              fi
+            done
+
+            ok=0
+            for pattern in "${allowed[@]}"; do
+              if [[ "$path" == $pattern ]]; then ok=1; break; fi
+            done
+
+            if [[ $ok -eq 0 ]]; then
+              echo "::error file=$path::outside ${GATE}'s approved scope"
+              violations=$((violations + 1))
+            fi
+          done <<< "$changed"
+
+          if [[ $violations -gt 0 ]]; then
+            echo "::error::$violations path(s) outside the approved scope for ${GATE}."
+            echo "::error::Widening the manifest to fit the diff is not the fix -- a scope change"
+            echo "::error::needs a new plan and a new GO."
+            exit 1
+          fi
+
+          echo "All changed paths are within ${GATE}'s approved scope."

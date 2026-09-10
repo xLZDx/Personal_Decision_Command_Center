@@ -18,4 +18,5 @@ all Telegram-tainted, exactly like a raw Telegram string would be.
 ```
 ai_safe(value) = all provenance ancestors are AI_ALLOW
 ```
+
 Unknown/mixed ancestry = `AI_DENY`. Fail closed, not fail open.

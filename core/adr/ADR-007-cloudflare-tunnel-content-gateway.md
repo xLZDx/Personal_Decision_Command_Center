@@ -32,7 +32,7 @@ blocker) mandatory application-layer encryption for the Telegram path specifical
      ciphertext.
   8. Worker passes ciphertext through without decryption.
   9. PWA decrypts locally and renders plain text.
-  No alternate unauthenticated direct-to-host route is permitted.
+     No alternate unauthenticated direct-to-host route is permitted.
 - **Mandatory application-layer encryption (Variant A, adopted — not optional):** PWA creates an
   ephemeral WebCrypto P-256 ECDH key pair per authenticated content session; the Gateway holds an
   operator-provisioned rotating P-256 ECDH key pair; ECDH -> HKDF-SHA256 -> AES-256-GCM derives the

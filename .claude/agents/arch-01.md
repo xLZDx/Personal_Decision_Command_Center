@@ -1,7 +1,7 @@
 ---
 name: arch-01
 description: Personal Decision OS architecture reviewer (TDD role ARCH-01). Checks boundaries, coupling, unnecessary infrastructure, failure modes, data ownership, and MVP1 scope creep against docs/architecture/TDD.md. Use for any gate touching services/, connectors/, packages/, or infra/.
-tools: ["Read", "Grep", "Glob"]
+tools: ['Read', 'Grep', 'Glob']
 model: sonnet
 ---
 

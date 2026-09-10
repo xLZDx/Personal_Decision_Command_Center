@@ -19,9 +19,9 @@ Rules for this file:
 **Fetched 2026-09-10.** Neither document carries a version number, an effective date, or a
 `Last-Modified` header — so "current text" can only be pinned by fetch date plus content hash.
 
-| Document | URL | SHA-256 of extracted text |
-|---|---|---|
-| API Terms of Service | `https://core.telegram.org/api/terms` | `6ec4b42589a18f5870ebea5ffa4b0fb911ee1a70c98dfd38270e7e8b3c016e33` |
+| Document                                | URL                                          | SHA-256 of extracted text                                          |
+| --------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------ |
+| API Terms of Service                    | `https://core.telegram.org/api/terms`        | `6ec4b42589a18f5870ebea5ffa4b0fb911ee1a70c98dfd38270e7e8b3c016e33` |
 | Content Licensing and AI Scraping Terms | `https://telegram.org/tos/content-licensing` | `760d088692a52c875aae09261d04785811c7cb0caecddc66f89fc94f35defa20` |
 
 ### The AI prohibition — verified present, and BROADER than the TDD's summary
@@ -43,7 +43,7 @@ Content Licensing Terms, section "Large Language Models and AI", verbatim:
 
 **Material finding (widening, not relaxation):** the Content Licensing text prohibits five verbs
 the TDD's own summary omits — **scraping, indexing, harvesting, validate, benchmarking**. "No LLM
-training" is a *narrower* commitment than the terms actually impose. `indexing` in particular is
+training" is a _narrower_ commitment than the terms actually impose. `indexing` in particular is
 the word any future embedding/retrieval design must be measured against — a vector index over
 Telegram content would be prohibited by this clause even if no model were ever trained on it.
 `benchmarking` and `validate` similarly rule out using Telegram content as an evaluation set,
@@ -88,7 +88,7 @@ Content Licensing Terms, verbatim:
 > obtained in one context is non-transferable and does not grant a license to data in other chats
 > or the broader platform."
 
-`INFERENCE` (not quoted text): this requires consent from *all relevant users* — i.e. the
+`INFERENCE` (not quoted text): this requires consent from _all relevant users_ — i.e. the
 operator's counterparties, not just the operator — and continued consent at that. For a personal
 account holding ordinary two-party chats, obtaining and maintaining that from every counterparty
 is not practically reachable, which is why MVP1 does not attempt to rely on this exception. Stated
@@ -103,35 +103,35 @@ found weakens INV-03/04/05/26. Re-verify quarterly and before any change to AI s
 
 **Fetched 2026-09-10.**
 
-| Item | Published value | Source | Confidence |
-|---|---|---|---|
-| Workers Free requests/day | 100,000/day | `https://developers.cloudflare.com/workers/platform/limits/` | VERIFIED |
-| Workers Free CPU/invocation | 10 ms (HTTP request row); Paid 5 min, default 30 s | same | VERIFIED |
-| How CPU is measured | "Waiting on network requests (such as `fetch()` calls, KV reads, or database queries) does **not** count toward CPU time." | same | VERIFIED |
-| Queue consumer **wall** time | "Each consumer invocation has a maximum wall time of 15 minutes." | same | VERIFIED |
-| Queues Free operations | 10,000/day. "An operation is counted for each 64 KB of data that is written, read, or deleted." | `https://developers.cloudflare.com/queues/platform/pricing/` | VERIFIED |
-| Queues Free retention | 24 hours, non-configurable | same | VERIFIED |
-| Batching defaults | `max_batch_size` default 10 (range 1-100); `max_batch_timeout` default 5 s (0-60 s); `max_retries` default 3 | `https://developers.cloudflare.com/queues/configuration/batching-retries/` | VERIFIED |
-| HTTP pull consumers — mechanics | `POST /accounts/{id}/queues/{qid}/messages/pull` + `/ack`; `batch_size` default 5 / max 100; `visibility_timeout` default 30 s / max 12 h | `https://developers.cloudflare.com/queues/configuration/pull-consumers/` | VERIFIED |
-| HTTP pull consumers — **allowed on Free?** | **NOT FOUND.** The pull-consumers page carries no plan statement at all | — | **NOT FOUND** |
-| D1 Free rows | 5,000,000 read/day; 100,000 written/day | `https://developers.cloudflare.com/d1/platform/pricing/` | VERIFIED |
-| D1 Free storage | 500 MB per database; 5 GB per account; 10 databases | `https://developers.cloudflare.com/d1/platform/limits/` | VERIFIED |
-| D1 Free **queries per Worker invocation** | **50** (Paid: 1,000) | same | VERIFIED — **new constraint, not in TDD §65** |
-| D1 Time Travel | 7 days Free (30 days Paid) | same | VERIFIED |
-| D1 over-limit behavior | "Beginning September 1, 2026, D1 queries on the Workers Free plan will fail when an account exceeds the daily row read or row write limits" — errors "until the limit resets at midnight UTC" | `https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/` | VERIFIED — project's belief confirmed |
-| Analytics Engine Free | 100,000 data points/day; 10,000 read queries/day; 3-month retention; 250 data points per Worker invocation; "Currently, you will not be billed for your use of Workers Analytics Engine." | `https://developers.cloudflare.com/analytics/analytics-engine/pricing/` | VERIFIED — **closes MIN-5** |
-| Cloudflare Tunnel | "outbound-only, post-quantum encrypted connection"; page badge "Available on all plans" | `https://developers.cloudflare.com/tunnel/` | VERIFIED (badge, not prose) |
-| Workers AI data use | "Cloudflare does not use your Customer Content to (1) train any AI models made available on Workers AI or (2) improve any Cloudflare or third-party services, and would not do so unless we received your explicit consent." | `https://developers.cloudflare.com/workers-ai/platform/data-usage/` | VERIFIED |
-| Workers AI REST + free allocation | REST at `/client/v4/accounts/{id}/ai/run/@cf/...` with Bearer token; "10,000 Neurons per day at no charge", resets 00:00 UTC | `https://developers.cloudflare.com/workers-ai/get-started/rest-api/`, `.../workers-ai/platform/pricing/` | VERIFIED — **limit not in TDD §65** |
+| Item                                       | Published value                                                                                                                                                                                                              | Source                                                                                                   | Confidence                                    |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Workers Free requests/day                  | 100,000/day                                                                                                                                                                                                                  | `https://developers.cloudflare.com/workers/platform/limits/`                                             | VERIFIED                                      |
+| Workers Free CPU/invocation                | 10 ms (HTTP request row); Paid 5 min, default 30 s                                                                                                                                                                           | same                                                                                                     | VERIFIED                                      |
+| How CPU is measured                        | "Waiting on network requests (such as `fetch()` calls, KV reads, or database queries) does **not** count toward CPU time."                                                                                                   | same                                                                                                     | VERIFIED                                      |
+| Queue consumer **wall** time               | "Each consumer invocation has a maximum wall time of 15 minutes."                                                                                                                                                            | same                                                                                                     | VERIFIED                                      |
+| Queues Free operations                     | 10,000/day. "An operation is counted for each 64 KB of data that is written, read, or deleted."                                                                                                                              | `https://developers.cloudflare.com/queues/platform/pricing/`                                             | VERIFIED                                      |
+| Queues Free retention                      | 24 hours, non-configurable                                                                                                                                                                                                   | same                                                                                                     | VERIFIED                                      |
+| Batching defaults                          | `max_batch_size` default 10 (range 1-100); `max_batch_timeout` default 5 s (0-60 s); `max_retries` default 3                                                                                                                 | `https://developers.cloudflare.com/queues/configuration/batching-retries/`                               | VERIFIED                                      |
+| HTTP pull consumers — mechanics            | `POST /accounts/{id}/queues/{qid}/messages/pull` + `/ack`; `batch_size` default 5 / max 100; `visibility_timeout` default 30 s / max 12 h                                                                                    | `https://developers.cloudflare.com/queues/configuration/pull-consumers/`                                 | VERIFIED                                      |
+| HTTP pull consumers — **allowed on Free?** | **NOT FOUND.** The pull-consumers page carries no plan statement at all                                                                                                                                                      | —                                                                                                        | **NOT FOUND**                                 |
+| D1 Free rows                               | 5,000,000 read/day; 100,000 written/day                                                                                                                                                                                      | `https://developers.cloudflare.com/d1/platform/pricing/`                                                 | VERIFIED                                      |
+| D1 Free storage                            | 500 MB per database; 5 GB per account; 10 databases                                                                                                                                                                          | `https://developers.cloudflare.com/d1/platform/limits/`                                                  | VERIFIED                                      |
+| D1 Free **queries per Worker invocation**  | **50** (Paid: 1,000)                                                                                                                                                                                                         | same                                                                                                     | VERIFIED — **new constraint, not in TDD §65** |
+| D1 Time Travel                             | 7 days Free (30 days Paid)                                                                                                                                                                                                   | same                                                                                                     | VERIFIED                                      |
+| D1 over-limit behavior                     | "Beginning September 1, 2026, D1 queries on the Workers Free plan will fail when an account exceeds the daily row read or row write limits" — errors "until the limit resets at midnight UTC"                                | `https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/`            | VERIFIED — project's belief confirmed         |
+| Analytics Engine Free                      | 100,000 data points/day; 10,000 read queries/day; 3-month retention; 250 data points per Worker invocation; "Currently, you will not be billed for your use of Workers Analytics Engine."                                    | `https://developers.cloudflare.com/analytics/analytics-engine/pricing/`                                  | VERIFIED — **closes MIN-5**                   |
+| Cloudflare Tunnel                          | "outbound-only, post-quantum encrypted connection"; page badge "Available on all plans"                                                                                                                                      | `https://developers.cloudflare.com/tunnel/`                                                              | VERIFIED (badge, not prose)                   |
+| Workers AI data use                        | "Cloudflare does not use your Customer Content to (1) train any AI models made available on Workers AI or (2) improve any Cloudflare or third-party services, and would not do so unless we received your explicit consent." | `https://developers.cloudflare.com/workers-ai/platform/data-usage/`                                      | VERIFIED                                      |
+| Workers AI REST + free allocation          | REST at `/client/v4/accounts/{id}/ai/run/@cf/...` with Bearer token; "10,000 Neurons per day at no charge", resets 00:00 UTC                                                                                                 | `https://developers.cloudflare.com/workers-ai/get-started/rest-api/`, `.../workers-ai/platform/pricing/` | VERIFIED — **limit not in TDD §65**           |
 
 ### The NB1 contradiction is NOT resolved — and it is now three-way
 
 This was the sole BLOCKER of the v0.2 adversarial review. Re-fetching the live docs did not settle
 it; it made it worse:
 
-1. **Workers limits page** — the CPU-time table has rows only for *HTTP request* (10 ms Free) and
-   *Cron Trigger* (10 ms Free). **There is no Queue-consumer row in the CPU table at all.** Queue
-   consumers appear only in the separate *wall time* table (15 minutes).
+1. **Workers limits page** — the CPU-time table has rows only for _HTTP request_ (10 ms Free) and
+   _Cron Trigger_ (10 ms Free). **There is no Queue-consumer row in the CPU table at all.** Queue
+   consumers appear only in the separate _wall time_ table (15 minutes).
 2. **Queues limits page** — "By default, the maximum CPU time per consumer Worker invocation is set
    to 30 seconds, but can be increased by setting `limits.cpu_ms`" (up to 5 minutes), sitting under
    a blanket header saying the limits "apply to both Workers Paid and Workers Free plans with the
@@ -151,7 +151,7 @@ where documentation cannot substitute for measurement. `core/RISK_REGISTER.md` R
 ### New findings that change the design (not in TDD §65)
 
 - **D1 Free allows only 50 queries per Worker invocation** (Paid: 1,000). The consumer's budget is
-  therefore *two* ceilings, not one: ~10 ms CPU **and** ≤50 D1 queries. A design that fetches
+  therefore _two_ ceilings, not one: ~10 ms CPU **and** ≤50 D1 queries. A design that fetches
   `MAX_TOPIC_CANDIDATES = 20` candidates one query at a time, plus dedupe/state/audit writes, is
   uncomfortably close to that ceiling — candidate fetching must be a single batched query, not a
   loop. Binding on G2.
@@ -164,7 +164,7 @@ where documentation cannot substitute for measurement. `core/RISK_REGISTER.md` R
   must treat this as the AI quota ceiling for HARD_ZERO purposes; the TDD's §65 table does not
   record it.
 - **Whether HTTP pull consumers are available on the Free plan is NOT documented anywhere.** This
-  matters more than it looks: the pull consumer is `ADR-011`'s *pre-approved fallback* for the case
+  matters more than it looks: the pull consumer is `ADR-011`'s _pre-approved fallback_ for the case
   where the Worker CPU budget proves too tight. A fallback whose availability on the target plan is
   unverified is not yet a fallback. G0 closure must record this as an open item, and the empirical
   probe should be extended to attempt a pull-consumer `pull`/`ack` call on the same Free account.
@@ -175,22 +175,22 @@ where documentation cannot substitute for measurement. `core/RISK_REGISTER.md` R
 
 **Fetched 2026-09-10.**
 
-| Item | Finding | Source | Confidence |
-|---|---|---|---|
-| `users.watch` lifetime | Must be called at least every 7 days; Google recommends once per day | `https://developers.google.com/workspace/gmail/api/guides/push` | VERIFIED |
-| Stale `startHistoryId` | Returns HTTP 404; client must then perform a full sync. History records "typically available for at least one week", sometimes only hours | `https://developers.google.com/workspace/gmail/api/guides/sync` | VERIFIED |
-| Pub/Sub push auth | OIDC JWT in the authorization header; verify signature, `email` and `audience` claims against the push-subscription config | `https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions` | VERIFIED |
-| Pub/Sub push auth default | **Authentication is optional and OFF by default** — "Optional: To enable authentication, follow these steps" | `https://docs.cloud.google.com/pubsub/docs/create-push-subscription` | VERIFIED |
-| Billing account required for Pub/Sub? | **AMBIGUOUS — not settled by the documentation.** See below | multiple | AMBIGUOUS |
-| Gmail API quotas | 80,000,000 units/day/project; 6,000 units/min/user; `history.list`=2, `messages.list`=5, `messages.get`=20, `watch`=100 | `https://developers.google.com/workspace/gmail/api/reference/quota` | VERIFIED |
-| Minimum OAuth scope | `gmail.readonly` covers both `watch` and message bodies; `gmail.metadata` covers `watch` but not bodies; no send scope needed | `https://developers.google.com/workspace/gmail/api/reference/rest/v1/users/watch`, `.../api/auth/scopes` | VERIFIED |
+| Item                                  | Finding                                                                                                                                   | Source                                                                                                   | Confidence |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------- |
+| `users.watch` lifetime                | Must be called at least every 7 days; Google recommends once per day                                                                      | `https://developers.google.com/workspace/gmail/api/guides/push`                                          | VERIFIED   |
+| Stale `startHistoryId`                | Returns HTTP 404; client must then perform a full sync. History records "typically available for at least one week", sometimes only hours | `https://developers.google.com/workspace/gmail/api/guides/sync`                                          | VERIFIED   |
+| Pub/Sub push auth                     | OIDC JWT in the authorization header; verify signature, `email` and `audience` claims against the push-subscription config                | `https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions`                              | VERIFIED   |
+| Pub/Sub push auth default             | **Authentication is optional and OFF by default** — "Optional: To enable authentication, follow these steps"                              | `https://docs.cloud.google.com/pubsub/docs/create-push-subscription`                                     | VERIFIED   |
+| Billing account required for Pub/Sub? | **AMBIGUOUS — not settled by the documentation.** See below                                                                               | multiple                                                                                                 | AMBIGUOUS  |
+| Gmail API quotas                      | 80,000,000 units/day/project; 6,000 units/min/user; `history.list`=2, `messages.list`=5, `messages.get`=20, `watch`=100                   | `https://developers.google.com/workspace/gmail/api/reference/quota`                                      | VERIFIED   |
+| Minimum OAuth scope                   | `gmail.readonly` covers both `watch` and message bodies; `gmail.metadata` covers `watch` but not bodies; no send scope needed             | `https://developers.google.com/workspace/gmail/api/reference/rest/v1/users/watch`, `.../api/auth/scopes` | VERIFIED   |
 
 ### Correction to the TDD's framing of gap recovery
 
 Google's **documented** recovery from a 404 history cursor is a **full sync**, not a bounded one.
 `docs/architecture/TDD.md` §12.1 describes bounded recovery beginning no earlier than
-`connected_at` as though it were the required procedure. It is not — it is *this project's own
-engineering decision*, made because an unbounded full sync would violate the no-backfill invariant
+`connected_at` as though it were the required procedure. It is not — it is _this project's own
+engineering decision_, made because an unbounded full sync would violate the no-backfill invariant
 and silently import years of old mail. The decision is correct and stays; the attribution must be
 accurate. Recorded rather than silently kept, per `CLAUDE.md` §8.
 
@@ -240,7 +240,7 @@ Polling `history.list` every 5 minutes is 288 calls/day ≈ 576 quota units agai
 ### Restricted-scope note
 
 `INFERENCE` (from the scope's restricted classification, not a quoted sentence): `gmail.readonly`
-is a *restricted* scope, so a **public** app would face Google's CASA security assessment. A
+is a _restricted_ scope, so a **public** app would face Google's CASA security assessment. A
 single-user app kept in Testing mode does not. MVP1 is single-user by design
 (`docs/architecture/TDD.md` §38), so this should not bite — but it is a reason not to casually
 publish the OAuth consent screen.

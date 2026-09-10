@@ -7,18 +7,18 @@
 
 ## Status of this plan
 
-| Step | Item | Status |
-|---|---|---|
-| 1 | Repository scaffold (directory tree, `CLAUDE.md`, `core/*`, ADR drafts, `.claude/agents/`, `.claude/skills/`) | **DONE** — this commit |
-| 2 | A. Adopt/freeze TDD v0.3 in repo | **DONE** — `docs/architecture/TDD.md` |
-| 3 | B. Live Telegram API/Content Licensing terms snapshot | PENDING |
-| 4 | C. Live Cloudflare Workers/Queues/D1/Analytics/Tunnel/Workers-AI snapshot | PENDING |
-| 5 | D. Live Gmail watch/history assumptions snapshot | PENDING |
-| 6 | E. Empirical Cloudflare Free CPU smoke harness + operator-run instructions | PENDING |
-| 7 | F-M. ADR-002/003/005/007/008/009/010/011 | DRAFT written this commit (`core/adr/`); need review before "adopted" |
-| 8 | N. Threat model update | DRAFT written this commit (`docs/architecture/THREAT_MODEL.md`); needs sec-01/priv-01 review |
-| 9 | O. Binding gate-manifest integrity mechanism design | PENDING |
-| 10 | Submit `G0 PLAN REVIEW REQUEST` for independent review before G1 | PENDING (blocked on 3-6, 9) |
+| Step | Item                                                                                                          | Status                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 1    | Repository scaffold (directory tree, `CLAUDE.md`, `core/*`, ADR drafts, `.claude/agents/`, `.claude/skills/`) | **DONE** — this commit                                                                       |
+| 2    | A. Adopt/freeze TDD v0.3 in repo                                                                              | **DONE** — `docs/architecture/TDD.md`                                                        |
+| 3    | B. Live Telegram API/Content Licensing terms snapshot                                                         | PENDING                                                                                      |
+| 4    | C. Live Cloudflare Workers/Queues/D1/Analytics/Tunnel/Workers-AI snapshot                                     | PENDING                                                                                      |
+| 5    | D. Live Gmail watch/history assumptions snapshot                                                              | PENDING                                                                                      |
+| 6    | E. Empirical Cloudflare Free CPU smoke harness + operator-run instructions                                    | PENDING                                                                                      |
+| 7    | F-M. ADR-002/003/005/007/008/009/010/011                                                                      | DRAFT written this commit (`core/adr/`); need review before "adopted"                        |
+| 8    | N. Threat model update                                                                                        | DRAFT written this commit (`docs/architecture/THREAT_MODEL.md`); needs sec-01/priv-01 review |
+| 9    | O. Binding gate-manifest integrity mechanism design                                                           | PENDING                                                                                      |
+| 10   | Submit `G0 PLAN REVIEW REQUEST` for independent review before G1                                              | PENDING (blocked on 3-6, 9)                                                                  |
 
 ## Files created/changed (step 1-2, this commit)
 
@@ -47,6 +47,7 @@ on Home Screen PWA.
 ```
 git status / git log   — verify scaffold committed cleanly, no stray files
 ```
+
 No code exists yet, so no build/lint/test commands apply to steps 1-2. Steps 3-6/9 will add
 `scripts/probes/free-tier-snapshot/` (fetch + record live values) and
 `scripts/probes/cloudflare-free-cpu/` (empirical CPU harness + reproducible operator instructions).

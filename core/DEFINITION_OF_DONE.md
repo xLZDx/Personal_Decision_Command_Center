@@ -45,6 +45,7 @@ as evidence, check the assertion would actually fail if the thing it guards were
 ## Per-component DoD
 
 See `docs/architecture/TDD.md`:
+
 - §68 Telegram Connector DoD
 - §69 Gmail Connector DoD
 - §70 Provenance/AI Policy DoD

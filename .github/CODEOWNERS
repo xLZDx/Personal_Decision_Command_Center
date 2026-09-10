@@ -1,0 +1,26 @@
+# Operator-owned protected paths.
+#
+# See governance/GATE_MANIFEST_INTEGRITY.md. This file is the control that actually enforces the
+# governance invariant "the actor being constrained cannot modify the authoritative object that
+# defines the constraint" -- CI checks are detection, merge authority is enforcement.
+#
+# CODEOWNERS only has teeth when branch protection on `main` has "Require review from Code Owners"
+# enabled. A CODEOWNERS file with that setting off is decoration; G1's DoD requires evidence that
+# it is actually on.
+
+# Governance state: manifests and approvals define what a gate may do.
+/governance/gate-manifests/     @xLZDx
+/governance/operator-approvals/ @xLZDx
+
+# CI cannot police its own definition: for `pull_request` events GitHub runs the workflow as it
+# exists in the PR's merge commit, so a PR that edits these files edits the checks that police it.
+/.github/                       @xLZDx
+
+# Policy-sensitive files (TDD 57(13)).
+/core/SOURCE_POLICY.md          @xLZDx
+/core/DATA_RETENTION_POLICY.md  @xLZDx
+/core/adr/                      @xLZDx
+
+# The operating contracts themselves.
+/CLAUDE.md                      @xLZDx
+/AGENTS.md                      @xLZDx

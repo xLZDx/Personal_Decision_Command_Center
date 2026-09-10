@@ -36,7 +36,7 @@ So the probe instead:
 
 The breaking point is the smallest `target` for which `PROBE_START` appears with no matching
 `PROBE_DONE` and an `Exceeded CPU` error is logged. The dashboard's CPU-ms figure for the largest
-`target` that *did* complete is the empirical budget.
+`target` that _did_ complete is the empirical budget.
 
 ## Cost safety
 

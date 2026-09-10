@@ -6,7 +6,7 @@ Everything below is an empty template. Any number appearing in it that is not ac
 run date, an account-plan confirmation and a raw `wrangler tail` excerpt is **not evidence** and
 must not be cited in a gate closure, an ADR, or a report.
 
-`core/adr/ADR-011-queue-consumer-runtime.md` currently rests on the conservative *assumption* of a
+`core/adr/ADR-011-queue-consumer-runtime.md` currently rests on the conservative _assumption_ of a
 10ms budget, explicitly recorded as an assumption. It stays an assumption until this file says
 otherwise.
 
@@ -24,26 +24,26 @@ Worker name / region:
 ### Queue-consumer ladder (`GET /run`)
 
 | target (SHA-256 rounds) | PROBE_START seen | PROBE_DONE seen | dashboard CPU ms | outcome |
-|---|---|---|---|---|
-| 1e3 | | | | |
-| 1e4 | | | | |
-| 1e5 | | | | |
-| 1e6 | | | | |
-| 3e6 | | | | |
-| 1e7 | | | | |
-| 3e7 | | | | |
+| ----------------------- | ---------------- | --------------- | ---------------- | ------- |
+| 1e3                     |                  |                 |                  |         |
+| 1e4                     |                  |                 |                  |         |
+| 1e5                     |                  |                 |                  |         |
+| 1e6                     |                  |                 |                  |         |
+| 3e6                     |                  |                 |                  |         |
+| 1e7                     |                  |                 |                  |         |
+| 3e7                     |                  |                 |                  |         |
 
 ### HTTP ladder (`GET /http-ladder`) — same account, for comparison
 
 | target (SHA-256 rounds) | PROBE_START seen | PROBE_DONE seen | dashboard CPU ms | outcome |
-|---|---|---|---|---|
-| 1e3 | | | | |
-| 1e4 | | | | |
-| 1e5 | | | | |
-| 1e6 | | | | |
-| 3e6 | | | | |
-| 1e7 | | | | |
-| 3e7 | | | | |
+| ----------------------- | ---------------- | --------------- | ---------------- | ------- |
+| 1e3                     |                  |                 |                  |         |
+| 1e4                     |                  |                 |                  |         |
+| 1e5                     |                  |                 |                  |         |
+| 1e6                     |                  |                 |                  |         |
+| 3e6                     |                  |                 |                  |         |
+| 1e7                     |                  |                 |                  |         |
+| 3e7                     |                  |                 |                  |         |
 
 ### Raw `wrangler tail` excerpt
 

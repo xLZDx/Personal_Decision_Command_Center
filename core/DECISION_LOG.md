@@ -5,6 +5,54 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — G1: toolchain, CI, governance enforcement, first contracts
+
+**Decision:** Established the TypeScript/npm-workspaces toolchain (prettier, eslint, tsc strict,
+vitest), the CI workflows (`ci.yml`, `policy-integrity.yml`, `gate-scope.yml`), `.github/CODEOWNERS`,
+the verification scripts (`assert-tests-ran`, `check-test-deletion`, `check-secrets`,
+`mutation-check`), and `packages/contracts` — the normalized event envelope, queue payload, push
+payload and provenance wrapper.
+
+**Why these specific guard choices, since they will look arbitrary later:**
+
+- **`.strict()` on every contract schema.** Raw bodies are not part of the central contract
+  (INV-12/INV-14). A permissive schema lets a connector attach `body`/`snippet` and have it reach
+  D1, the queue and the logs while every reviewer reads the type and sees no such field.
+- **Telegram routing hints may not be `ai_policy: ALLOW`, enforced at the ingest boundary.**
+  Defence in depth behind ADR-005's type-level AI boundary, so lost provenance fails loudly at the
+  edge rather than looking AI-eligible three layers downstream.
+- **`idempotencyKey` is length-prefixed, not delimiter-joined.** Any single-character separator
+  collides when a field can contain it — `("a b","c")` and `("a","b c")` both render as `"a b c"`,
+  so two distinct events would share a key and one would be silently dropped as a duplicate
+  (INV-08).
+- **`assert-tests-ran.mjs` with a test-count floor.** A suite that runs zero tests reports success;
+  everything else here is asserted by tests.
+
+**Evidence:** `npm run verify` green (format, lint, `tsc --noEmit` strict, 37 tests).
+`npm run verify:mutation` — **all 7 mutations killed**, including the two controls that prove the
+Telegram guard is source-specific rather than a blanket rejection. Secret scanner verified by
+positive control: a planted Telegram bot token in a tracked file made it exit 1; after removal,
+exit 0 over 70 files.
+
+**A bug this caught, worth recording because it argues for the harness:** removing `shell: true`
+from `assert-tests-ran.mjs` to silence a Node deprecation warning silently broke it — on Windows
+`execFileSync` refuses to spawn the `npx.cmd` shim without a shell (CVE-2024-27980 fix), so the
+script's "did the suite pass" check began returning false unconditionally. It was caught only
+because `mutation-check.mjs` reported `BASELINE FAILS` against a suite that was demonstrably green.
+Both scripts now run vitest's own JS entry via `process.execPath`, resolved with `require.resolve`
+so workspace hoisting cannot break the path.
+
+**How to apply:** When a gate adds a guard, add a mutation for it to `scripts/verify/mutation-check.mjs`
+and confirm it is killed — an anchor that stops matching is reported as a survivor, never skipped.
+Raise `MIN_TESTS` as suites grow; never lower it to make a build green.
+
+**Open, deliberately not resolved here:** a real secret scanner (gitleaks) is not wired in, because
+pinning a third-party action to an unverified SHA in the pipeline that guards secrets is worse than
+the gap; `npm audit` is advisory-only at G1. Both are recorded as debt rather than quietly assumed
+done.
+
+---
+
 ## 2026-09-10 — G0 evidence complete; three findings that change the design
 
 **Decision:** G0's live-verification items (B Telegram, C Cloudflare, D Gmail) are done and
@@ -16,13 +64,13 @@ operator-owned Cloudflare Free account. Gate-manifest integrity (item O) is desi
 **Three findings that would have produced wrong code had we skipped this gate:**
 
 1. **Cloudflare's Queue-consumer CPU documentation is now self-contradictory in three places**, and
-   *no* page publishes a Free-plan figure at all — the Workers limits CPU table has no
+   _no_ page publishes a Free-plan figure at all — the Workers limits CPU table has no
    Queue-consumer row, the Queues page says 30s/5min "applies to Free", and the pricing page puts
    "15 minutes" in the Paid column. The paid figure itself differs between pages (15 min vs 5 min).
    NB1 is therefore NOT resolved by documentation; the conservative 10ms assumption stands and the
    empirical probe is the answer of record. `RISK_REGISTER.md` R8 stays open.
 2. **D1 Free allows only 50 queries per Worker invocation** (Paid: 1,000) — a second ceiling absent
-   from TDD §65 entirely. The consumer is bound by CPU *and* query count; fetching 20 topic
+   from TDD §65 entirely. The consumer is bound by CPU _and_ query count; fetching 20 topic
    candidates in a loop would hit the query ceiling before CPU ever mattered. New R10; binding on
    G2's design.
 3. **Telegram's prohibition is broader than this project had recorded**: the Content Licensing
@@ -34,7 +82,7 @@ operator-owned Cloudflare Free account. Gate-manifest integrity (item O) is desi
 **Also found:** `ADR-011`'s "pre-approved" HTTP-pull-consumer fallback has **no published
 plan-eligibility statement** for Free (new R9 — an unverified fallback is not a fallback); Workers
 AI free allocation is 10,000 Neurons/day (not in TDD §65); Analytics Engine 100K/10K per day is now
-officially published, closing the v0.2 review's MIN-5 open item; and Google's *documented* Gmail
+officially published, closing the v0.2 review's MIN-5 open item; and Google's _documented_ Gmail
 404-recovery is a **full** sync — this project's bounded recovery is its own engineering decision
 and must not be attributed to Google (`docs/architecture/TDD.md` §12.1 wording corrected in
 `EXTERNAL_ASSUMPTIONS.md`).

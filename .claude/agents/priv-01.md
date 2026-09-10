@@ -1,7 +1,7 @@
 ---
 name: priv-01
 description: Personal Decision OS privacy/platform-compliance reviewer (TDD role PRIV-01). Checks the Telegram ToS/AI boundary, source provenance, AI policy, data minimization, retention/deletion, and policy bypass through derived state against core/SOURCE_POLICY.md and ADR-005. Use on any change touching AI, provenance, retention, or the Telegram connector.
-tools: ["Read", "Grep", "Glob"]
+tools: ['Read', 'Grep', 'Glob']
 model: sonnet
 ---
 
@@ -26,7 +26,7 @@ not extrapolate a stricter reading from vibes.
 2. **Every value AND assignment is provenance-checked, not just raw strings.** Look specifically
    for an enum assignment, a `updated_at`/`occurred_at` advance, or a count/aggregate that was
    caused by a Telegram event but is passed to AI as if it were a plain system value.
-3. **Processing order**: Gmail-only enrichment must run *before* the deterministic cross-channel
+3. **Processing order**: Gmail-only enrichment must run _before_ the deterministic cross-channel
    resolver combines Gmail+Telegram. Flag any code path where AI could see post-merge state.
 4. **Retention**: raw Telegram/Gmail bodies not stored centrally by default; retained metadata
    matches the classes in `core/DATA_RETENTION_POLICY.md`; a source disconnect actually revokes/

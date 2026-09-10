@@ -30,7 +30,7 @@ export default {
       }
       return new Response(
         `enqueued ${LADDER.length} probe messages: ${LADDER.join(', ')}\n` +
-        `watch: npx wrangler tail pdos-cpu-probe --format pretty\n`,
+          `watch: npx wrangler tail pdos-cpu-probe --format pretty\n`,
         { headers: { 'content-type': 'text/plain' } },
       );
     }
@@ -56,18 +56,18 @@ export default {
       }
       return new Response(
         results.join('\n') +
-        '\n\nNOTE: a target missing from this list entirely means the invocation was killed\n' +
-        'before it could respond -- check wrangler tail for the CPU-exceeded exception.\n',
+          '\n\nNOTE: a target missing from this list entirely means the invocation was killed\n' +
+          'before it could respond -- check wrangler tail for the CPU-exceeded exception.\n',
         { headers: { 'content-type': 'text/plain' } },
       );
     }
 
     return new Response(
       'pdos-cpu-probe\n\n' +
-      '  GET /run          enqueue the escalating ladder for the QUEUE CONSUMER path\n' +
-      '  GET /http-ladder  run the same ladder in the HTTP path for comparison\n\n' +
-      'Read results from `wrangler tail` and the dashboard CPU-time metric, not from this\n' +
-      'Worker\'s own timings -- see ../README.md.\n',
+        '  GET /run          enqueue the escalating ladder for the QUEUE CONSUMER path\n' +
+        '  GET /http-ladder  run the same ladder in the HTTP path for comparison\n\n' +
+        'Read results from `wrangler tail` and the dashboard CPU-time metric, not from this\n' +
+        "Worker's own timings -- see ../README.md.\n",
       { headers: { 'content-type': 'text/plain' } },
     );
   },

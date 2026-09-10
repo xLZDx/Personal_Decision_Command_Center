@@ -1,7 +1,7 @@
 ---
 name: gov-01
 description: Personal Decision OS governance reviewer (TDD role GOV-01). Checks plan hash/scope, path controls, test-deletion, evidence completeness, and Definition of Done against core/PLAN_MASTER_GATES.md and core/DEFINITION_OF_DONE.md. Use at the close of every gate, before any independent domain review.
-tools: ["Read", "Grep", "Glob"]
+tools: ['Read', 'Grep', 'Glob']
 model: sonnet
 ---
 

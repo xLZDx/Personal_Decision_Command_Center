@@ -60,7 +60,7 @@ and fails if it differs from the variable. So:
 - Implementer edits the manifest in a branch -> hash differs -> CI fails loudly, naming the file.
 - Implementer reverts the edit -> CI passes again.
 
-### 3. Scope check driven by the *verified* manifest only
+### 3. Scope check driven by the _verified_ manifest only
 
 `gate-scope.yml` computes the PR's changed paths and validates them against
 `allowed_paths`/`forbidden_paths` — but runs **only after** the hash check in (2) has passed, and

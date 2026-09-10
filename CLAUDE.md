@@ -26,6 +26,7 @@ harnesses/proposed ADR text at any time. Claude implements a gate only after the
 returns that gate's GO.
 
 Claude MUST NOT:
+
 - self-approve a gate, merge protected `main`, or use production deployment credentials;
 - silently expand MVP1 scope or add a source outside the fixed MVP1 list below;
 - weaken/delete tests to obtain green, or mark a reviewer finding closed without evidence;
@@ -52,7 +53,7 @@ Gate sequence (see `core/PLAN_MASTER_GATES.md` for detail): **G0 -> G1 -> G2 -> 
 Completion of one gate does NOT authorize the next. Each gate has its own binding
 `governance/gate-manifests/<gate>.yaml` (operator-authored/adopted, never authored solely by Claude)
 and needs its own plan + GO before implementation, exactly like the global GO contract — this section
-narrows *scope* (one gate, not "MVP1"), it does not relax the global mechanism.
+narrows _scope_ (one gate, not "MVP1"), it does not relax the global mechanism.
 
 **Current state: G0 in progress.** See `governance/plans/` for the live plan and
 `core/DECISION_LOG.md` for what has actually been decided/closed so far.
@@ -78,7 +79,7 @@ unreviewed shortcut, worth repeating here:
 - Telegram raw or Telegram-derived content **never** enters any AI call, in any form, at any
   granularity — including enum assignments, aggregates, counts, and cross-channel Topic/Stream/Person
   state derived even partly from Telegram (INV-03/04/05/26). MVP1 AI accepts exactly one input type:
-  `GmailEvidenceBundle`, built *before* cross-channel merge.
+  `GmailEvidenceBundle`, built _before_ cross-channel merge.
 - No pre-connection Telegram backfill; only events with `occurred_at >= connected_at` are centrally
   emitted (INV-02/local TDLib cache may exist client-side, see TDD §11).
 - Push payload is opaque — no sender/title/question/deadline/source-derived text (INV-11).

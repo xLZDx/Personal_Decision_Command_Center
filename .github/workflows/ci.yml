@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The test-deletion guard needs the base commit to diff against.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Format
+        run: npm run format
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm run test
+
+      # A suite that reports success while running zero tests is the failure mode that would make
+      # every check above meaningless. vitest is configured with passWithNoTests:false, and this
+      # asserts the count independently rather than trusting that config to stay set.
+      - name: Assert the suite actually ran tests
+        run: node scripts/verify/assert-tests-ran.mjs
+
+      - name: Test-deletion guard
+        if: github.event_name == 'pull_request'
+        run: node scripts/verify/check-test-deletion.mjs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - name: Secret scan
+        run: node scripts/verify/check-secrets.mjs
+
+      - name: Dependency audit
+        # Advisory only at G1: `npm audit` fails on transitive advisories with no available fix,
+        # which would block unrelated gates. Tightening this to a hard failure needs a decision
+        # about which severity blocks -- deferred to G8 (see core/RISK_REGISTER.md).
+        run: npm audit --audit-level=high || echo "::warning::npm audit reported findings (advisory at G1)"

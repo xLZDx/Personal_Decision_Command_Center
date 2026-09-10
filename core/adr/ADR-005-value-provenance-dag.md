@@ -14,7 +14,7 @@ literally present. The review required choosing and documenting one of two varia
 
 ## Decision
 
-**Variant A (adopted):** the MVP1 AI context is built *exclusively* from Gmail-evidence-scoped
+**Variant A (adopted):** the MVP1 AI context is built _exclusively_ from Gmail-evidence-scoped
 objects. No Topic/Stream/Person/shared-state field, and no aggregate derived from cross-channel
 membership, ever enters an AI request — regardless of whether every individual field looks
 Gmail-only in isolation.
@@ -43,7 +43,7 @@ entirely by construction rather than documenting it as accepted residual risk.
 
 - `intent_class`, `updated_at`/`occurred_at` when advanced by a Telegram event, and combined-topic
   participant/evidence counts are never passed to the AI serializer, full stop — no "system
-  constant, so it's fine" exception, because the *assignment* still carries provenance even when
+  constant, so it's fine" exception, because the _assignment_ still carries provenance even when
   the value itself is a plain enum.
 - Gmail AI enrichment must run and produce `GmailSourceEnrichment` **before** the cross-channel
   resolver runs (mandatory processing order, TDD §7.1).

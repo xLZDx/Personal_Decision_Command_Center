@@ -1,7 +1,7 @@
 ---
 name: rel-01
 description: Personal Decision OS reliability/SRE reviewer (TDD role REL-01). Checks the connector spool, Gmail gap recovery, queue expiry, reconciler, DLQ, restart/recovery, and backup/restore against docs/architecture/TDD.md §15-18, §53-54. Use on any change touching connectors/, services/ingest, services/processor, or host/backup-agent.
-tools: ["Read", "Grep", "Glob"]
+tools: ['Read', 'Grep', 'Glob']
 model: sonnet
 ---
 

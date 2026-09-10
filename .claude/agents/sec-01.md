@@ -1,7 +1,7 @@
 ---
 name: sec-01
 description: Personal Decision OS security reviewer (TDD role SEC-01). Checks authentication, OAuth/session storage, the Telegram Content Gateway auth chain, Tunnel, replay defenses, web security headers, supply chain, and backup encryption against docs/architecture/THREAT_MODEL.md and ADR-007. Use on any change touching auth, connectors, host/, or apps/pwa/.
-tools: ["Read", "Grep", "Glob"]
+tools: ['Read', 'Grep', 'Glob']
 model: sonnet
 ---
 
