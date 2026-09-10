@@ -5,6 +5,27 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — `AGENTS.md` added as the tool-agnostic contract
+
+**Decision:** Added a root `AGENTS.md` carrying the same authority boundary, invariants, DoD and
+review-role pointers as `CLAUDE.md`, framed for any coding agent (Codex/ChatGPT, Aider, etc.).
+`CLAUDE.md` now states the two must be kept in sync.
+
+**Why:** Operator caught its absence ("а где agents.md?"). Verified: every other project in this
+workspace (`ERP`, `Fitness_App`, `RQDO`, `TENDER`, `Ferma`, `AI_trading_assistance`, and 12 more)
+carries a root `AGENTS.md` as the non-Claude-Code entry point, with `CLAUDE.md` as the
+Claude-Code-specific one — the initial scaffold created only `.claude/agents/` (the ten review-role
+subagents) and read the operator's "агентс" as meaning only that.
+
+**Evidence:** `find D:\Repo -maxdepth 2 -iname AGENTS.md` returned 18 sibling projects;
+`D:\Repo\ERP\AGENTS.md:1-5` states the convention explicitly ("Tool-agnostic conventions for any
+coding agent... `CLAUDE.md` is the Claude Code entry point; this file is for everyone else").
+
+**How to apply:** When either governance file changes, update both. A future gate that adds build/
+test commands must add them to `AGENTS.md` too — that section currently says "no code exists yet".
+
+---
+
 ## 2026-09-10 — Repository scaffold created; G0 started
 
 **Decision:** Initialized the git repository at `D:\Repo\Personal_Decision_Command_Center` (empty

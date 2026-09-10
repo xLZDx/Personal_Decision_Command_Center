@@ -6,7 +6,8 @@ people/projects/streams/topics, tracks commitments and decisions, and shows one 
 "what needs my attention now" surface with full evidence drill-down.
 
 Full architecture: [`docs/architecture/TDD.md`](docs/architecture/TDD.md) (binding baseline,
-v0.3 FINAL). Project governance contract for Claude Code sessions: [`CLAUDE.md`](CLAUDE.md).
+v0.3 FINAL). Project governance contract for Claude Code sessions: [`CLAUDE.md`](CLAUDE.md);
+tool-agnostic version for any other coding agent: [`AGENTS.md`](AGENTS.md).
 Current status and gate plan: [`core/PLAN_MASTER_GATES.md`](core/PLAN_MASTER_GATES.md).
 
 ## Status
@@ -24,6 +25,8 @@ point to expand from casually.
 ## Repository layout
 
 ```
+CLAUDE.md        Claude Code entry point (project governance contract)
+AGENTS.md        tool-agnostic version of the same contract, for any other coding agent
 core/            product/scope/gate/decision/risk/policy/DoD governance docs + ADRs
 docs/            architecture (TDD, data model, provenance, threat model, connectors, observability),
                  product (MVP1, post-MVP, user flows), runbooks

@@ -1,7 +1,9 @@
 # Personal Decision OS — Project Operating Contract
 
-This file is project-specific. It does not duplicate the universal GO/push/evidence/git contract in
-`~/.claude/CLAUDE.md` or the workspace container rules in `D:\Repo\CLAUDE.md` — both still apply.
+This file is project-specific and Claude-Code-specific. It does not duplicate the universal
+GO/push/evidence/git contract in `~/.claude/CLAUDE.md` or the workspace container rules in
+`D:\Repo\CLAUDE.md` — both still apply. `AGENTS.md` carries the same contract in tool-agnostic
+form for any other coding agent; keep the two in sync when either changes.
 This file adds the governance model that is **specific and binding for this repository only**,
 established in `Personal_Decision_OS_v0.3_Implementation_Pack/Personal_Decision_OS_Claude_Implementation_Kickoff_v0.3.md`
 (the kickoff prompt) and `docs/architecture/TDD.md` (the adopted TDD v0.3 FINAL, binding architecture
