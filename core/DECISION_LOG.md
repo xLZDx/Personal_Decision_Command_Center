@@ -74,10 +74,27 @@ bound by this scope is the party that drafted it. GPT-PM reviewed it, but the on
 between that and a self-authorized scope is the operator actually reading the bytes before setting
 the hash. That is not a formality; it is the entire remaining control.
 
+**The measured outcome, added after the runs completed.** The refusal message changed, and that is
+the evidence the manifest was actually found and read rather than merely committed. Runs A and B
+failed with _"No manifest at governance/gate-manifests/g1.yaml and no approved hash"_. Generation C
+(head `7ad63fa`, run `34543242198`, job `103090262040`) failed with a different sentence:
+
+```
+manifest: governance/gate-manifests/g1.yaml
+actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
+##[error]Repository variable GATE_MANIFEST_APPROVED_HASH_G1 is not set.
+```
+
+Step 6 is still `SKIPPED`, so the ordering holds **with a manifest present** — which A and B could
+not demonstrate, because there was nothing to get past. That hash is identical to the one computed
+locally from the committed blob `ad19d7df`, cross-checked in that order, and it is the only thing
+the operator now has to act on.
+
 **How to apply:** delegation of authorship is not delegation of approval, and the two must be
 separated explicitly whenever a broad instruction could be read as covering both. When in doubt,
 do the half that is unambiguous, hand over the half that is not, and make the artifact say which
-is which.
+is which. And when a control's refusal changes its wording, that wording **is** the measurement —
+"still failing" and "failing for a different reason" are different results.
 
 ---
 

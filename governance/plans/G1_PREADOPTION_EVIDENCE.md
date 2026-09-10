@@ -326,25 +326,117 @@ of it. It belongs in the backlog as a pin-refresh, not in this gate.
 A control never observed refusing anything is not known to work. This one has now been observed
 refusing.
 
-## 9. Operator boundary — nothing below is the implementer's
+## 9. The candidate manifest exists, and the guard's refusal changed
 
-Note the change §3.1 makes to this list. Items 1-3 and 5 are no longer operator-only because the
-implementer _cannot_ do them; the credential now can. They are operator-only because they are the
-authority the whole mechanism is built on, and an implementer that adopts its own manifest and
-sets its own approval hash has authorized itself. The boundary is now held by choice, and saying
-so is the point.
+**2026-09-11.** The operator delegated authoring — _"го создай манифест за меня и всё что ты
+можешь сделать сам. логины в конце"_ — and did not delegate approving. GPT-PM was asked to rule on
+whether the delegation reached the approval hash, and ruled that it does not. So
+`governance/gate-manifests/g1.yaml` now exists on `main`, written by the implementer, as an
+**operator-review candidate** that says in its own header that it carries no authority yet.
 
-1. Adopt an authoritative `governance/gate-manifests/g1.yaml` (its own commit on `main`; that path
-   is in `forbidden_paths`, so a gate PR carrying it fails the check — correctly).
-2. Compute the sha256 **of that adopted file**, not of the proposal.
-3. Set `GATE_MANIFEST_APPROVED_HASH_G1`.
-4. ~~`gh auth login`~~ — **done**, by the operator, during this plan. The pull request can now be
-   opened from this session. It has not been: opening it is GPT-PM's step 6, and the approved plan
-   ends at F12 with a stop. It needs its own GO, not this document's assumption.
+**FACT.** Committed to `main` as `34b9d2d`, its own commit, outside PR #1. That placement is not
+stylistic: `governance/gate-manifests/**/*.yaml` is in the manifest's own `forbidden_paths`, so a
+gate PR carrying its own authorizing manifest would fail the very check it was trying to satisfy —
+which is NM3 stated as a diff.
+
+**FACT, asserted rather than reasoned.** `git diff --name-only main...gate/g1-remediation` does not
+list `governance/gate-manifests/g1.yaml`. Zero occurrences. The three-dot range starts after the
+manifest's introduction once `main` is merged into the gate branch, so the PR never carries it.
+
+### 9.1 The transition that proves the manifest was read
+
+Runs A and B failed with _"No manifest at governance/gate-manifests/g1.yaml and no approved hash"_.
+**Generation C fails with a different sentence**, and the difference is the evidence:
+
+| Generation | Head      | CI                | Governance       | Step 5 message          | Step 6      |
+| ---------- | --------- | ----------------- | ---------------- | ----------------------- | ----------- |
+| A          | `3c43d06` | success, 15 steps | failure, 9 steps | no manifest, no hash    | **SKIPPED** |
+| B          | `5bbf783` | success, 15 steps | failure, 9 steps | no manifest, no hash    | **SKIPPED** |
+| C          | `7ad63fa` | success, 15 steps | failure, 9 steps | **variable is not set** | **SKIPPED** |
+
+Verbatim from run `34543242198`, job `103090262040`:
+
+```
+manifest: governance/gate-manifests/g1.yaml
+actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
+##[error]Repository variable GATE_MANIFEST_APPROVED_HASH_G1 is not set.
+```
+
+The runner found the file, read it, and hashed it. What is missing is now the operator's approval
+and nothing else. Step 6 is still `SKIPPED`, so the ordering still holds with a manifest present —
+which runs A and B could not demonstrate, because there was no manifest to get past.
+
+### 9.2 The hash, cross-checked two ways before being handed over
+
+| Source                                      | Value                                                              |
+| ------------------------------------------- | ------------------------------------------------------------------ |
+| Local: `git cat-file -p` on blob `ad19d7df` | `e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162` |
+| CI: the `actual:` line of run `34543242198` | `e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162` |
+
+Identical. 21257 bytes. Both are computed from the **LF** bytes git stores and the runner checks
+out — a hash taken from a Windows working copy with CRLF endings will not match, which is the
+reason the value is supplied at all.
+
+**It is supplied to remove a byte-encoding trap, not to remove the reading.** The workflow's own
+error text says setting the printed value without reading the manifest reduces the control to a
+rubber stamp, and the candidate repeats that warning in its header.
+
+### 9.3 A local verification trap, and it is the same CRLF trap as the hash
+
+Worth recording because it made local verification **lie in the failing direction**, and because it
+is the identical byte-encoding problem that makes §9.2's hash worth cross-checking.
+
+`core.autocrlf` is `true` on this machine. Switching branches to place the manifest on `main` and
+back re-materialised every file that differs between the two commits — converting them to CRLF,
+where the same checkout had been LF before. Two things then broke locally while CI stayed green:
+
+- `prettier --check .` reported **18 files** with style issues. `--end-of-line auto` reported all
+  of them clean. The difference was line endings and nothing else.
+- `vitest` reported `SyntaxError: Invalid or unexpected token` in `tests/policy/gate-scope.test.mjs`,
+  with the caret pointing at a line the reported position did not match — the signature of offset
+  drift in Vite's SSR transform on CRLF input. `node --check` parsed both the test and the module
+  it imports without complaint, and a direct `import()` returned all six exports.
+
+**The measurement that settled it, after two wrong guesses.** `git cat-file -s` is authoritative
+where a piped `grep` is not: `AGENTS.md` is **4129** bytes in git and was **4201** in the working
+tree — exactly +72, the file's line count. An earlier probe using `grep -c $'\r'` reported 72 CRs in
+the blob too; that probe was counting lines containing the letter `r`, not carriage returns, and it
+sent the diagnosis down a false path for two steps. Byte counts do not have that failure mode.
+
+Normalising the working tree with the project's own `prettier --write .` restored 88/88 tests and
+30/30 mutations killed. `git diff --numstat` then showed real content changes in **three** files
+only; the other 18 were line-ending noise in `git status`'s stat cache, with zero diff.
+
+**Nothing in the repository was ever wrong** — CI proved it independently at every step, since the
+runner checks out the LF bytes git actually stores. The lesson is narrower and worth keeping: on
+this machine a branch switch can make the local suite fail on content that is correct, and the
+first instinct — that the code broke — is the wrong one.
+
+### 9.4 An incidental measurement
+
+The same push made `main`'s own CI execute for the first time: run `34543145719`, **15 steps,
+success**. Worth recording because it was an open question — the toolchain fixes are on the gate
+branch, so `main` passing on its own was not certain.
+
+## 10. Operator boundary — nothing below is the implementer's
+
+Note the change §3.1 makes to this list. These are not operator-only because the implementer
+_cannot_ do them; the credential now can. They are operator-only because they are the authority the
+whole mechanism is built on, and an implementer that adopts its own manifest and sets its own
+approval hash has authorized itself. The boundary is held by choice, and saying so is the point.
+
+1. ~~Adopt an authoritative `governance/gate-manifests/g1.yaml`~~ — **authoring delegated and
+   done** (§9). What exists is a candidate; adopting it is step 2, not step 1.
+2. **Read the candidate**, then set `GATE_MANIFEST_APPROVED_HASH_G1` to
+   `e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162` if adopting it. This single
+   act is what converts the file from a draft into scope authority. Measured at the time of
+   writing: `gh variable list` returns empty — the implementer did not set it.
+3. Merge PR #1 (INV-20).
+4. ~~`gh auth login`~~ — **done**, by the operator, during an earlier plan.
 5. Decide and apply branch protection (§6).
-6. **New, and the one this document most wants an answer to:** decide the credential model of
-   §3.1. A fine-grained token, a hand-operated admin path, or an explicit acceptance that these
-   controls are procedural. Whichever is chosen, the documents in §4 must end up saying the same
-   thing the token actually permits.
+6. **The one this document most wants an answer to:** decide the credential model of §3.1. A
+   fine-grained token, a hand-operated admin path, or an explicit acceptance that these controls
+   are procedural. Whichever is chosen, the documents in §4 must end up saying the same thing the
+   token actually permits.
 
 G1 is **not** closed. G2 does not begin.

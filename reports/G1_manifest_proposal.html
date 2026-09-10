@@ -395,13 +395,17 @@
   <dl>
     <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 3c43d06</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 7ad63fa</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Copy page" data-done="Copied"
           data-fail="Select manually">Copy page</button>
 </div>
 <!-- report-conform:end -->
+
+
+
+
 
 
 
@@ -925,6 +929,119 @@ An implementer-authored manifest has no authority (INV-28).</code></pre>
     </div>
   </section>
 
+
+  <section>
+    <div class="section-head">
+      <span class="num">08</span>
+      <div><h2>The manifest is written. One operator action remains</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The operator delegated authoring: <em>"go, create the manifest for me and everything you
+        can do yourself"</em>. Authoring, yes. <strong>Approving, no</strong> &mdash; and that
+        difference is the entire mechanism. This was not decided unilaterally: the question went to
+        GPT-PM as a decision with options, and it ruled &mdash; <em>"implementer may author and
+        push the candidate manifest at the operator's explicit direction, but must not set
+        GATE_MANIFEST_APPROVED_HASH_G1"</em>.
+      </p>
+      <p>
+        The reason, recorded in the file itself: if one party writes a manifest <em>and</em>
+        installs the hash that makes it binding, the check proves nothing &mdash; the loop is closed
+        with no external party in it. That is NM3 from the v0.2 adversarial review, and G1's whole
+        closure argument rests on NM3 being closed.
+      </p>
+
+      <p class="kicker">What now exists in the repository</p>
+      <p>
+        <code>governance/gate-manifests/g1.yaml</code>, commit <code>34b9d2d</code>, directly on
+        <code>main</code> &mdash; <strong>outside PR #1</strong>. Not a stylistic choice:
+        <code>governance/gate-manifests/**/*.yaml</code> is in the manifest's own
+        <em>forbidden_paths</em>, so a PR carrying its own authorizing manifest would fail the very
+        check it was trying to satisfy. Asserted, not reasoned:
+        <code>git diff --name-only main...gate/g1-remediation</code> does not list it &mdash; zero
+        occurrences.
+      </p>
+
+      <p class="kicker">The changed refusal message is the evidence</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Runs A and B failed for a missing file. C fails for a different reason.</caption>
+          <thead>
+            <tr><th>Generation</th><th>Head</th><th>CI</th><th>Governance</th><th>Step 5 message</th><th>Step 6</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>A</td><td><code>3c43d06</code></td><td>success, 15</td><td>failure, 9</td><td>no manifest, no hash</td><td><span class="chip block">SKIPPED</span></td></tr>
+            <tr><td>B</td><td><code>5bbf783</code></td><td>success, 15</td><td>failure, 9</td><td>no manifest, no hash</td><td><span class="chip block">SKIPPED</span></td></tr>
+            <tr><td>C</td><td><code>7ad63fa</code></td><td>success, 15</td><td>failure, 9</td><td><strong>variable is not set</strong></td><td><span class="chip block">SKIPPED</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>manifest: governance/gate-manifests/g1.yaml
+actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
+##[error]Repository variable GATE_MANIFEST_APPROVED_HASH_G1 is not set.</code></pre>
+      <p>
+        The runner <strong>found the file, read it and hashed it</strong>. What is missing now is
+        the operator's approval and nothing else. Step 6 is still <code>SKIPPED</code>, so the
+        ordering holds with a manifest present &mdash; which runs A and B could not demonstrate,
+        because there was no manifest to get past.
+      </p>
+
+      <p class="kicker">The hash, cross-checked two independent ways</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Source</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Local, <code>git cat-file -p</code> on blob <code>ad19d7df</code></td><td><code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code></td></tr>
+            <tr><td>CI, the <code>actual:</code> line of run <code>34543242198</code></td><td><code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Identical. 21257 bytes. Both computed from the <strong>LF</strong> bytes git stores and the
+        runner checks out &mdash; a hash taken from a Windows working copy with CRLF endings will
+        <em>not</em> match. That is why the value is supplied at all.
+      </p>
+      <p>
+        <strong>It removes a line-ending trap, not the reading.</strong> The workflow's own error
+        text says that pasting the value CI just printed, without reading the manifest, reduces the
+        control to a rubber stamp. The candidate repeats that warning in its own header.
+      </p>
+
+      <p class="kicker">Exactly one operator action</p>
+      <p>
+        Read <code>governance/gate-manifests/g1.yaml</code> (24 allowed paths, 4 forbidden), and if
+        adopting it, set <code>GATE_MANIFEST_APPROVED_HASH_G1</code> = <code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code> under
+        Settings &rarr; Secrets and variables &rarr; Actions &rarr; Variables. Step 6 will then be
+        reached for the first time in this repository's life &mdash; and pass: it was verified
+        locally that all 28 of the PR's paths fall inside the scope.
+      </p>
+      <p>
+        <strong>An honest limitation, recorded inside the manifest too.</strong> The party bound by
+        this scope is the party that drafted it. GPT-PM reviewed it, but the only thing standing
+        between that and a self-authorized scope is the operator actually reading the bytes before
+        setting the hash. That is not a formality; it is the entire remaining control.
+      </p>
+      <p class="kicker">A side finding: local verification lied, CI did not</p>
+      <p>
+        <code>core.autocrlf = true</code> on this machine. Switching branches to commit the manifest
+        rewrote the working tree to CRLF, and two things broke locally while CI stayed green:
+        <code>prettier --check</code> flagged 18 files, and <code>vitest</code> reported a
+        <code>SyntaxError</code> in a test that <code>node --check</code> parses without complaint.
+        Byte counts settled it: <code>AGENTS.md</code> is 4129 bytes in git against 4201 in the
+        tree, exactly +72 = its line count. The project's own <code>prettier --write .</code>
+        restored 88/88 and 30/30, and <code>git diff --numstat</code> showed real changes in three
+        files only. <strong>Nothing in the repository was ever wrong.</strong> It is the same
+        line-ending trap that is the reason to take the hash above from CI rather than compute it
+        locally.
+      </p>
+      <p>
+        Measured at handover: <code>gh variable list</code> is empty. The variable was not set by
+        the implementer, though it technically could have been &mdash; which is what makes it mean
+        anything.
+      </p>
+    </div>
+  </section>
+
   <footer>
     <p>
       G1 is not closed. G2 does not begin. The manifest proposal stays a proposal until the operator
@@ -932,6 +1049,10 @@ An implementer-authored manifest has no authority (INV-28).</code></pre>
     </p>
   </footer>
 </div>
+
+
+
+
 
 
 

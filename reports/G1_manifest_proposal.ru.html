@@ -395,13 +395,17 @@
   <dl>
     <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 3c43d06</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 7ad63fa</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Копировать страницу" data-done="Скопировано"
           data-fail="Выделите вручную">Копировать страницу</button>
 </div>
 <!-- report-conform:end -->
+
+
+
+
 
 
 
@@ -924,6 +928,117 @@ An implementer-authored manifest has no authority (INV-28).</code></pre>
     </div>
   </section>
 
+
+  <section>
+    <div class="section-head">
+      <span class="num">08</span>
+      <div><h2>Манифест написан. Осталось одно ваше действие</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Вы делегировали написание: <em>&laquo;го создай манифест за меня и всё что ты можешь
+        сделать сам&raquo;</em>. Написание &mdash; да. <strong>Одобрение &mdash; нет</strong>, и
+        разница здесь и есть весь механизм. Я не решал это сам: вопрос был поставлен GPT-PM как
+        решение с вариантами, и он вынес правило &mdash;
+        <em>&laquo;implementer may author and push the candidate manifest at the operator's
+        explicit direction, but must not set GATE_MANIFEST_APPROVED_HASH_G1&raquo;</em>.
+      </p>
+      <p>
+        Причина, записанная и в самом файле: если одна сторона пишет манифест <em>и</em> ставит
+        хеш, который делает его обязывающим, проверка не доказывает ничего &mdash; контур замкнут,
+        внешней стороны в нём нет. Это NM3 из состязательного ревью v0.2, а на закрытости NM3
+        держится весь аргумент закрытия G1.
+      </p>
+
+      <p class="kicker">Что появилось в репозитории</p>
+      <p>
+        <code>governance/gate-manifests/g1.yaml</code>, коммит <code>34b9d2d</code> прямо в
+        <code>main</code> &mdash; <strong>вне PR #1</strong>. Это не стилистика: путь
+        <code>governance/gate-manifests/**/*.yaml</code> стоит в <em>forbidden_paths</em> самого
+        манифеста, и PR, везущий собственный авторизующий манифест, провалил бы ту самую проверку,
+        которую пытается пройти. Проверено фактом, а не рассуждением:
+        <code>git diff --name-only main...gate/g1-remediation</code> файла не содержит &mdash; ноль
+        совпадений.
+      </p>
+
+      <p class="kicker">Сменившаяся фраза отказа &mdash; это и есть доказательство</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Прогоны A и B падали из-за отсутствия файла. C падает уже по другой причине.</caption>
+          <thead>
+            <tr><th>Поколение</th><th>Head</th><th>CI</th><th>Governance</th><th>Сообщение шага 5</th><th>Шаг 6</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>A</td><td><code>3c43d06</code></td><td>success, 15</td><td>failure, 9</td><td>нет манифеста и нет хеша</td><td><span class="chip block">SKIPPED</span></td></tr>
+            <tr><td>B</td><td><code>5bbf783</code></td><td>success, 15</td><td>failure, 9</td><td>нет манифеста и нет хеша</td><td><span class="chip block">SKIPPED</span></td></tr>
+            <tr><td>C</td><td><code>7ad63fa</code></td><td>success, 15</td><td>failure, 9</td><td><strong>переменная не установлена</strong></td><td><span class="chip block">SKIPPED</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>manifest: governance/gate-manifests/g1.yaml
+actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
+##[error]Repository variable GATE_MANIFEST_APPROVED_HASH_G1 is not set.</code></pre>
+      <p>
+        Раннер <strong>нашёл файл, прочитал его и посчитал хеш</strong>. Не хватает теперь только
+        вашего одобрения. Шаг 6 по-прежнему <code>SKIPPED</code> &mdash; то есть порядок держится и
+        при наличии манифеста, чего прогоны A и B показать не могли: там манифеста не было вовсе.
+      </p>
+
+      <p class="kicker">Хеш, сверенный двумя независимыми способами</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Источник</th><th>Значение</th></tr></thead>
+          <tbody>
+            <tr><td>Локально, <code>git cat-file -p</code> по блобу <code>ad19d7df</code></td><td><code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code></td></tr>
+            <tr><td>CI, строка <code>actual:</code> прогона <code>34543242198</code></td><td><code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Совпали. 21257 байт. Оба посчитаны от <strong>LF</strong>-байтов, которые хранит git и
+        выкладывает раннер &mdash; хеш, снятый в Windows-чекауте с CRLF, <em>не совпадёт</em>.
+        Именно поэтому значение вообще приводится.
+      </p>
+      <p>
+        <strong>Оно дано, чтобы убрать ловушку с переносами строк, а не чтобы убрать чтение.</strong>
+        Сам workflow пишет в тексте ошибки, что вставить только что напечатанное CI значение, не
+        прочитав манифест, значит превратить контроль в штамп. Кандидат повторяет это
+        предупреждение в собственной шапке.
+      </p>
+
+      <p class="kicker">Ваше действие &mdash; ровно одно</p>
+      <p>
+        Прочитать <code>governance/gate-manifests/g1.yaml</code> (24 разрешённых пути, 4
+        запрещённых) и, если принимаете, поставить <code>GATE_MANIFEST_APPROVED_HASH_G1</code> =
+        <code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code> в Settings &rarr; Secrets and variables &rarr; Actions &rarr;
+        Variables. После этого шаг 6 впервые в жизни репозитория дойдёт до выполнения &mdash; и
+        пройдёт: локально проверено, что все 28 путей PR укладываются в область.
+      </p>
+      <p>
+        <strong>Честное ограничение, записанное и внутри манифеста.</strong> Сторона, которую
+        связывает эта область, &mdash; та же сторона, что её составила. GPT-PM отревьюил, но
+        единственное, что отделяет это от самоавторизации, &mdash; то, что вы действительно
+        прочитаете байты перед установкой хеша. Это не формальность, это весь оставшийся контроль.
+      </p>
+      <p class="kicker">Побочная находка: локальная проверка солгала, CI — нет</p>
+      <p>
+        На этой машине <code>core.autocrlf = true</code>. Переключение веток ради коммита манифеста
+        переписало рабочее дерево в CRLF — и локально сломались две вещи, при том что CI оставался
+        зелёным: <code>prettier --check</code> зафлагал 18 файлов, а <code>vitest</code> выдал
+        <code>SyntaxError</code> в тесте, который <code>node --check</code> разбирает без единого
+        замечания. Решил байтовый счёт: <code>AGENTS.md</code> — 4129 байт в git против 4201 в
+        дереве, ровно +72 = число строк. Штатный <code>prettier --write .</code> вернул 88/88 и
+        30/30; <code>git diff --numstat</code> показал реальные изменения только в трёх файлах.
+        <strong>В репозитории всё это время всё было верно.</strong> Это ровно та же ловушка
+        переносов строк, из-за которой хеш выше стоит брать из CI, а не считать у себя.
+      </p>
+      <p>
+        Измерено на момент передачи: <code>gh variable list</code> пуст. Переменную я не ставил,
+        хотя технически мог &mdash; и именно это делает её значимой.
+      </p>
+    </div>
+  </section>
+
   <footer>
     <p>
       G1 не закрыт. G2 не начинается. Предложение манифеста остаётся предложением до вашего
@@ -932,6 +1047,10 @@ An implementer-authored manifest has no authority (INV-28).</code></pre>
     </p>
   </footer>
 </div>
+
+
+
+
 
 
 
