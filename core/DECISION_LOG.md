@@ -5,6 +5,80 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — Standing MVP1 GO: what one operator GO replaces, and the five things it does not
+
+**Decision:** MVP1 runs as one authorized program instead of gate-by-gate operator approval. GPT-PM
+review is capped at **three rounds** per gate. Anything unresolved after round three goes to the
+backlog and the program continues. Credentials and anything costing money are deferred to the end
+of the program. Plan `personal-decision-os-2026-09-10T21-30-18-539Z-0e084e`, hash `abc4a5f…`,
+GPT-PM `VERDICT: APPROVE` 0/0 at round 2.
+
+**Why — the operator's instructions, verbatim, because paraphrase is how a grant quietly grows:**
+
+> "запиши строгие правила для этой сесии - совратить количество раундов гпт до 3 максимум, ГО весь
+> мвп1 одним большим прогоном плюс ГО все пуш, комит, пр до завершения мвп1"
+
+> "го на всё что нужно. если за 3 прогона не решается пишешь в бэклог и идёшь дальше по плану.
+> деньги и логины тоже на последок"
+
+**What this displaces, named rather than silently overwritten.** The kickoff document says: _"Claude
+is IMPLEMENTER, not final approver. No blanket authorization; gates are approved one at a time."_
+The operator is entitled to change their own rule and has done so explicitly.
+
+**What the standing GO actually replaces: exactly one thing.** It satisfies the **operator-GO**
+requirement for every MVP1 gate and authorizes every commit, push, pull request and gate branch
+until MVP1 is complete. That is its entire reach. It does not reach:
+
+- **A — the reviewer.** Every gate's own Rosetta plan still needs its own GPT-PM `VERDICT: APPROVE`
+  before that plan's mutations begin. GPT-PM cannot approve G2…G10 plans it has never seen: their
+  scope and hashes do not exist yet. A standing operator GO cannot be laundered into a pre-issued
+  reviewer approval.
+- **B — INV-28, program-wide.** For every gate G1 through G10 the binding manifest and its approved
+  hash are operator-owned. The implementer prepares non-binding proposals only. This invariant does
+  not expire when G1 closes.
+- **C — INV-20.** The implementer does not approve or merge its own gate. Opening a PR is
+  authorized; merging it is not.
+- **D — deletion and real money.** Operator-only under any GO, and now explicitly deferred to the
+  end of the program by the operator's own "деньги и логины тоже на последок".
+- **E — MVP1's own boundaries.** Sources stay exactly Gmail + personal Telegram. HARD_ZERO holds.
+  Telegram raw and Telegram-derived values never enter AI; MVP1 AI accepts only a
+  `GmailEvidenceBundle` built before cross-channel merge. A GO to **build** MVP1 is not a GO to
+  **redefine** it.
+
+**Round cap, and the precedence stated rather than left as a silent conflict.** The injected
+authority header says "up to 5 evidence-based rounds"; the operator says three. Both cannot hold,
+and keeping both is how a cap becomes decorative. The later operator instruction supersedes the
+header for this program: round 1 a complete BLOCKER/MAJOR sweep, round 2 one remediation batch,
+round 3 verification. Still unresolved → **backlog entry, and the program moves on** — the
+operator's own disposal, replacing the earlier "escalate as a decision".
+
+**Authority is not capability — and this entry's own first draft got it wrong.** Rev1 of the plan
+said `governance/operator-approvals/` is CODEOWNERS-protected and that "only the operator **can**
+write it". Both overstate, and `.github/CODEOWNERS:7-9` says so itself: without branch protection
+requiring Code Owner review, CODEOWNERS is decoration — and this session measured a credential with
+repository admin. The accurate form is **only the operator is AUTHORIZED to write those paths**.
+That this recurred one round after the identical finding was closed is the durable lesson: the
+overclaiming phrasing is the default, and only deliberate attention keeps it out.
+
+**Consequence for sequencing, not yet actioned.** "Logins last" reorders the program in a real way:
+G3 (Gmail OAuth) and G4 (Telegram TDLib session) cannot _complete_ without credentials, and nothing
+deploys to Cloudflare without an account. What can proceed is everything offline-verifiable —
+contracts, schema, provenance primitives, resolver logic, deterministic rules, tests and mutation
+evidence — with the live-credential legs of each gate deferred to a credential phase at the end.
+Gates will therefore close in a different order than `PLAN_MASTER_GATES.md` lists, and that
+divergence needs GPT-PM's ruling before it is acted on rather than after.
+
+**Evidence:** GPT-PM rev1 `88c571f…` REJECT with 2 BLOCKER + 2 MAJOR; rev2 `abc4a5f…` APPROVE 0/0,
+reply `ded62fcc…`. Round count for this plan: 2 of 3.
+
+**How to apply:** Before treating anything as authorized by the standing GO, check it against A-E.
+The grant removed one approval step; it did not make the implementer the reviewer, the manifest
+authority, or the merge authority. When a gate hits the round cap, write the backlog entry with the
+same rigour as a finding — an unresolved item recorded vaguely is how a cap turns into a way of
+losing work rather than a way of finishing it.
+
+---
+
 ## 2026-09-10 — A post-GO edit reconciled, and two defects it hid
 
 **Decision:** The manifest proposal was edited **after** its plan's GO and **outside** that plan's
