@@ -5,6 +5,82 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — The operator delegated authoring the G1 manifest, and did not delegate approving it
+
+**Decision:** `governance/gate-manifests/g1.yaml` now exists on `main`, written by the implementer,
+as an **operator-review candidate**. It has no authority yet and says so in its own header. Plan
+`personal-decision-os-2026-09-10T23-30-47-031Z-e532fc`, hash `ebb8178a…`, GPT-PM
+`VERDICT: APPROVE` 0/0 at round 3 of a 3-round cap.
+
+**Why — the operator's instruction, verbatim, because paraphrase is how a delegation quietly
+grows:**
+
+> "го создай манифест за меня и всё что ты можешь сделать сам. логины в конце"
+
+That sentence delegates **authoring**. It does not, on its own, delegate **approving** — and the
+difference is the entire mechanism. GPT-PM was asked to rule rather than told what had been
+decided, and ruled:
+
+> "Final authority ruling remains Option A: implementer may author and push the candidate manifest
+> at the operator's explicit direction, but must not set `GATE_MANIFEST_APPROVED_HASH_G1`. The
+> operator must review the exact committed bytes and set the verified hash only if adopting them."
+
+**The reasoning, recorded because it will be tempting to skip next time.** If one party writes a
+manifest **and** installs the hash that makes it binding, the check proves nothing about scope
+authority — the loop is closed with no external party in it. That is NM3 from the v0.2 adversarial
+review, and G1's whole closure argument rests on NM3 being closed. Measured, not assumed: the
+implementer's credential is a classic PAT with `repo`, `workflow`, `admin:org` and
+`.permissions.admin: true`, so it **can** set that variable. It did not. `gh variable list`
+returned empty before the work and is re-measured at closure.
+
+**Why the file went to `main` directly instead of through PR #1.** `governance/gate-manifests/**/*.yaml`
+is in the manifest's own `forbidden_paths`. A gate PR carrying its own authorizing manifest is the
+circularity the ordering exists to prevent, so the candidate is committed outside the PR and,
+because `git diff BASE...HEAD` is three-dot, never appears in that PR's diff once `main` is merged
+into the gate branch. Asserted empirically, not trusted.
+
+**Two defects GPT-PM caught in the plan, both real, and one premise of its own that measurement
+disproved.**
+
+1. **The moving-ref defect, and it would have shipped false provenance.** The plan said to
+   recompute `plan_hash` from `HEAD:governance/plans/G1_REMEDIATION_PLAN.md`. But the manifest is
+   committed while checked out on `main`, where that same path is a **different, older object**:
+
+   | Ref                   | Blob                                       | Bytes |
+   | --------------------- | ------------------------------------------ | ----- |
+   | `main`                | `3df2f47c754513df2d363008a94d10127675c027` | 7681  |
+   | `gate/g1-remediation` | `5f48ca301835d79d4512cafb077c4abb644745be` | 13678 |
+
+   Executed as written it would have hashed the 7681-byte copy and written provenance pointing at
+   the wrong object — and **nothing downstream would have caught it**, because `plan_hash` is not
+   enforced by CI. Provenance is now pinned to an immutable commit and blob, and the reproducing
+   command names that commit and never `HEAD`.
+
+2. **Rewriting the header was not enough.** The draft carried further assertions that become false
+   once the bytes sit in the binding directory: its own location rationale, a never-copy-this
+   instruction, its filename, "Nothing here has been approved", the second-person adoption section,
+   and `approved_scope` beginning "NOT APPROVED". All rewritten so the committed object stays true
+   **both before and after** the hash is set. Verified by grep: five such strings, zero live hits.
+
+3. **The premise I did not accept.** GPT-PM asserted `plan_hash` was stale because the plan "has
+   changed since that original proposal snapshot". Measured: blob `5f48ca30…`, 13678 bytes, sha256
+   `91b4dd9a…` — byte-identical to the drafted value and to the byte count its own comment records.
+   The file had not changed. The required change was adopted anyway, because provenance recorded by
+   measurement beats provenance carried forward on trust — but "recomputed because it was stale"
+   was not written into a governance artifact when the measurement says otherwise.
+
+**A limitation this file adds by existing, and it is stated inside the manifest too.** The party
+bound by this scope is the party that drafted it. GPT-PM reviewed it, but the only thing standing
+between that and a self-authorized scope is the operator actually reading the bytes before setting
+the hash. That is not a formality; it is the entire remaining control.
+
+**How to apply:** delegation of authorship is not delegation of approval, and the two must be
+separated explicitly whenever a broad instruction could be read as covering both. When in doubt,
+do the half that is unambiguous, hand over the half that is not, and make the artifact say which
+is which.
+
+---
+
 ## 2026-09-10 — G0 CLOSED (GPT-PM APPROVE); G1 held; CI is blocked by GitHub billing
 
 **Decision:** G0 is closed. GPT-PM returned `VERDICT: APPROVE, 0 BLOCKER, 0 MAJOR` and ruled that
