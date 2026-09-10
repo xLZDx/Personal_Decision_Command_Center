@@ -5,6 +5,74 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — CI executed for the first time, and the guard was observed refusing
+
+**Decision:** PR **#1** (`gate/g1-remediation` → `main`) opened as a deliberate negative control,
+with the manifest **not** adopted, to find out whether this repository's governance claims describe
+anything real. They do. The PR stays open: INV-20 means the implementer does not merge its own
+gate. Plan `personal-decision-os-2026-09-10T21-44-03-956Z-a5c65d`, hash `213bfce…`, GPT-PM
+`VERDICT: APPROVE` 0/0 at round 2.
+
+**Why:** Every governance claim here was backed by local evidence only. Both prior runs in the
+repository's entire history — `34513131209` and `34515018325` — completed in 3-4 seconds with
+`steps: 0`. Nothing had ever executed. So "CI enforces X" had never once been true, not because a
+check failed but because no check ran.
+
+**Evidence — the prediction was written before the PR existed, so a miss would have shown:**
+
+| Run           | Workflow     | Conclusion  | Job            | **Steps** |
+| ------------- | ------------ | ----------- | -------------- | --------- |
+| `34533959619` | `CI`         | **success** | `103061087465` | **15**    |
+| `34533959777` | `Governance` | **failure** | `103061087929` | **9**     |
+
+The step counts are the headline. Fifteen executed steps is the first proof Actions run here at
+all — `npm ci`, format, lint, typecheck, 88 tests, the test-count assertion, the test-deletion
+guard, the secret scan and the dependency audit, every one green on a clean checkout.
+
+**The Governance job settled two claims that had been assertions until now:**
+
+```
+4. Resolve the gate this PR belongs to                      success
+5. Verify manifest hash against operator-controlled state   FAILURE
+6. Check changed paths against the verified manifest        SKIPPED
+```
+
+Verbatim from the annotations: _"No manifest at governance/gate-manifests/g1.yaml and no approved
+hash for G1. The operator must author and adopt the manifest, and set the repository variable
+GATE_MANIFEST_APPROVED_HASH_G1, before this gate can merge. An implementer-authored manifest has no
+authority (INV-28)."_
+
+1. **The guard refuses.** First time in this project's life that a control has been observed saying
+   no. Everything before was a description of a control.
+2. **The scope check is unreachable behind the hash check** — step 6 `SKIPPED`, not merely failed.
+   That is exactly what G1-M2 was about: validating a diff against a manifest whose integrity was
+   never established is circular, since the diff could have rewritten the manifest authorizing it
+   (NM3). The one-workflow rewrite claimed to close that, and now it is observed doing so.
+
+**R11: factually resolved, register deliberately not updated.** Non-zero step counts are the one
+thing that closes it. But changing a risk's status is G1 document remediation, which waits for a
+binding manifest exactly like the corrections catalogued in `G1_PREADOPTION_EVIDENCE.md` §4 — the
+standing MVP1 GO replaced the operator-GO requirement, not the manifest requirement. GPT-PM raised
+this as a BLOCKER against the plan's first revision and was right to.
+
+**A second defect GPT-PM caught in the same review, worth recording because it is subtle:** pushing
+the evidence commit changes the PR head and fires a `synchronize` event, producing a _second_ set of
+runs. The first plan revision would have closed having observed only the first generation, leaving
+the PR's actual head carrying checks nobody had looked at — fatal for a plan whose load-bearing
+evidence is a step count. The approved revision names two generations, observes both, and forbids a
+third commit to record the second, which is where that regress would otherwise never end.
+
+**Backlog, not blocking:** both jobs warn that `actions/checkout@v4` and `actions/setup-node@v4`
+target the deprecated Node.js 20 and are being forced onto Node.js 24.
+
+**How to apply:** This is what a governance claim looks like once it has been tested, and it is
+worth the contrast — until today every statement in this repository about enforcement was a
+description of intended behaviour. Before writing that some control here works, check whether it has
+ever been observed refusing something. Two things are now in that category; everything else is still
+a description.
+
+---
+
 ## 2026-09-10 — Standing MVP1 GO: what one operator GO replaces, and the five things it does not
 
 **Decision:** MVP1 runs as one authorized program instead of gate-by-gate operator approval. GPT-PM

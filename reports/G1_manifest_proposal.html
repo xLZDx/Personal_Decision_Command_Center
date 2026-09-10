@@ -395,13 +395,15 @@
   <dl>
     <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ a33140e</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 3c43d06</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Copy page" data-done="Copied"
           data-fail="Select manually">Copy page</button>
 </div>
 <!-- report-conform:end -->
+
+
 
 
 
@@ -867,23 +869,59 @@
   <section>
     <div class="section-head">
       <span class="num">07</span>
-      <div><h2>The prediction this is willing to be wrong about</h2></div>
+      <div><h2>The prediction held: the guard caught refusing</h2></div>
     </div>
     <div class="flow">
       <p>
-        Stated <em>before</em> the run, so the outcome is evidence either way. When the pull request
-        is opened:
+        The prediction was written down <em>before</em> the pull request existed, so a miss would
+        have been as visible as a hit. <strong>It held in full.</strong> PR <strong>#1</strong>,
+        <code>gate/g1-remediation</code> &rarr; <code>main</code>, head <code>3c43d06</code>.
       </p>
+      <div class="table-scroll">
+        <table>
+          <caption>The step count is the headline here, not a detail.</caption>
+          <thead>
+            <tr><th>Run</th><th>Workflow</th><th>Conclusion</th><th class="num-col">Steps</th><th>Duration</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="num-col">34533959619</td><td><code>CI</code></td><td><span class="chip done">success</span></td><td class="num-col">15</td><td class="num-col">33 s</td></tr>
+            <tr><td class="num-col">34533959777</td><td><code>Governance</code></td><td><span class="chip block">failure</span></td><td class="num-col">9</td><td class="num-col">10 s</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Every previous run in the repository's history reported <code>steps: 0</code> and died in
+        3-4 seconds — the billing block, nothing executing. <strong>Fifteen executed steps is the
+        first proof that CI runs here at all.</strong> The 88 tests that were only ever local
+        evidence have now run on a clean machine from a clean checkout.
+      </p>
+      <p class="kicker">Governance: nine steps, and both claims tested</p>
+      <pre><code>4. Resolve the gate this PR belongs to                      success
+5. Verify manifest hash against operator-controlled state   FAILURE
+6. Check changed paths against the verified manifest        SKIPPED</code></pre>
+      <p>Verbatim from the failing step's annotations:</p>
+      <pre><code>No manifest at governance/gate-manifests/g1.yaml and no approved hash for G1.
+The operator must author and adopt the manifest, and set the repository
+variable GATE_MANIFEST_APPROVED_HASH_G1, before this gate can merge.
+An implementer-authored manifest has no authority (INV-28).</code></pre>
       <ul>
-        <li><strong><code>CI</code> should pass.</strong> Locally 88 tests are green and all 30
-          mutations are killed. A failure here would mean the workflow is wrong, not the code.</li>
-        <li><strong><code>Governance</code> should FAIL, at the manifest step.</strong> No adopted
-          manifest exists and the variable is unset. That failure is the evidence: the first
-          observation of the guard refusing anything.</li>
-        <li><strong>If <code>Governance</code> passes, the check is broken</strong> and G1 cannot
-          close on it.</li>
+        <li><strong>The guard refuses.</strong> First time in this project's life that a control has
+          been observed saying no. Everything before it was a description of a control.</li>
+        <li><strong>The scope check is unreachable behind the hash check</strong> — step 6
+          <code>SKIPPED</code>, not merely failed. Exactly what G1-M2 was about: validating a diff
+          against a manifest whose integrity was never established is circular, because that same
+          diff could have rewritten the manifest authorizing it (NM3).</li>
       </ul>
-      <p>A control never observed refusing anything is not known to work.</p>
+      <p>
+        <strong>R11 is factually resolved</strong> — non-zero step counts are the one thing that
+        closes it. But <code>core/RISK_REGISTER.md</code> is deliberately untouched: changing a
+        risk's status is G1 document remediation and waits for the binding manifest. GPT-PM raised
+        this as a BLOCKER against the plan's first revision and was right to.
+      </p>
+      <p>
+        Backlog, not blocking: both jobs warn that <code>actions/checkout@v4</code> and
+        <code>actions/setup-node@v4</code> target the deprecated Node.js 20.
+      </p>
     </div>
   </section>
 
@@ -894,6 +932,8 @@
     </p>
   </footer>
 </div>
+
+
 
 
 

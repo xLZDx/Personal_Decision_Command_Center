@@ -42,12 +42,16 @@ state — they are evidence about the state that produced R11.
 `.github/workflows/ci.yml` triggers on `push: branches: [main]` and `pull_request`, and
 `.github/workflows/governance.yml` on `pull_request` only. A branch push matches neither.
 
-**INFERENCE, explicitly not yet a fact.** Public repositories get unmetered Actions minutes, so
-publication should have removed the block. **This is unverified.** No run has executed a step since
-publication, because no event that triggers one has occurred. R11 stays open until a run reports a
-non-zero step count.
+**SUPERSEDED BY MEASUREMENT — see §8.** This section previously ended with an INFERENCE, labelled
+as such: publication _should_ have removed the block, but no run had executed a step since, so R11
+stayed open, and one pull request was named as the whole test. That test has now been run.
 
-**What would close it:** one pull request. That is the whole test.
+**FACT.** PR #1 produced runs `34533959619` (`CI`, **15 steps**, success) and `34533959777`
+(`Governance`, **9 steps**, failure). Non-zero step counts. Actions execute on this repository.
+R11 is factually resolved; the register update is deferred behind the binding manifest per §8.4.
+
+The inference above is kept rather than deleted, so the record shows what was believed before it
+was known.
 
 ## 2. R12 — branch protection
 
@@ -251,20 +255,76 @@ of merges over red checks — real controls that do not depend on identity separ
   one number as evidence for the other; an earlier version of this project's closure evidence
   reported "27 patterns (23 + 4)", which was simply wrong and was caught in review.
 
-## 8. The prediction this plan is willing to be wrong about
+## 8. The prediction, and what actually happened
 
-Stated before the run, so the outcome is evidence either way. When the pull request is opened:
+The prediction was written down **before** the pull request existed, so that a miss would have been
+as visible as a hit: `CI` passes, `Governance` fails at the manifest step, and the scope step is
+unreachable behind it. **It held in full.**
 
-- **`CI` should PASS.** Locally `npm run verify` is green with 88 tests and
-  `npm run verify:mutation` kills all 30 mutations. A failure here means the workflow, not the
-  code, is wrong.
-- **`Governance` should FAIL, at the manifest step.** No adopted manifest exists and
-  `GATE_MANIFEST_APPROVED_HASH_G1` is unset. **This failure is the evidence**, not a setback: it is
-  the first observation of the guard refusing something, and the scope step must be shown to be
-  unreachable behind it — that ordering is what G1-M2 was about.
-- **If `Governance` PASSES, the check is broken** and G1 cannot close on it.
+### 8.1 The run
 
-A control never observed refusing anything is not known to work.
+PR **#1**, `gate/g1-remediation` → `main`, opened at head `3c43d06` with `Gate: G1` in the body.
+
+| Run           | Workflow     | Event          | Conclusion  | Job            | **Steps** | Duration |
+| ------------- | ------------ | -------------- | ----------- | -------------- | --------- | -------- |
+| `34533959619` | `CI`         | `pull_request` | **success** | `103061087465` | **15**    | 33 s     |
+| `34533959777` | `Governance` | `pull_request` | **failure** | `103061087929` | **9**     | 10 s     |
+
+**The step counts are the headline, not a detail.** Every previous run in this repository's history
+— `34513131209` and `34515018325` — reported `steps: 0` and finished in 3-4 seconds: the Actions
+billing block, nothing executing. Fifteen executed steps is the first proof that CI on this
+repository runs at all.
+
+### 8.2 CI: 15 steps, every one green
+
+`npm ci`, Format, Lint, Typecheck, Tests, "Assert the suite actually ran tests", the test-deletion
+guard, the secret scan and the dependency audit all executed and all succeeded. The 88 tests that
+were only ever local evidence are now evidence that ran on a clean machine from a clean checkout.
+
+### 8.3 Governance: the guard observed refusing, and the ordering observed holding
+
+```
+4. Resolve the gate this PR belongs to                      success
+5. Verify manifest hash against operator-controlled state   FAILURE
+6. Check changed paths against the verified manifest        SKIPPED
+```
+
+Verbatim from the failed step's annotations:
+
+> No manifest at governance/gate-manifests/g1.yaml and no approved hash for G1.
+> The operator must author and adopt the manifest, and set the repository
+> variable GATE_MANIFEST_APPROVED_HASH_G1, before this gate can merge.
+> An implementer-authored manifest has no authority (INV-28).
+
+Two separate claims are settled by those nine steps, and both had been assertions until now:
+
+1. **The guard refuses.** This is the first time in this project's life that a control has been
+   observed saying no to anything. Everything before it was a description of a control.
+2. **The scope check is unreachable behind the hash check** — step 6 `SKIPPED`, not merely failed.
+   That ordering is precisely what G1-M2 was about: validating a diff against a manifest whose
+   integrity was never established is circular, because the diff could have rewritten the manifest
+   that authorizes it (NM3). The one-workflow rewrite claimed to close that. It does.
+
+Step 4 also succeeded, which is its own small fact: the workflow found `Gate: G1` in the PR body
+and resolved the manifest path from it. The gate label remains implementer-written — limitation 6
+of `../GATE_MANIFEST_INTEGRITY.md` — and that is unchanged by this run.
+
+### 8.4 R11: factually resolved, register update deliberately deferred
+
+**Measured R11 closure evidence: non-zero Actions steps observed (15 and 9), so R11 is factually
+resolvable.** The `core/RISK_REGISTER.md` update is **not** made here. Changing a risk's status is
+G1 document remediation, and that waits for a binding manifest exactly like the corrections in §4.
+The standing MVP1 GO replaced the operator-GO requirement, not the manifest requirement. Recorded
+rather than acted on, deliberately.
+
+### 8.5 One incidental finding, not blocking
+
+Both jobs carried a warning: `actions/checkout@v4` and `actions/setup-node@v4` target Node.js 20,
+which is deprecated on GitHub runners and is being forced onto Node.js 24. Nothing failed because
+of it. It belongs in the backlog as a pin-refresh, not in this gate.
+
+A control never observed refusing anything is not known to work. This one has now been observed
+refusing.
 
 ## 9. Operator boundary — nothing below is the implementer's
 
