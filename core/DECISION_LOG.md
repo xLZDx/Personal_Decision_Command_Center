@@ -28,11 +28,29 @@ cannot be run is not evidence. The Node version runs here.
 
 **Evidence:**
 
-- `npm run verify` — green: prettier, eslint, `tsc --noEmit`, **76 tests**, 39 of them for this
-  guard in `tests/policy/gate-scope.test.mjs`.
-- `npm run verify:mutation` — **`all 27 mutations killed`**, 20 of them this guard's. Every one
+- `npm run verify` — green: prettier, eslint, `tsc --noEmit`, **88 tests**, 39 of them for this
+  guard in `tests/policy/gate-scope.test.mjs` and 12 for CODEOWNERS coverage.
+- `npm run verify:mutation` — **`all 30 mutations killed`**, 20 of them this guard's. Every one
   makes the check refuse **less**.
 - Both removed workflows remain recoverable at `b784265`.
+
+**The second GPT-PM round found a defect in the fix itself, and it was a real one.** Round 1, on
+the uncommitted diff, returned `APPROVE` with no findings. Round 2, against commit `0e7944f`,
+returned **MAJOR**: `TDD_ERRATA.md` is a new normative authority surface and was not
+CODEOWNERS-protected. Creating a document that outranks the frozen TDD and leaving it editable
+without operator review placed a new authority surface outside the trust boundary this very change
+was tightening — an implementer branch could have declared an architectural restriction superseded,
+or quoted an authority never given, without touching one protected path.
+
+Fixed by protecting `/docs/architecture/` as a directory, which also closes a gap GPT-PM did not
+raise because it predates the errata: **`TDD.md` itself was never CODEOWNERS-protected either.**
+The frozen baseline had been editable without operator review since the scaffold. Stated here
+rather than folded in silently. `tests/policy/codeowners.test.mjs` now asserts the operator-owned
+path list, with three mutations that delete or de-owner an entry — mutating the CODEOWNERS data
+rather than code, because here the data is the control.
+
+The lesson worth keeping: a change that tightens a boundary is exactly when a new authority
+surface gets created and forgotten, because attention is on the boundary being fixed.
 
 **What the internal review round changed, because it is the more useful half of this entry.**
 Three read-only specialists reviewed the change before any GPT-PM round. The first version of

@@ -211,7 +211,7 @@
     align-items: start;
     background: var(--surface);
     border: 1px solid var(--rule);
-    border-top: 3px solid var(--pass);
+    border-top: 3px solid var(--warn);
     padding: 20px 22px;
     margin-top: 26px;
   }
@@ -220,9 +220,9 @@
     font-weight: 600;
     font-size: 0.8rem;
     letter-spacing: 0.08em;
-    color: var(--pass);
-    background: var(--pass-soft);
-    border: 1px solid var(--pass);
+    color: var(--warn);
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
     padding: 4px 10px;
     white-space: nowrap;
   }
@@ -401,7 +401,7 @@
     <div class="masthead-meta">
       <span>10 September 2026</span>
       <span>branch gate/g1-remediation</span>
-      <span>76 tests · 27 mutations</span>
+      <span>88 tests · 30 mutations</span>
       <span>G1 NOT closed</span>
     </div>
   </header>
@@ -431,7 +431,7 @@
   <dl>
     <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 5574681</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 0e7944f</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Copy page" data-done="Copied"
@@ -439,14 +439,16 @@
 </div>
 <!-- report-conform:end -->
 
+
+
   <div class="verdict">
-    <span class="stamp">VERDICT: APPROVE</span>
+    <span class="stamp">VERDICT: MAJOR &rarr; remediated</span>
     <p>
-      GPT-PM: no BLOCKER / MAJOR / MINOR within the round's scope. Push approved for this branch.
-      Both judgement calls — moving the check off shell onto Node, and leaving the frozen TDD
-      untouched — were approved explicitly, with one requirement, met in this same change.
+      Round 1, on the uncommitted diff: APPROVE, no findings. Round 2, against the commit itself:
+      <strong>MAJOR</strong> — and correct. I had created a document that outranks the frozen TDD
+      and left it outside CODEOWNERS. Fixed; see §5.
     </p>
-    <p class="who">round 1 · scope: G1-M2 only · reply 50e23eb3 · APPROVE does not close G1</p>
+    <p class="who">round 1: APPROVE · round 2: MAJOR, remediated · G1 stays open</p>
   </div>
 
   <section>
@@ -749,6 +751,35 @@
         rejection branch had no assertion at all — either could have been deleted outright and the
         suite would have stayed green. Both are now covered, each by its own mutation.
       </p>
+      <h3>Then GPT-PM found a defect in the fix itself</h3>
+      <p>
+        Round 1, on the uncommitted diff, returned APPROVE with no findings. Round 2, against the
+        commit, returned <strong>MAJOR</strong>: <code>TDD_ERRATA.md</code> is a new normative
+        authority surface and was not CODEOWNERS-protected.
+      </p>
+      <p>
+        The finding is exactly right. I created a document that outranks the frozen TDD and left it
+        editable without operator review — placing a new authority surface <em>outside</em> the very
+        trust boundary this change was tightening. An implementer branch could have declared an
+        architectural restriction superseded, or quoted an authority that was never given, without
+        touching a single protected path.
+      </p>
+      <div class="note">
+        <p>
+          <strong>A gap GPT-PM did not raise was closed along the way.</strong> Protecting
+          <code>/docs/architecture/</code> as a directory surfaced that <code>TDD.md</code> itself
+          was <em>never</em> in CODEOWNERS either: the frozen architecture baseline had been editable
+          without operator review since the scaffold. That predates the errata file and was not
+          introduced by it. Said out loud rather than folded in silently — quiet bundling is exactly
+          how scope grows.
+        </p>
+      </div>
+      <p>
+        The operator-owned path list is now asserted by
+        <code>tests/policy/codeowners.test.mjs</code>, with three mutations that delete an entry or
+        strip its owner. Those mutations act on <code>.github/CODEOWNERS</code> itself rather than on
+        code, because here the data is the control.
+      </p>
     </div>
   </section>
 
@@ -763,14 +794,14 @@
       <pre><code>npm run verify
   prettier --check · eslint · tsc --noEmit · vitest
   Test Files  3 passed (3)
-       Tests  76 passed (76)          39 of them this guard
+       Tests  88 passed (88)          39 scope guard, 12 CODEOWNERS
 
 npm run verify:mutation
   baseline: green
-  all 27 mutations killed              20 of them this guard
+  all 30 mutations killed              20 scope guard, 3 CODEOWNERS
 
 node scripts/verify/assert-tests-ran.mjs
-  Test count OK: 76/76 passed (floor 50)
+  Test count OK: 88/88 passed (floor 50)
 
 node scripts/verify/check-secrets.mjs
   Secret scan: 91 tracked files, no candidate secrets found</code></pre>
@@ -878,6 +909,8 @@ node scripts/verify/check-secrets.mjs
     </p>
   </footer>
 </div>
+
+
 
 <!-- report-conform:script:begin -->
 <script>

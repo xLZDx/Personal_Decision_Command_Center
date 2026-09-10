@@ -123,8 +123,31 @@ mutation-tested — true of those two functions, and an overstatement of the fil
 CI runs was untested. `GATE_MANIFEST_INTEGRITY.md` now lists what is covered rather than
 summarising it.
 
-Final local state: `npm run verify` green with **76 tests** (39 for this guard), and
-`npm run verify:mutation` reports **all 27 mutations killed** (20 of them this guard's).
+### The GPT-PM round found one more, in the fix itself
+
+Round 1 (uncommitted diff) returned `VERDICT: APPROVE`, 0 findings. Round 2, against the actual
+commit, returned **MAJOR** — and it was right:
+
+> TDD_ERRATA.md is a new normative authority surface but is not CODEOWNERS-protected.
+
+Creating a document that outranks the frozen TDD, and leaving it editable without operator review,
+put a new authority surface **outside** the very trust boundary this change was tightening. An
+implementer branch could have declared an architectural restriction superseded, or quoted an
+authority that was never given, without touching a single protected path.
+
+Fixed by protecting `/docs/architecture/` as a directory. That also closes a gap GPT-PM did not
+raise, because it predates the errata file: **`TDD.md` itself was never CODEOWNERS-protected
+either** — the frozen architecture baseline was editable without operator review the entire time.
+Reported rather than folded in silently, since bundling an unrequested fix into a remediation is
+how scope quietly grows.
+
+`tests/policy/codeowners.test.mjs` now asserts the list of operator-owned paths, with three
+mutations that delete or de-owner an entry, so a protection cannot be dropped silently. The
+mutations act on `.github/CODEOWNERS` itself rather than on code, which is correct here: the data
+is the control.
+
+Final local state: `npm run verify` green with **88 tests** (39 for the scope guard, 12 for
+CODEOWNERS), and `npm run verify:mutation` reports **all 30 mutations killed**.
 
 **Deviation from the adopted TDD, flagged not hidden:** `docs/architecture/TDD.md`'s repository
 tree names the two separate workflow files. GPT-PM's ruling ("один workflow / один dependency

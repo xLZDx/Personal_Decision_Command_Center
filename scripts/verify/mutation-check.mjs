@@ -217,6 +217,28 @@ const MUTATIONS = [
     from: "return out.split('\\0').filter((p) => p !== '');",
     to: "return out.split('\\0');",
   },
+
+  // CODEOWNERS is the only control that actually enforces anything here (merge authority; CI is
+  // detection), so dropping a path from it is the highest-consequence silent edit in the repo.
+  // These mutate the data rather than code, which is exactly right: the guard IS the assertion.
+  {
+    label: 'CODEOWNERS: comment out /docs/architecture/, unprotecting the TDD and its errata',
+    file: '.github/CODEOWNERS',
+    from: '/docs/architecture/             @xLZDx',
+    to: '# /docs/architecture/           @xLZDx',
+  },
+  {
+    label: 'CODEOWNERS: drop /scripts/verify/, unprotecting the governance checks themselves',
+    file: '.github/CODEOWNERS',
+    from: '/scripts/verify/                @xLZDx',
+    to: '',
+  },
+  {
+    label: 'CODEOWNERS: leave an entry with no owner, which requires no review',
+    file: '.github/CODEOWNERS',
+    from: '/core/adr/                      @xLZDx',
+    to: '/core/adr/',
+  },
 ];
 
 function suitePasses() {

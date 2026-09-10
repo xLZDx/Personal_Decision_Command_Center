@@ -212,7 +212,7 @@
     align-items: start;
     background: var(--surface);
     border: 1px solid var(--rule);
-    border-top: 3px solid var(--pass);
+    border-top: 3px solid var(--warn);
     padding: 20px 22px;
     margin-top: 26px;
   }
@@ -221,9 +221,9 @@
     font-weight: 600;
     font-size: 0.8rem;
     letter-spacing: 0.08em;
-    color: var(--pass);
-    background: var(--pass-soft);
-    border: 1px solid var(--pass);
+    color: var(--warn);
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
     padding: 4px 10px;
     white-space: nowrap;
   }
@@ -405,7 +405,7 @@
     <div class="masthead-meta">
       <span>10 сентября 2026</span>
       <span>ветка gate/g1-remediation</span>
-      <span>76 тестов · 27 мутаций</span>
+      <span>88 тестов · 30 мутаций</span>
       <span>G1 НЕ закрыт</span>
     </div>
   </header>
@@ -435,7 +435,7 @@
   <dl>
     <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 5574681</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 0e7944f</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Копировать страницу" data-done="Скопировано"
@@ -443,14 +443,16 @@
 </div>
 <!-- report-conform:end -->
 
+
+
   <div class="verdict">
-    <span class="stamp">VERDICT: APPROVE</span>
+    <span class="stamp">VERDICT: MAJOR &rarr; исправлено</span>
     <p>
-      GPT-PM: BLOCKER / MAJOR / MINOR в границах раунда нет. Push для ветки одобрен.
-      Оба спорных решения — перенос проверки с shell на Node и отказ править замороженный TDD —
-      одобрены явно, с одним требованием, которое выполнено в этом же изменении.
+      Раунд 1 по незакоммиченному diff: APPROVE, находок нет. Раунд 2 по самому коммиту:
+      <strong>MAJOR</strong> — и справедливый. Я создал документ, который превосходит замороженный
+      TDD по нормативности, и оставил его вне CODEOWNERS. Исправлено; см. §5.
     </p>
-    <p class="who">раунд 1 · scope: только G1-M2 · reply 50e23eb3 · APPROVE не закрывает G1</p>
+    <p class="who">раунд 1: APPROVE · раунд 2: MAJOR, исправлено · G1 остаётся открытым</p>
   </div>
 
   <section>
@@ -751,6 +753,35 @@
         скаляров не имели ни одной ассерции — любую из них можно было удалить целиком, и suite
         остался бы зелёным. Обе теперь покрыты, каждая — собственной мутацией.
       </p>
+      <h3>А затем GPT-PM нашёл дефект в самом исправлении</h3>
+      <p>
+        Первый раунд по незакоммиченному diff вернул APPROVE без находок. Второй, уже по коммиту,
+        вернул <strong>MAJOR</strong>: <code>TDD_ERRATA.md</code> — новая нормативная поверхность
+        полномочий, и она не была защищена CODEOWNERS.
+      </p>
+      <p>
+        Формулировка точная. Я создал документ, который превосходит замороженный TDD, и оставил его
+        редактируемым без ревью оператора — то есть вынес новую поверхность полномочий
+        <em>наружу</em> того самого периметра доверия, который этим же изменением укреплял. Ветка
+        исполнителя могла объявить архитектурное ограничение отменённым или процитировать
+        полномочие, которого не было, не тронув ни одного защищённого пути.
+      </p>
+      <div class="note">
+        <p>
+          <strong>Попутно закрыт пробел, о котором GPT-PM не говорил.</strong> Защитив
+          <code>/docs/architecture/</code> целиком, я обнаружил, что <code>TDD.md</code>
+          <em>тоже</em> никогда не был в CODEOWNERS: замороженная архитектурная база была
+          редактируема без ревью оператора с самого создания репозитория. Это старше файла эрраты и
+          не им внесено. Говорю об этом отдельно, а не подмешиваю молча — именно так объём работ
+          незаметно и растёт.
+        </p>
+      </div>
+      <p>
+        Список путей, принадлежащих оператору, теперь проверяется тестом
+        <code>tests/policy/codeowners.test.mjs</code>, и три мутации удаляют запись или лишают её
+        владельца. Мутации действуют на сам файл <code>.github/CODEOWNERS</code>, а не на код — здесь
+        данные и есть средство контроля.
+      </p>
     </div>
   </section>
 
@@ -765,14 +796,14 @@
       <pre><code>npm run verify
   prettier --check · eslint · tsc --noEmit · vitest
   Test Files  3 passed (3)
-       Tests  76 passed (76)          из них 39 — этот guard
+       Tests  88 passed (88)          39 — scope guard, 12 — CODEOWNERS
 
 npm run verify:mutation
   baseline: green
-  all 27 mutations killed              из них 20 — этот guard
+  all 30 mutations killed              20 — scope guard, 3 — CODEOWNERS
 
 node scripts/verify/assert-tests-ran.mjs
-  Test count OK: 76/76 passed (floor 50)
+  Test count OK: 88/88 passed (floor 50)
 
 node scripts/verify/check-secrets.mjs
   Secret scan: 91 tracked files, no candidate secrets found</code></pre>
@@ -878,6 +909,8 @@ node scripts/verify/check-secrets.mjs
     </p>
   </footer>
 </div>
+
+
 
 <!-- report-conform:script:begin -->
 <script>

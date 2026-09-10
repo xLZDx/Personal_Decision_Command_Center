@@ -46,10 +46,24 @@ enforcement**; the rest are detection and friction.
 /core/SOURCE_POLICY.md          @<operator>
 /core/DATA_RETENTION_POLICY.md  @<operator>
 /core/adr/                      @<operator>
+/docs/architecture/             @<operator>
+/CLAUDE.md                      @<operator>
+/AGENTS.md                      @<operator>
 ```
 
-`/scripts/verify/` is on that list because the workflow is a wrapper and the checks themselves
-live there; see limitation 1 below.
+**The rule for this list: anything that can change what is binding belongs on it.** Two entries
+exist because that rule was broken and then caught:
+
+- `/scripts/verify/` — the workflow is a thin wrapper and the checks it runs live there. Protecting
+  a check's definition while leaving its implementation open protects nothing.
+- `/docs/architecture/` — `TDD_ERRATA.md` is normative and outranks `TDD.md` on concrete details,
+  so whoever can edit it can change the binding architecture without touching any other protected
+  path. GPT-PM found this in the G1-M2 review: the change created a new authority surface and left
+  it outside the boundary it was itself tightening. `TDD.md` was unlisted too — a gap that predates
+  the errata file; the directory covers both.
+
+The list of operator-owned authority paths is asserted by `tests/policy/codeowners.test.mjs`, so an
+entry cannot be dropped silently.
 
 ### 2. Approved-hash comparison against out-of-tree state
 
@@ -143,7 +157,7 @@ mechanism's credibility depends on its failure modes being written down, not onl
 
 #### What is actually verified, stated narrowly
 
-`tests/policy/gate-scope.test.mjs` (39 tests) and `npm run verify:mutation` (27 mutations, all
+`tests/policy/gate-scope.test.mjs` (39 tests) and `npm run verify:mutation` (30 mutations, all
 killed; 20 of them target this guard, and every one makes it refuse **less**) cover:
 
 - `compilePattern` — segment bounding, anchoring, metacharacter escaping, and the rejected

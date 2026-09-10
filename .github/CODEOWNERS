@@ -26,6 +26,19 @@
 /core/DATA_RETENTION_POLICY.md  @xLZDx
 /core/adr/                      @xLZDx
 
+# The architecture baseline and everything that can override it.
+#
+# `TDD_ERRATA.md` is NORMATIVE and outranks `TDD.md` on concrete details, so an implementer able to
+# edit it could change the binding architecture -- by declaring a restriction superseded, or by
+# quoting an authority that was never given -- without touching any other operator-owned path.
+# GPT-PM caught exactly that: the G1-M2 change created a new authority surface and left it outside
+# the trust boundary the same change was tightening.
+#
+# `TDD.md` itself was never listed here either. That gap predates the errata file and is not
+# something the errata introduced, but it is the same defect: the frozen baseline was editable
+# without operator review. Both are covered by taking the directory.
+/docs/architecture/             @xLZDx
+
 # The operating contracts themselves.
 /CLAUDE.md                      @xLZDx
 /AGENTS.md                      @xLZDx
