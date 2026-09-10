@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.wrangler/
+*.log
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.DS_Store
+Thumbs.db
+coverage/
+.vscode/
