@@ -16,6 +16,11 @@
 # exists in the PR's merge commit, so a PR that edits these files edits the checks that police it.
 /.github/                       @xLZDx
 
+# The workflow above is a thin wrapper; the checks it runs live here. Leaving these unprotected
+# while protecting `.github/` would mean the definition of a check is operator-owned but its
+# implementation is not.
+/scripts/verify/                @xLZDx
+
 # Policy-sensitive files (TDD 57(13)).
 /core/SOURCE_POLICY.md          @xLZDx
 /core/DATA_RETENTION_POLICY.md  @xLZDx

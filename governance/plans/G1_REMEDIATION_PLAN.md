@@ -60,12 +60,77 @@ check fails, but because no check runs. Recorded as `R11` in `../core/RISK_REGIS
 4. Operator authors/adopts governance/gate-manifests/g1.yaml    pending (operator-only, INV-28)
 5. Operator sets GATE_MANIFEST_APPROVED_HASH_G1 repo variable   pending (operator-only, out of tree)
 6. Create branch gate/g1-remediation                            AUTHORIZED by GPT-PM APPROVE
-7. Fix G1-M2: one governance workflow, hash-check -> scope-check pending
+7. Fix G1-M2: one governance workflow, hash-check -> scope-check DONE (see below)
 8. Confirm CI actually runs and is green on that branch          blocked on step 2
 9. Negative-control PR tests (see below)                         blocked on steps 2, 4, 5
 10. Fresh-context G1 review                                      pending
 11. G1 closure report                                            pending
 ```
+
+### Step 7, as built
+
+`policy-integrity.yml` and `gate-scope.yml` are replaced by a single `.github/workflows/
+governance.yml` whose steps run in one job, in order: resolve gate -> verify manifest sha256
+against the operator-held repository variable -> check changed paths. The scope step is
+unreachable unless the hash step exited 0, which is the guarantee `GATE_MANIFEST_INTEGRITY.md`
+had been claiming while the code did not provide it.
+
+Two things were done beyond the literal finding, both because the finding exposed them:
+
+- **The scope check moved from shell+`yq` into `scripts/verify/check-gate-scope.mjs`.** The shell
+  version's behaviour depended on `yq` flag and expression semantics that differ between that
+  command's Go and Python implementations, and with CI executing nothing (R11) there was no way
+  to find out which one the runner has before merging. The Node version can be run and
+  mutation-tested here and now: 20 unit tests, and 11 mutations — each one making the guard
+  refuse _less_ — all killed by `npm run verify:mutation`.
+- **Two real defects in the old matcher were found while porting it** and are recorded in
+  `../GATE_MANIFEST_INTEGRITY.md`: bash `[[ path == pattern ]]` lets `*` cross `/`, so
+  `packages/*` authorized the entire subtree; and an unparseable manifest produced an empty
+  pattern list rather than an error. Neither was in GPT-PM's findings.
+
+Also fixed, both of them side effects of the above rather than separate scope: `scripts/verify/`
+added to CODEOWNERS (it now holds a governance check, so leaving it unprotected while protecting
+`.github/` protects nothing), and `@eslint/js` declared explicitly — `eslint.config.js` imports it
+directly while it was only present transitively.
+
+### What the internal reviewers found before this was committed
+
+Three read-only specialists (security, functional-test, code) reviewed the change before any
+GPT-PM round, per the global contract's sequencing rule. They found four things worth the pass,
+all remediated in one batch:
+
+- **A silent-truncation defect in the manifest reader (MAJOR, security).** Any non-indented line
+  ended a block, so a list item that lost its indent produced an empty list with no error. For
+  `forbidden_paths` that is zero enforcement, invisible, in a file that still reads correctly to
+  the operator giving it a hash approval. Fixed and recorded in `../GATE_MANIFEST_INTEGRITY.md`.
+- **`run()` — the only function CI executes — had no test of any kind (MAJOR, tests).** Its exit
+  code IS the control. A regression dropping the violation branch would have left every unit test
+  green while the check exited 0 on a real violation. `main()` is now an exported `run()` with
+  injected dependencies, and every exit path is asserted.
+- **`changedPathsFrom()` had no test (MAJOR, tests)** — including the `-z` handling it exists for.
+  Now tested against a real temporary git repository with filenames containing a space and
+  non-ASCII characters.
+- **A mutation whose label overstated what it proved (MAJOR, tests).** "Run past the end of the
+  block" was killed by an "Unsupported line" error, not by the silent list-widening its name
+  implied. Relabelled, and replaced by two mutations that do demonstrate the real hazard.
+
+Two smaller ones: the `&` half of the alias/anchor rejection and the block-scalar rejection had no
+assertions at all, so either could have been deleted with the suite staying green. Both are now
+covered, each by its own mutation.
+
+The claim in the design document was corrected too. It had said the matcher and reader were
+mutation-tested — true of those two functions, and an overstatement of the file, since the part
+CI runs was untested. `GATE_MANIFEST_INTEGRITY.md` now lists what is covered rather than
+summarising it.
+
+Final local state: `npm run verify` green with **76 tests** (39 for this guard), and
+`npm run verify:mutation` reports **all 27 mutations killed** (20 of them this guard's).
+
+**Deviation from the adopted TDD, flagged not hidden:** `docs/architecture/TDD.md`'s repository
+tree names the two separate workflow files. GPT-PM's ruling ("один workflow / один dependency
+chain") is followed instead; the frozen TDD is left untouched and the divergence is recorded in
+`../GATE_MANIFEST_INTEGRITY.md` and `../../core/DECISION_LOG.md`. This needs GPT-PM's
+acknowledgement at the step-10 review, since it is the product owner's document to reconcile.
 
 Step 6's branch is authorized: GPT-PM returned an explicit APPROVE for "option (a)", naming
 `gate/g1-remediation`, which under the global operating contract §20 is sufficient authorization
@@ -77,8 +142,10 @@ A governance control that has never been observed _refusing_ something is not kn
 of these must be demonstrated on a real PR, with the result recorded:
 
 - A PR that edits `governance/gate-manifests/g1.yaml` without the operator updating the repository
-  variable **must fail** `policy-integrity`.
-- A PR touching a path outside the manifest's `allowed_paths` **must fail** `gate-scope`.
+  variable **must fail** the `Governance` check, at the hash step.
+- A PR touching a path outside the manifest's `allowed_paths` **must fail** the `Governance`
+  check, at the scope step — having reached that step only because the hash step passed. Both
+  halves matter: reaching the scope step is what G1-M2 was about.
 - A PR that deletes or `.skip`s a test **must fail** the test-deletion guard.
 - Evidence that branch protection and CODEOWNERS review are actually enabled — `gh api` output or
   equivalent, not a screenshot of the settings page and not this document's word for it.

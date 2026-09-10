@@ -5,6 +5,113 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — G1-M2 fixed: one governance workflow; scope check rewritten and mutation-tested
+
+**Decision:** `.github/workflows/policy-integrity.yml` and `.github/workflows/gate-scope.yml` are
+replaced by a single `.github/workflows/governance.yml`. Its steps run in one job in order —
+resolve gate, verify manifest sha256 against the operator-held repository variable, check changed
+paths — so the scope step is unreachable unless the hash step exited 0. The scope logic moved out
+of shell into `scripts/verify/check-gate-scope.mjs`.
+
+**Why:** GPT-PM's G1 review, finding **G1-M2**: `governance/GATE_MANIFEST_INTEGRITY.md` promised
+the scope check ran "only after the hash check has passed, and in the same job", while the code
+had two independent `pull_request` workflows with `needs: []`. `gate-scope.yml`'s own header
+comment asserted the ordering it did not have. The scope check therefore validated a diff against
+a manifest whose integrity nothing had established — the NM3 circularity, reintroduced by the file
+layout. GPT-PM: "Я предпочитаю один workflow / один dependency chain."
+
+The rewrite out of shell was not in the finding. Reason: the old check's behaviour depended on
+`yq` flag and expression semantics that differ between that command's Go and Python
+implementations (`-r`, `// empty`), and because GitHub Actions on this repository executes nothing
+at all (R11), there was no way to learn which one the runner has before merging it. A guard that
+cannot be run is not evidence. The Node version runs here.
+
+**Evidence:**
+
+- `npm run verify` — green: prettier, eslint, `tsc --noEmit`, **76 tests**, 39 of them for this
+  guard in `tests/policy/gate-scope.test.mjs`.
+- `npm run verify:mutation` — **`all 27 mutations killed`**, 20 of them this guard's. Every one
+  makes the check refuse **less**.
+- Both removed workflows remain recoverable at `b784265`.
+
+**What the internal review round changed, because it is the more useful half of this entry.**
+Three read-only specialists reviewed the change before any GPT-PM round. The first version of
+this work was committed to nothing yet, and it was wrong in ways the tests did not show:
+
+1. **The manifest reader truncated a list silently.** Any non-indented line ended a block, so a
+   list entry that lost its indent yielded an empty list with no error. For `forbidden_paths`
+   that is zero enforcement — and invisible, since an empty list is exactly what "nothing is
+   forbidden" looks like, in a file that still reads correctly to the operator hash-approving it.
+   A non-indented line now ends a block only if it matches a top-level `key:` shape; a key that is
+   present but declares no entries is rejected outright.
+2. **`run()` had no test of any kind** — the one function CI actually executes, whose exit code is
+   the entire control. All the tested logic could be correct while the process exited 0 on a real
+   violation, and nothing would have gone red. It is now an exported function returning an exit
+   code, with injected dependencies, and every exit path is asserted.
+3. **`changedPathsFrom()` had no test**, including the `-z` NUL handling that is its whole reason
+   for existing. Now tested against a real temporary git repository containing filenames with a
+   space and with non-ASCII characters.
+4. **One mutation's label claimed more than it proved** — "run past the end of the block" was
+   killed by a parse error, not by the silent list-widening the name implied. Relabelled, and
+   replaced with two mutations that demonstrate the actual hazard.
+
+The design document's own summary was corrected as part of this: it had said the matcher and
+reader were mutation-tested, which was true of those two functions and an overstatement of the
+file. `governance/GATE_MANIFEST_INTEGRITY.md` now enumerates what is covered instead of
+summarising it. This is the repository's recurring defect class — a claim broader than its check —
+and it appeared here in the very artifact built to catch it.
+
+**Two defects found while porting, neither of them in GPT-PM's findings:**
+
+1. bash `[[ "$path" == $pattern ]]` lets `*` cross `/`, so `allowed_paths: [packages/*]` silently
+   authorized `packages/anything/deep/file.ts` — a manifest that read as "the top level of
+   `packages`" in fact authorized the whole subtree. The new matcher is segment-bounded: `*`
+   stays inside one segment, `**` is a whole segment.
+2. An unparseable or key-less manifest produced an empty pattern list rather than an error. The
+   new reader accepts a deliberately tiny YAML subset and rejects everything else — flow style,
+   duplicate keys, aliases, nested mappings — because a governance document that a human audits
+   and hash-approves should not have a parser that guesses.
+
+**Deviation from the frozen TDD, recorded not hidden:** `docs/architecture/TDD.md`'s repository
+tree (around line 2265) lists the two workflow files separately, and §57(9) names "gate-scope CI
+failure". That tree is illustrative layout rather than one of INV-01..INV-31, and it is the exact
+layout that produced G1-M2. GPT-PM's ruling is followed; the frozen TDD is not edited. This needs
+GPT-PM's acknowledgement at the step-10 review — reconciling the product document is the product
+owner's call, not the implementer's.
+
+**Also changed, as consequences rather than separate scope:** `scripts/verify/` added to
+`.github/CODEOWNERS` (it now holds a governance check, and protecting `.github/` while leaving the
+check's implementation unprotected protects nothing); `@eslint/js` declared explicitly, since
+`eslint.config.js` imports it directly while it was present only transitively; `MIN_TESTS` in
+`scripts/verify/assert-tests-ran.mjs` raised 30 → 50 against an actual 57, so a collapse to 31
+stops reading as green; `vitest.config.ts` now collects `tests/**/*.test.mjs`.
+
+**GPT-PM verdict on this change (2026-09-10): `VERDICT: APPROVE`**, no BLOCKER/MAJOR/MINOR in
+scope, and push approved for `gate/g1-remediation`. It approved both judgement calls explicitly —
+the move off shell/`yq` ("не случайный refactor... старый matcher реально имел более широкую
+glob-semantics") and leaving the frozen TDD untouched — with one requirement attached:
+
+> перед G1 final closure я хочу маленький normative erratum/addendum, чтобы будущий Claude не
+> воскресил два workflow, просто следуя старому repo-tree в TDD. Сам frozen TDD переписывать
+> сейчас не надо.
+
+**Done in this same change rather than deferred to closure:** `docs/architecture/TDD_ERRATA.md`
+is created as a normative file that **outranks `TDD.md`** on concrete details (paths, file names,
+figures) while explicitly never amending INV-01..INV-31, with entry **E-001** covering the
+one-workflow layout. It is wired into the source-of-truth ordering in `CLAUDE.md` §8, `AGENTS.md`
+and `README.md`, because an errata file nobody is told to read corrects nothing.
+
+GPT-PM also ruled that after push **G1 does not close**, and that the next review continues on the
+remaining G1-B1/G1-B2/G1-M1/G1-M3 and R11-R13 without reopening M2 absent a real regression.
+
+**How to apply:** The required status check to configure on `main` is now `Governance`, not
+`Policy integrity` / `Gate scope`. Nothing here is verified remotely — CI still starts no jobs
+(R11) and `main` still has no branch protection (R12). The honest status is: the matcher, the
+manifest reader and the CLI exit codes are verified locally; the enforcement around them is not
+verified at all.
+
+---
+
 ## 2026-09-10 — G0 CLOSED (GPT-PM APPROVE); G1 held; CI is blocked by GitHub billing
 
 **Decision:** G0 is closed. GPT-PM returned `VERDICT: APPROVE, 0 BLOCKER, 0 MAJOR` and ruled that

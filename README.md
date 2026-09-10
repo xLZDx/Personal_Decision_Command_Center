@@ -6,7 +6,9 @@ people/projects/streams/topics, tracks commitments and decisions, and shows one 
 "what needs my attention now" surface with full evidence drill-down.
 
 Full architecture: [`docs/architecture/TDD.md`](docs/architecture/TDD.md) (binding baseline,
-v0.3 FINAL). Project governance contract for Claude Code sessions: [`CLAUDE.md`](CLAUDE.md);
+v0.3 FINAL), read together with [`docs/architecture/TDD_ERRATA.md`](docs/architecture/TDD_ERRATA.md),
+which is normative and outranks it on concrete details.
+Project governance contract for Claude Code sessions: [`CLAUDE.md`](CLAUDE.md);
 tool-agnostic version for any other coding agent: [`AGENTS.md`](AGENTS.md).
 Current status and gate plan: [`core/PLAN_MASTER_GATES.md`](core/PLAN_MASTER_GATES.md).
 

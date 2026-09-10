@@ -12,6 +12,10 @@ Personal Decision OS: a personal work/knowledge/decision operating layer over ex
 — Gmail and personal Telegram. Full architecture: `docs/architecture/TDD.md` (binding baseline,
 v0.3 FINAL). Do not re-derive the architecture from scratch; read that file first.
 
+Read `docs/architecture/TDD_ERRATA.md` alongside it. The TDD is frozen and cannot self-correct, so
+corrections to concrete details — paths, file names, figures — live there and **outrank the TDD**.
+It never amends the invariants.
+
 ## Authority boundary — read this before writing any code
 
 Any implementing agent here is **IMPLEMENTER, not final approver**. No agent has blanket

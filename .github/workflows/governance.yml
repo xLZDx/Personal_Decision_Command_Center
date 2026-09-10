@@ -1,0 +1,120 @@
+name: Governance
+
+# Manifest integrity + gate scope, in ONE job, in this order:
+#
+#     resolve gate  ->  verify manifest hash  ->  verify changed paths
+#
+# The ordering is the whole point and is why these are not two workflows. Validating a diff
+# against a manifest whose integrity has not been established first is circular: the same diff
+# could have rewritten the manifest that authorizes it. That circularity is NM3 from the v0.2
+# adversarial review, and splitting the checks into two workflows with `needs: []` quietly
+# reintroduced it while the design document still claimed the ordering held -- GPT-PM caught that
+# as G1-M2. Sequential steps in one job make the scope check unreachable unless the hash matched.
+#
+# The scope check runs `node` against repository sources only -- no `npm ci`, no dependencies. A
+# PR cannot disable this check by breaking the dependency tree.
+#
+# HONEST LIMITATION: this is a `pull_request` workflow, so it does not run on a direct push to
+# `main`. Scope enforcement exists on the PR path only. See governance/GATE_MANIFEST_INTEGRITY.md
+# for the full list of what this does and does not protect against -- notably that a PR editing
+# `.github/**` edits the checks that police it, which is why `.github/**` is CODEOWNERS-protected
+# and why merge authority, not CI, is the control that actually enforces.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve the gate this PR belongs to
+        id: gate
+        env:
+          BRANCH: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          # Branch `gate/g1-something` -> G1; otherwise a `Gate: G1` line in the PR body.
+          gate=""
+          if [[ "$BRANCH" =~ ^gate/([gG][0-9]+) ]]; then
+            gate="${BASH_REMATCH[1]}"
+          elif [[ "$PR_BODY" =~ [Gg]ate:[[:space:]]*([gG][0-9]+) ]]; then
+            gate="${BASH_REMATCH[1]}"
+          fi
+          gate="${gate^^}"
+          if [[ -z "$gate" ]]; then
+            echo "::error::This PR declares no gate. Name the branch gate/g<N>-... or put a"
+            echo "::error::'Gate: G<N>' line in the PR body. A change with no gate has no approved"
+            echo "::error::scope, which is the thing this check exists to require."
+            exit 1
+          fi
+          echo "gate=$gate" >> "$GITHUB_OUTPUT"
+          echo "Resolved gate: $gate"
+
+      - name: Verify manifest hash against operator-controlled state
+        id: manifest
+        env:
+          GATE: ${{ steps.gate.outputs.gate }}
+          ALL_VARS: ${{ toJSON(vars) }}
+        run: |
+          set -euo pipefail
+
+          manifest="governance/gate-manifests/${GATE,,}.yaml"
+          approved=$(echo "$ALL_VARS" | jq -r --arg k "GATE_MANIFEST_APPROVED_HASH_${GATE}" '.[$k] // ""')
+
+          if [[ ! -f "$manifest" ]]; then
+            if [[ -n "$approved" ]]; then
+              echo "::error::${GATE} has an approved hash but $manifest is missing -- the manifest"
+              echo "::error::was deleted or renamed in this PR."
+            else
+              echo "::error::No manifest at $manifest and no approved hash for ${GATE}."
+              echo "::error::The operator must author and adopt the manifest, and set the repository"
+              echo "::error::variable GATE_MANIFEST_APPROVED_HASH_${GATE}, before this gate can merge."
+              echo "::error::An implementer-authored manifest has no authority (INV-28)."
+            fi
+            exit 1
+          fi
+
+          actual=$(sha256sum "$manifest" | cut -d' ' -f1)
+          echo "manifest: $manifest"
+          echo "actual:   $actual"
+
+          if [[ -z "$approved" ]]; then
+            echo "::error::Repository variable GATE_MANIFEST_APPROVED_HASH_${GATE} is not set."
+            echo "::error::Set it to the hash above ONLY if you (the operator) authored or actually"
+            echo "::error::reviewed this manifest. Setting it to whatever CI just printed, without"
+            echo "::error::reading the manifest, reduces this control to a rubber stamp."
+            exit 1
+          fi
+
+          if [[ "$actual" != "$approved" ]]; then
+            echo "::error::Manifest hash mismatch for ${GATE}."
+            echo "::error::approved: $approved"
+            echo "::error::actual:   $actual"
+            echo "::error::$manifest differs from what the operator approved. An implementer-branch"
+            echo "::error::edit to a manifest has no authority (INV-28)."
+            exit 1
+          fi
+
+          echo "Manifest hash matches the operator-approved value."
+          echo "manifest=$manifest" >> "$GITHUB_OUTPUT"
+
+      # Reachable only when the step above exited 0, so the manifest read here is the verified one.
+      - name: Check changed paths against the verified manifest
+        env:
+          GATE: ${{ steps.gate.outputs.gate }}
+          MANIFEST: ${{ steps.manifest.outputs.manifest }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/verify/check-gate-scope.mjs

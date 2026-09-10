@@ -100,3 +100,9 @@ Repository (code + `docs/architecture/TDD.md`) > `core/DECISION_LOG.md` > `gover
 Where a document contradicts executable behavior or a newer decision, investigate which is stale,
 fix the stale artifact, and record the correction in the decision log — never silently keep a design
 known to be wrong because an older doc still describes it.
+
+**`docs/architecture/TDD_ERRATA.md` outranks `TDD.md` and must be read with it.** The TDD is frozen,
+so it cannot self-correct; the errata file is where a gate's findings against a concrete detail —
+a path, a file name, a figure — are recorded normatively. It may not amend INV-01..INV-31, and an
+entry may be added only by a gate carrying an explicit GPT-PM ruling, quoted in the entry. Read it
+before treating any specific detail of the TDD as binding.

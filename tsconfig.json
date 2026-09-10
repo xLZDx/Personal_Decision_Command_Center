@@ -26,7 +26,8 @@
     "services/**/*.ts",
     "connectors/**/*.ts",
     "host/**/*.ts",
-    "apps/**/*.ts"
+    "apps/**/*.ts",
+    "tests/**/*.ts"
   ],
   "exclude": ["node_modules", "**/dist", "scripts/probes/**"]
 }
