@@ -5,11 +5,34 @@ independent review + operator approval (project `CLAUDE.md` §2, §6).
 
 ## Telegram
 
-Current Telegram API Terms state that data obtained from Telegram may not be used/accessed/
-aggregated to train, fine-tune, or otherwise develop/enhance/deploy AI/ML systems. Telegram
-Content Licensing terms separately limit access to ordinary legitimate use with a limited
-exception for legitimate Telegram clients. This must be re-fetched and re-reviewed at G0 (item B)
-before implementation GO, and periodically thereafter (quarterly, or on any terms change).
+**Verified live 2026-09-10** (G0 item B — see `docs/architecture/EXTERNAL_ASSUMPTIONS.md` for
+URLs, content hashes and full quotes). The prohibition is **broader** than this file originally
+summarized. Content Licensing and AI Scraping Terms, verbatim:
+
+> "For clarity, Telegram firmly prohibits the scraping, indexing, harvesting, aggregation or use
+> of data obtained from its platform to train, fine-tune, validate or otherwise engage in the
+> development, enhancement, benchmarking or deployment of artificial intelligence, machine
+> learning models and similar technologies."
+
+Note the verbs beyond "train/fine-tune": **scraping, indexing, harvesting, validate,
+benchmarking**. Consequences the narrower reading would have missed — a vector/embedding **index**
+over Telegram content is prohibited even with no model training; using Telegram content as an
+**evaluation/benchmark set** is prohibited; **aggregation** for these purposes is prohibited
+independently of any model.
+
+API Terms §1.5 carries the same prohibition and additionally binds API use to the Content
+Licensing terms. API Terms §1.3/§1.4 require a client not to break expected Telegram behavior —
+relevant to G4: do not implement a "ghost mode"/don't-mark-as-read feature, which §1.4 names
+explicitly as forbidden tampering.
+
+A consent exception exists in the Content Licensing terms but requires explicit, informed,
+continued consent from **all relevant users** (i.e. counterparties, not just the operator) per
+chat/context. MVP1 deliberately does not rely on it — recorded so the exception is visibly
+considered and declined rather than unmentioned.
+
+Neither document carries a version number or `Last-Modified` header, so "current text" is pinned
+by fetch date plus SHA-256 of extracted text (recorded in `EXTERNAL_ASSUMPTIONS.md`). Re-fetch
+quarterly and before any change to AI scope.
 
 ```
 Telegram realtime client receive         ALLOWED DESIGN PATH

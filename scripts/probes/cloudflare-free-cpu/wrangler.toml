@@ -1,0 +1,22 @@
+name = "pdos-cpu-probe"
+main = "src/probe.js"
+compatibility_date = "2026-09-10"
+
+# Producer binding: lets the HTTP handler enqueue the probe ladder.
+[[queues.producers]]
+queue = "pdos-cpu-probe"
+binding = "PROBE_QUEUE"
+
+# Consumer binding: the same Worker consumes what it produced.
+#
+# max_batch_size = 1        one probe message per invocation, so a measured CPU figure
+#                           belongs to exactly one target value.
+# max_retries = 0           a CPU-exceeded message must NOT be retried -- retries would
+#                           multiply Free-plan queue operations for zero extra information
+#                           (see README "Cost safety").
+# dead_letter_queue omitted: a dropped probe message is the signal, not a loss to recover.
+[[queues.consumers]]
+queue = "pdos-cpu-probe"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 0

@@ -5,6 +5,66 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — G0 evidence complete; three findings that change the design
+
+**Decision:** G0's live-verification items (B Telegram, C Cloudflare, D Gmail) are done and
+recorded in `docs/architecture/EXTERNAL_ASSUMPTIONS.md` with URLs, fetch dates, content hashes and
+verbatim quotes. The CPU probe harness (item E) is written but **NOT RUN** — it needs an
+operator-owned Cloudflare Free account. Gate-manifest integrity (item O) is designed in
+`governance/GATE_MANIFEST_INTEGRITY.md`. ADR drafts F-M and the threat model N are written.
+
+**Three findings that would have produced wrong code had we skipped this gate:**
+
+1. **Cloudflare's Queue-consumer CPU documentation is now self-contradictory in three places**, and
+   *no* page publishes a Free-plan figure at all — the Workers limits CPU table has no
+   Queue-consumer row, the Queues page says 30s/5min "applies to Free", and the pricing page puts
+   "15 minutes" in the Paid column. The paid figure itself differs between pages (15 min vs 5 min).
+   NB1 is therefore NOT resolved by documentation; the conservative 10ms assumption stands and the
+   empirical probe is the answer of record. `RISK_REGISTER.md` R8 stays open.
+2. **D1 Free allows only 50 queries per Worker invocation** (Paid: 1,000) — a second ceiling absent
+   from TDD §65 entirely. The consumer is bound by CPU *and* query count; fetching 20 topic
+   candidates in a loop would hit the query ceiling before CPU ever mattered. New R10; binding on
+   G2's design.
+3. **Telegram's prohibition is broader than this project had recorded**: the Content Licensing
+   terms forbid "scraping, **indexing**, **harvesting**, aggregation... train, fine-tune,
+   **validate**... development, enhancement, **benchmarking** or deployment". A vector/embedding
+   index over Telegram content is prohibited even with no training; using Telegram content as an
+   evaluation set is prohibited. `core/SOURCE_POLICY.md` now quotes the real text.
+
+**Also found:** `ADR-011`'s "pre-approved" HTTP-pull-consumer fallback has **no published
+plan-eligibility statement** for Free (new R9 — an unverified fallback is not a fallback); Workers
+AI free allocation is 10,000 Neurons/day (not in TDD §65); Analytics Engine 100K/10K per day is now
+officially published, closing the v0.2 review's MIN-5 open item; and Google's *documented* Gmail
+404-recovery is a **full** sync — this project's bounded recovery is its own engineering decision
+and must not be attributed to Google (`docs/architecture/TDD.md` §12.1 wording corrected in
+`EXTERNAL_ASSUMPTIONS.md`).
+
+**Evidence:** `docs/architecture/EXTERNAL_ASSUMPTIONS.md` — every claim carries the URL actually
+fetched plus fetch date; Telegram documents pinned by SHA-256 of extracted text because neither
+carries a version or `Last-Modified` header.
+
+**How to apply:** G2 must design candidate selection as a single batched query and count queries
+per invocation in the quota harness. Any future retrieval/embedding feature over Telegram content
+is prohibited outright, not merely "not planned". The Gmail ingestion layer must keep push and
+poll interchangeable behind one interface until the billing experiment (R3) returns.
+
+---
+
+## 2026-09-10 — GPT-PM conversation registered for this project
+
+**Decision:** Registered `personal-decision-os` in PM Bridge, binding this repo and
+`https://github.com/xLZDx/Personal_Decision_Command_Center.git` to ChatGPT conversation
+`6aa27eb5-7048-83eb-a8a4-e901b86a0f80`.
+
+**Why:** The TDD's governance model names GPT-PM as a final gate authority alongside the operator,
+but no conversation mapping existed — flagged as an open item in `governance/plans/G0_PLAN.md`,
+then resolved by the operator supplying the conversation link.
+
+**How to apply:** Gate reviews and closure notifications for this project use
+`project: "personal-decision-os"`.
+
+---
+
 ## 2026-09-10 — `AGENTS.md` added as the tool-agnostic contract
 
 **Decision:** Added a root `AGENTS.md` carrying the same authority boundary, invariants, DoD and

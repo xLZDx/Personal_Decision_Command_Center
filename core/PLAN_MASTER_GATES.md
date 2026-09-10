@@ -7,8 +7,8 @@ next.**
 
 | Gate | Scope | Status |
 |---|---|---|
-| G0 | Implementation-readiness verification + ADR freeze (adopt TDD v0.3, live platform/terms snapshots, empirical Cloudflare Free CPU probe, threat model, ADR-002/003/005/007/008/009/010/011, gate-manifest integrity mechanism) | **IN PROGRESS** — repo scaffold done, evidence package pending |
-| G1 | Repository + governance enforcement + CI + contracts | NOT STARTED |
+| G0 | Implementation-readiness verification + ADR freeze (adopt TDD v0.3, live platform/terms snapshots, empirical Cloudflare Free CPU probe, threat model, ADR-002/003/005/007/008/009/010/011, gate-manifest integrity mechanism) | **EVIDENCE COMPLETE** — A-D, F-M, N, O done; E harness written but not run (needs operator's Cloudflare Free account). Findings: `core/DECISION_LOG.md` 2026-09-10 |
+| G1 | Repository + governance enforcement + CI + contracts | **IN PROGRESS** |
 | G2 | D1 schema + provenance primitives + durable ingest/outbox + Queue/reconciler/DLQ + soft-budget guard + CPU/quota harness + live Analytics Engine limits snapshot | NOT STARTED |
 | G3 | Gmail connector (OAuth, push/watch auth, renewal, bounded gap recovery, billing-account check + poll fallback, GmailEvidenceBundle + source-local AI extraction before merge) | NOT STARTED |
 | G4 | Telegram direct TDLib connector (session, `connected_at` boundary, local spool, deterministic rules/provenance, offline/reconnect, Tunnel Content Gateway, ECDH/HKDF/AES-GCM drill-down) | NOT STARTED |

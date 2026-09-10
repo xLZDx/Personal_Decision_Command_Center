@@ -15,7 +15,9 @@ their closure conditions stay visible gate-by-gate instead of buried in a review
 | R5 | Free-tier platform drift (Cloudflare/GCP quotas/semantics may change) | Live gate snapshots + HARD_ZERO + quota telemetry reduce but do not eliminate this | ACCEPTED |
 | R6 | Source deletion before drill-down (no central raw retention by default) | Intentional data-minimization trade-off | ACCEPTED |
 | R7 | Push timing metadata observable by FCM/APNs even though payload is opaque | Documented residual metadata leakage in threat model | ACCEPTED, INFO severity |
-| R8 | Cloudflare Queue CPU documentation ambiguity (Free vs Paid) | Architecture assumes the stricter 10ms Workers Free budget; empirical probe at G0/G2 confirms actual account behavior | ACCEPTED conservatively, empirical confirmation PENDING (G0 item E) |
+| R8 | Cloudflare Queue CPU documentation ambiguity (Free vs Paid) | Architecture assumes the stricter 10ms Workers Free budget; empirical probe at G0/G2 confirms actual account behavior | **OPEN — worsened.** Live re-verification 2026-09-10 found the contradiction is now three-way and no page publishes a Free-plan queue-consumer CPU figure at all. Probe harness written (`scripts/probes/cloudflare-free-cpu/`), NOT YET RUN — needs an operator-owned Free account |
+| R9 | `ADR-011`'s pre-approved fallback (HTTP pull consumer) may not be available on the Free plan — Cloudflare documents the mechanics but publishes **no plan-eligibility statement** | Extend the CPU probe to attempt a real `pull`/`ack` call on the Free account before relying on the fallback | **OPEN — new, found at G0.** A fallback whose availability is unverified is not yet a fallback |
+| R10 | D1 Free allows only **50 queries per Worker invocation** (Paid: 1,000) — a second ceiling the TDD never recorded | Candidate selection must be one batched query, never a per-candidate loop; G2 quota harness must count queries per invocation, not just CPU | **OPEN — new, found at G0.** Binding constraint on G2 design |
 
 ## Findings closed in v0.3 (from the v0.2 adversarial review), tracked for gate-time verification
 

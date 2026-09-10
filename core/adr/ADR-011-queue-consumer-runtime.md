@@ -48,11 +48,43 @@ processing outside Workers entirely while keeping the same queue/event contracts
 encrypt/upload-to-R2 runs on the connector host (`host/backup-agent/`), never inside a Worker —
 bulk compression/encryption at 10ms CPU is not realistic (see `docs/architecture/TDD.md` §53).
 
+## Live re-verification, 2026-09-10 (G0 item C) — the contradiction got worse, not better
+
+Re-fetching Cloudflare's live docs did not resolve NB1. It is now **three-way** (full quotes and
+URLs in `docs/architecture/EXTERNAL_ASSUMPTIONS.md` §C):
+
+1. The Workers limits CPU table has **no Queue-consumer row at all** — only HTTP request (10 ms
+   Free) and Cron Trigger (10 ms Free). Queue consumers appear only in the *wall time* table
+   (15 minutes, which is not a CPU figure).
+2. The Queues limits page still says 30 s default / 5 min configurable, under a blanket "applies
+   to both Paid and Free" header.
+3. The Workers **pricing** page says "Max of 15 minutes of CPU time per Cron Trigger or Queue
+   Consumer invocation" — in the **Paid** column, with the Free column saying only 10 ms and no
+   queue exception.
+
+The paid-side figure itself has drifted between pages (15 min vs 5 min), which is evidence these
+pages are not maintained against each other. **No Cloudflare page publishes a Free-plan
+queue-consumer CPU figure.** The conservative decision above therefore stands unchanged, and the
+empirical probe is the answer of record.
+
+**Two corrections to this ADR's own premises, from the same pass:**
+
+- **D1 Free allows only 50 queries per Worker invocation** (Paid: 1,000). The consumer is bound by
+  *two* ceilings, not one: ~10 ms CPU **and** ≤50 D1 queries. Fetching `MAX_TOPIC_CANDIDATES = 20`
+  candidates must be a single batched query, never a per-candidate loop, or the query ceiling is
+  hit before the CPU ceiling ever matters. Binding on G2.
+- **Whether HTTP pull consumers are available on the Free plan is not documented anywhere.** This
+  ADR calls the pull consumer a "pre-approved fallback" — but a fallback whose availability on the
+  target plan is unverified is not yet a fallback. The empirical probe must be extended to attempt
+  a real `pull`/`ack` call against the Free account; until it does, this ADR's fallback is
+  provisional and `core/RISK_REGISTER.md` R8 stays open on both counts.
+
 ## Consequences
 
 - `services/processor/` and `services/resolver/` must be written to the light-consumer contract
   from the start, not optimized later — retrofitting a heavy consumer into a 10ms budget is a
   rewrite, not a tuning pass.
+- Candidate selection is one batched D1 query, by construction (see the 50-query ceiling above).
 - `scripts/probes/cloudflare-free-cpu/` must exist and be runnable by the operator against a real
   Free account; if Claude lacks credentials to run it, the script + exact reproducible
   instructions are still produced, and results are never fabricated.
