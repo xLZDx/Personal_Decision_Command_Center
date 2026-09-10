@@ -431,13 +431,15 @@
   <dl>
     <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 0e7944f</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ faeb209</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Copy page" data-done="Copied"
           data-fail="Select manually">Copy page</button>
 </div>
 <!-- report-conform:end -->
+
+
 
 
 
@@ -900,6 +902,43 @@ node scripts/verify/check-secrets.mjs
     </div>
   </section>
 
+  <section>
+    <div class="section-head">
+      <span class="num">§ 9</span>
+      <div>
+        <h2>This session's governance debt</h2>
+        <p class="kicker">Reconciled, never retroactively authorized</p>
+      </div>
+    </div>
+    <div class="flow">
+      <p>
+        All of this session's work — the scaffold, all of G0, the G1 bootstrap, the G0 closure and
+        the G1-M2 remediation — ran <em>without</em> an approved plan: 210+ mutating calls recorded
+        as <code>governed=false</code>. The protocol is Plan → GO → Act → Validate → Document; this
+        session acted first. The debt is reconciled by a retrospective plan and
+        <strong>does not disappear</strong>: the historical mutations stay
+        <code>governed=false</code> permanently and are <strong>not</strong> authorized after the
+        fact.
+      </p>
+      <div class="note">
+        <p>
+          <strong>The first version of that reconciliation was rejected, correctly.</strong> GPT-PM
+          returned REJECT with two BLOCKERs: the plan put pushes to <code>main</code> out of scope
+          while listing the very commits pushed there (a reconciliation that hides the most
+          consequential ungoverned actions reconciles nothing), and it left an APPROVE readable as
+          retroactive authorization. Both fixed, along with two MAJORs — inconsistent step statuses,
+          and a range that stopped short of the branch's actual state.
+        </p>
+      </div>
+      <p>
+        The two governance layers are independent: commits <code>0e7944f</code> and
+        <code>faeb209</code> carried genuine GPT-PM GO and push approval and are still
+        <code>governed=false</code> in Rosetta, because a GPT-PM verdict is not a Rosetta plan.
+        Having one does not supply the other.
+      </p>
+    </div>
+  </section>
+
   <footer>
     <p>
       This report was written by the implementer and describes the implementer's own work. GPT-PM's
@@ -909,6 +948,8 @@ node scripts/verify/check-secrets.mjs
     </p>
   </footer>
 </div>
+
+
 
 
 

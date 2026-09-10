@@ -435,13 +435,15 @@
   <dl>
     <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 0e7944f</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ faeb209</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Копировать страницу" data-done="Скопировано"
           data-fail="Выделите вручную">Копировать страницу</button>
 </div>
 <!-- report-conform:end -->
+
+
 
 
 
@@ -901,6 +903,42 @@ node scripts/verify/check-secrets.mjs
     </div>
   </section>
 
+  <section>
+    <div class="section-head">
+      <span class="num">§ 9</span>
+      <div>
+        <h2>Governance-долг этой сессии</h2>
+        <p class="kicker">Сверено, но не авторизовано задним числом</p>
+      </div>
+    </div>
+    <div class="flow">
+      <p>
+        Вся работа этой сессии — каркас, весь G0, bootstrap G1, закрытие G0 и ремедиация G1-M2 —
+        выполнена <em>без</em> одобренного плана: 210+ изменяющих вызовов записаны как
+        <code>governed=false</code>. Протокол требует Plan → GO → Act → Validate → Document; эта
+        сессия начала с действий. Долг зафиксирован ретроспективным планом и
+        <strong>не исчезает</strong>: исторические изменения остаются <code>governed=false</code>
+        навсегда и <strong>не</strong> авторизуются задним числом.
+      </p>
+      <div class="note">
+        <p>
+          <strong>Первая версия этой сверки была отклонена — и правильно.</strong> GPT-PM вернул
+          REJECT с двумя BLOCKER: план исключал из области действия пуши в <code>main</code>,
+          перечисляя при этом сами эти коммиты (сверка, скрывающая самые весомые неуправляемые
+          действия, не сверяет ничего), и допускал прочтение APPROVE как ретроактивной авторизации.
+          Оба исправлены. Ещё два MAJOR — противоречивые статусы шагов и диапазон, обрывавшийся до
+          фактического состояния ветки, — тоже.
+        </p>
+      </div>
+      <p>
+        Два слоя управления независимы: коммиты <code>0e7944f</code> и <code>faeb209</code> имели
+        настоящее одобрение GPT-PM на GO и push и всё равно остаются <code>governed=false</code> в
+        Rosetta, потому что вердикт GPT-PM не является планом Rosetta. Наличие одного не заменяет
+        другое.
+      </p>
+    </div>
+  </section>
+
   <footer>
     <p>
       Отчёт составлен исполнителем и описывает работу исполнителя. Вердикт GPT-PM — мнение, которое
@@ -909,6 +947,8 @@ node scripts/verify/check-secrets.mjs
     </p>
   </footer>
 </div>
+
+
 
 
 

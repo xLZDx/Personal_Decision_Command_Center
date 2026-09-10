@@ -5,6 +5,56 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — Governance debt reconciled: the session's work ran without an approved plan
+
+**Decision:** A retrospective Rosetta plan now reconciles every mutation made in this session.
+The historical mutations **remain `governed=false` permanently** and are **not** retroactively
+authorized. Plan `personal-decision-os-2026-09-10T19-39-19-987Z-7fa025`, hash
+`025dc9496fb111a2334a39789a995df9fd64eec7e397ea2fa3cbc64ccbcbd874`, cutoff `2026-09-10T19:38:25Z`,
+GPT-PM `VERDICT: APPROVE`, 0/0.
+
+**Why:** 210+ mutating tool calls — the scaffold, all of G0, the G1 bootstrap, G0 closure, and the
+G1-M2 remediation — ran with no approved plan. The protocol is Plan → GO → Act → Validate →
+Document; this session acted first. The debt does not disappear by being noticed, so it is
+reconciled rather than quietly dropped.
+
+**The first attempt at that reconciliation was itself rejected, and the reasons are worth keeping.**
+GPT-PM returned REJECT with 2 BLOCKER + 2 MAJOR against the plan, not against the code:
+
+1. **The plan excluded the most consequential ungoverned actions.** It listed "any push to `main`"
+   under NOT IN SCOPE while its own steps described the commits that were pushed there. A
+   reconciliation that hides the pushes reconciles nothing. Corrected: `fb45aab`, `9e67d6e`,
+   `71ab1cf`, `b784265`, `5574681` are named in scope as already-performed `governed=false`
+   actions.
+2. **An APPROVE on a retrospective plan could have been misread as retroactive authorization.** The
+   plan carried the ordinary "only APPROVE authorizes execution" wording, which for a retrospective
+   record is dangerously ambiguous — a future auditor could read the verdict as proof the work was
+   approved before it happened. The plan now states normatively that approval reconciles the record
+   only, changes no `governed=false` status, and authorizes only post-verdict reconciliation steps.
+3. **Internally inconsistent statuses** (a step marked IN PROGRESS while the verification section
+   described the same work as finished) — fixed with a single immutable AS-OF cutoff.
+4. **The range stopped short of reality** — it described uncommitted work at 57 tests / 18
+   mutations and did not know about the CODEOWNERS remediation at all. Extended to `faeb209`.
+
+**Evidence:** GPT-PM APPROVE against the rev2 hash, bound via `pm_rosetta_go`; plan status
+`in-progress`. Every commit hash in the plan was verified with `git rev-parse` locally rather than
+copied from a review reply.
+
+**A discrepancy left open deliberately, not fixed.** The approved rev2 plan states that the
+superseded plan `2f20c9ff…` "stays at status pending and is NOT marked rejected", written on the
+belief that no terminal state existed for a GO-refused plan. That is wrong: `pm_rosetta_close`
+accepts `result: "rejected"` for exactly this case. Closing it out is nonetheless **not** on the
+approved plan's list of authorized future actions, so it is not being done here — a plan's
+authorization is scoped to what it says, and a small tidy-up is not a reason to step outside it.
+The next Rosetta plan should close `2f20c9ff…` as `rejected`.
+
+**How to apply:** Open a Rosetta plan **before** acting, not after. The two governance layers are
+independent: `0e7944f` and `faeb209` carried genuine GPT-PM GO and push approval and are still
+`governed=false` in Rosetta, because a GPT-PM verdict is not a Rosetta plan. Having one does not
+supply the other.
+
+---
+
 ## 2026-09-10 — G1-M2 fixed: one governance workflow; scope check rewritten and mutation-tested
 
 **Decision:** `.github/workflows/policy-integrity.yml` and `.github/workflows/gate-scope.yml` are
