@@ -5,20 +5,26 @@
 **Scope:** Implementation-readiness verification + ADR freeze, per
 `../reviews/00-claude-implementation-kickoff-v0.3.md`, G0 required outputs A-O.
 
+## Status: CLOSED
+
+**GPT-PM VERDICT: APPROVE, 0 BLOCKER / 0 MAJOR (2026-09-10).** Full closure record, including
+the approval-anchor discrepancy and the items carried into G2 as blocking preflight, is in
+`../G0_CLOSURE_REPORT.md`. The table below is the final state, not a live worklist.
+
 ## Status of this plan
 
-| Step | Item                                                                                                          | Status                                                                                       |
-| ---- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 1    | Repository scaffold (directory tree, `CLAUDE.md`, `core/*`, ADR drafts, `.claude/agents/`, `.claude/skills/`) | **DONE** — this commit                                                                       |
-| 2    | A. Adopt/freeze TDD v0.3 in repo                                                                              | **DONE** — `docs/architecture/TDD.md`                                                        |
-| 3    | B. Live Telegram API/Content Licensing terms snapshot                                                         | PENDING                                                                                      |
-| 4    | C. Live Cloudflare Workers/Queues/D1/Analytics/Tunnel/Workers-AI snapshot                                     | PENDING                                                                                      |
-| 5    | D. Live Gmail watch/history assumptions snapshot                                                              | PENDING                                                                                      |
-| 6    | E. Empirical Cloudflare Free CPU smoke harness + operator-run instructions                                    | PENDING                                                                                      |
-| 7    | F-M. ADR-002/003/005/007/008/009/010/011                                                                      | DRAFT written this commit (`core/adr/`); need review before "adopted"                        |
-| 8    | N. Threat model update                                                                                        | DRAFT written this commit (`docs/architecture/THREAT_MODEL.md`); needs sec-01/priv-01 review |
-| 9    | O. Binding gate-manifest integrity mechanism design                                                           | PENDING                                                                                      |
-| 10   | Submit `G0 PLAN REVIEW REQUEST` for independent review before G1                                              | PENDING (blocked on 3-6, 9)                                                                  |
+| Step | Item                                                                                                          | Status                                                                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Repository scaffold (directory tree, `CLAUDE.md`, `core/*`, ADR drafts, `.claude/agents/`, `.claude/skills/`) | **DONE** — this commit                                                                                                                      |
+| 2    | A. Adopt/freeze TDD v0.3 in repo                                                                              | **DONE** — `docs/architecture/TDD.md`                                                                                                       |
+| 3    | B. Live Telegram API/Content Licensing terms snapshot                                                         | DONE — `docs/architecture/EXTERNAL_ASSUMPTIONS.md` B                                                                                        |
+| 4    | C. Live Cloudflare Workers/Queues/D1/Analytics/Tunnel/Workers-AI snapshot                                     | DONE — `EXTERNAL_ASSUMPTIONS.md` C (contradiction found to be three-way)                                                                    |
+| 5    | D. Live Gmail watch/history assumptions snapshot                                                              | DONE — `EXTERNAL_ASSUMPTIONS.md` D (billing question unresolved by docs, experiment recorded)                                               |
+| 6    | E. Empirical Cloudflare Free CPU smoke harness + operator-run instructions                                    | **HARNESS DONE, NOT RUN** — needs an operator Cloudflare Free account; closed unrun by GPT-PM ruling, carried to G2 as `G2-PREFLIGHT-01/02` |
+| 7    | F-M. ADR-002/003/005/007/008/009/010/011                                                                      | ADOPTED — all eight ADRs; ADR-011 is ADOPTED WITH R8/R9 OPEN                                                                                |
+| 8    | N. Threat model update                                                                                        | REVIEWED AND ADOPTED — GPT-PM fresh-context SEC/PRIV review, no new BLOCKER/MAJOR                                                           |
+| 9    | O. Binding gate-manifest integrity mechanism design                                                           | DONE — `../GATE_MANIFEST_INTEGRITY.md` (design; implementation is G1)                                                                       |
+| 10   | Submit `G0 PLAN REVIEW REQUEST` for independent review before G1                                              | DONE — submitted and answered; G0 APPROVED, G1 held (see `G1_REMEDIATION_PLAN.md`)                                                          |
 
 ## Files created/changed (step 1-2, this commit)
 

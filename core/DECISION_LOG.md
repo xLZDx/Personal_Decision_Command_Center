@@ -5,6 +5,54 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-10 — G0 CLOSED (GPT-PM APPROVE); G1 held; CI is blocked by GitHub billing
+
+**Decision:** G0 is closed. GPT-PM returned `VERDICT: APPROVE, 0 BLOCKER, 0 MAJOR` and ruled that
+G0 closes **without** the empirical CPU probe having run — the design already assumes the most
+conservative reading, so the probe can only widen the budget, never invalidate the architecture.
+R8/R9/R10 transfer to G2 as **blocking preflight** items (`G2-PREFLIGHT-01/02/03`), not as
+someday-work. ADR-002/003/005/007/008/009/010 → ADOPTED; ADR-011 → ADOPTED WITH R8/R9 OPEN; threat
+model → REVIEWED AND ADOPTED via GPT-PM's fresh-context SEC/PRIV pass. Full record:
+`governance/G0_CLOSURE_REPORT.md`.
+
+**G1 is NOT closed and was never an authorized gate.** GPT-PM: REJECT/HOLD, two BLOCKERs and three
+MAJORs, all accepted. Commit `b784265` is recorded as bootstrap implementation. Not reverted —
+re-landing identical, mutation-tested code purely to produce a tidier history would destroy real
+evidence to buy an appearance of process. Remediation: `governance/plans/G1_REMEDIATION_PLAN.md`.
+
+**The finding that matters most, because it invalidates a claim I made:** GPT-PM said remote CI was
+red. It was, and the cause is not the code. Run `34513131209` (job `102991918020`) completed in
+**4 seconds having executed zero steps**, with GitHub's annotation: _"The job was not started
+because recent account payments have failed or your spending limit needs to be increased."_ So
+"local `npm run verify` is green" was true and simultaneously worthless as gate evidence — every
+"CI enforces X" statement in this repo is currently false, because nothing runs. Recorded as R11.
+Verified independently via the GitHub API, not taken on GPT-PM's word.
+
+**Two more verified-not-assumed facts:** `/branches/main/protection` returns 404, so `CODEOWNERS`
+is presently decoration (R12) — and branch protection on a _private_ repo needs a paid GitHub plan,
+which is why repo visibility is now an operator decision rather than a detail. GitHub also forbids
+a PR author approving their own PR, so if Claude pushes as `xLZDx` the required-review model
+deadlocks against itself (R13).
+
+**Where I corrected GPT-PM rather than accepting its citation:** its approval was anchored to
+`G0_PLAN.md` blob `b930873f…` _and_ to commit `71ab1cf`, while stating that `b784265` was excluded.
+Those anchors contradict: `b930873f…` is the blob as of `b784265`; at `71ab1cf` it is `f69c7f7a…`.
+Checked with `git rev-parse`. The difference is one prettier-padded markdown table separator — zero
+semantic change — so the approval stands on its prose, but the citation is wrong and is recorded as
+wrong rather than silently adopted. Lesson: request a hash-bound approval only against a frozen
+artifact; asking while commits still land on the branch produces exactly this ambiguity.
+
+**Decision 1 (branching), ruled by GPT-PM:** move to gate branches + PR. `gate/g1-remediation` is
+explicitly authorized; each later `gate/gN-*` still needs its own gate-level GO. Direct commits to
+`main` stop after this G0-closure commit. Under global CLAUDE.md §20 a genuine GPT-PM APPROVE is
+sufficient authorization for branch creation, which is what this is.
+
+**How to apply:** Do not start G2. Do not describe any CI check as enforcing anything until R11 is
+resolved and a check has been observed actually failing on purpose (the negative controls in the
+remediation plan).
+
+---
+
 ## 2026-09-10 — G1: toolchain, CI, governance enforcement, first contracts
 
 **Decision:** Established the TypeScript/npm-workspaces toolchain (prettier, eslint, tsc strict,

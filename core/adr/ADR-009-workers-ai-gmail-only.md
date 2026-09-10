@@ -1,7 +1,12 @@
 # ADR-009: Gmail-Only AI Provider / Data-Use Decision
 
-**Status:** DRAFT (G0 output K) — pending operator/GPT-PM adoption at G0 closure and pending G0
-item C (live re-verification of Workers AI Customer Content / model terms).
+**Status:** ADOPTED at G0 closure, 2026-09-10 (G0 output K). GPT-PM VERDICT: APPROVE, 0 BLOCKER /
+0 MAJOR. Approval anchor: G0 evidence commit `71ab1cf`. GPT-PM also cited a blob hash for
+`governance/plans/G0_PLAN.md` that belongs to a later commit; see `governance/G0_CLOSURE_REPORT.md`.
+G0 item C re-verified the Workers AI Customer Content statement verbatim and recorded the free
+allocation of 10,000 Neurons/day, which TDD §65 did not carry
+(`docs/architecture/EXTERNAL_ASSUMPTIONS.md` C). The per-model license/terms check before any
+production Gmail content reaches AI remains owed at G3.
 **Source:** `docs/architecture/TDD.md` §24, §25.
 
 ## Context

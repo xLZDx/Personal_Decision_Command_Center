@@ -1,7 +1,9 @@
 # ADR-005: Value/Assignment Provenance DAG + Gmail-Only Pre-Aggregation AI Boundary
 
-**Status:** DRAFT (G0 output H) — pending operator/GPT-PM adoption at G0 closure. Resolves NM2
-(the v0.2 adversarial review's enum/aggregate/existential Telegram-leakage MAJOR).
+**Status:** ADOPTED at G0 closure, 2026-09-10 (G0 output H). GPT-PM VERDICT: APPROVE, 0 BLOCKER /
+0 MAJOR. Approval anchor: G0 evidence commit `71ab1cf`. GPT-PM also cited a blob hash for
+`governance/plans/G0_PLAN.md` that belongs to a later commit; see `governance/G0_CLOSURE_REPORT.md`.
+Resolves NM2 (the v0.2 adversarial review's enum/aggregate/existential Telegram-leakage MAJOR).
 **Source:** `docs/architecture/TDD.md` §7, §7.1, §7.2, §8, §24.
 
 ## Context

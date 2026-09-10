@@ -1,7 +1,10 @@
 # ADR-007: Cloudflare Tunnel Content Gateway — Full Auth Chain + Mandatory E2E Envelope
 
-**Status:** DRAFT (G0 output I) — pending operator/GPT-PM adoption at G0 closure and pending G0
-item C (live Cloudflare Tunnel assumption re-verification).
+**Status:** ADOPTED at G0 closure, 2026-09-10 (G0 output I). GPT-PM VERDICT: APPROVE, 0 BLOCKER /
+0 MAJOR. Approval anchor: G0 evidence commit `71ab1cf`. GPT-PM also cited a blob hash for
+`governance/plans/G0_PLAN.md` that belongs to a later commit; see `governance/G0_CLOSURE_REPORT.md`.
+G0 item C re-verified Cloudflare Tunnel live: outbound-only, "Available on all plans"
+(`docs/architecture/EXTERNAL_ASSUMPTIONS.md` C).
 **Source:** `docs/architecture/TDD.md` §10.3, §33, §33.1-33.4.
 
 ## Context

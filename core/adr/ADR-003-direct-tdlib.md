@@ -1,6 +1,8 @@
 # ADR-003: Direct TDLib for the Telegram Connector
 
-**Status:** DRAFT (G0 output G) — pending operator/GPT-PM adoption at G0 closure.
+**Status:** ADOPTED at G0 closure, 2026-09-10 (G0 output G). GPT-PM VERDICT: APPROVE, 0 BLOCKER /
+0 MAJOR. Approval anchor: G0 evidence commit `71ab1cf`. GPT-PM also cited a blob hash for
+`governance/plans/G0_PLAN.md` that belongs to a later commit; see `governance/G0_CLOSURE_REPORT.md`.
 **Source:** `docs/architecture/TDD.md` §11, §84.
 
 ## Context

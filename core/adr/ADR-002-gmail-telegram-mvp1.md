@@ -1,6 +1,8 @@
 # ADR-002: Gmail + Telegram MVP1 Scope Lock
 
-**Status:** DRAFT (G0 output F) — pending operator/GPT-PM adoption at G0 closure.
+**Status:** ADOPTED at G0 closure, 2026-09-10 (G0 output F). GPT-PM VERDICT: APPROVE, 0 BLOCKER /
+0 MAJOR. Approval anchor: G0 evidence commit `71ab1cf`. GPT-PM also cited a blob hash for
+`governance/plans/G0_PLAN.md` that belongs to a later commit; see `governance/G0_CLOSURE_REPORT.md`.
 **Source:** `docs/architecture/TDD.md` §3-4, §55, §79-80; `core/MVP1_SCOPE_LOCK.md`.
 
 ## Context

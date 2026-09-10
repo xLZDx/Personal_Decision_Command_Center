@@ -1,8 +1,32 @@
 # ADR-011: Queue Consumer Runtime Choice / Fallback
 
-**Status:** DRAFT (G0 output M) — pending operator/GPT-PM adoption at G0 closure and pending G0
-item E (empirical Cloudflare Free-account CPU probe). This ADR directly resolves NB1, the sole
-BLOCKER from the v0.2 adversarial review.
+**Status:** ADOPTED WITH R8/R9 OPEN, at G0 closure 2026-09-10 (G0 output M). GPT-PM VERDICT:
+APPROVE, 0 BLOCKER / 0 MAJOR. Approval anchor: G0 evidence commit `71ab1cf`. GPT-PM also cited a
+blob hash for `governance/plans/G0_PLAN.md` that belongs to a later commit; see
+`governance/G0_CLOSURE_REPORT.md`.
+
+**G0 closure did NOT wait for the empirical probe, and that is a deliberate GPT-PM ruling, not an
+oversight.** The reasoning: this ADR's decisions are already the most conservative reading
+available (assume ≤10 ms, `max_batch_size = 1`, single batched D1 candidate query), so the probe
+can only ever _widen_ the available budget — it cannot invalidate a design that never depended on
+the larger figure. Blocking G0 on creating a Cloudflare account would stall every gate behind it
+for evidence that cannot change the decision.
+
+What that costs: the runtime choice is **not VERIFIED**, only _conservatively assumed_. R8 and R9
+therefore transfer to G2 as **blocking preflight items**, not as "check on this eventually":
+
+```
+G2-PREFLIGHT-01  Run the Free-account Queue-consumer CPU probe.
+G2-PREFLIGHT-02  Attempt a real HTTP pull + ack on the same Free account.
+G2-PREFLIGHT-03  Record the D1 <=50-queries-per-invocation budget in the quota harness.
+```
+
+No Queue runtime choice may be declared VERIFIED until all three are done. And if
+G2-PREFLIGHT-02 shows pull consumers are unavailable on Free, this ADR must stop calling the pull
+consumer a fallback — an unavailable fallback is not a fallback, and continuing to describe it as
+one would leave the architecture with no recorded escape hatch at all.
+
+This ADR directly resolves NB1, the sole BLOCKER from the v0.2 adversarial review.
 
 **Source:** `docs/architecture/TDD.md` §16.1, §16.2, §65; `governance/reviews/02-tdd-v0.2-adversarial-review.md`
 NB1.

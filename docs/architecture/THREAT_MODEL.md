@@ -1,9 +1,17 @@
 # Threat Model
 
-**Status:** G0 output N — DRAFT v1, built from `docs/architecture/TDD.md` §37-45 and the closed
-findings in `governance/reviews/02-tdd-v0.2-adversarial-review.md`. Needs `sec-01` and `priv-01`
-independent review before G0 closes; needs re-review at any source-policy change (quarterly, or
-sooner — see `../../core/SOURCE_POLICY.md`).
+**Status:** G0 output N — **REVIEWED AND ADOPTED at G0 closure, 2026-09-10.** The independent
+review was performed by GPT-PM in fresh context, acting as the SEC/PRIV reviewer, which satisfies
+the "at least one substantive review is fresh-context independent from the implementer context"
+requirement (`../../core/DEFINITION_OF_DONE.md` item 21) for G0. Its verdict: no new
+BLOCKER/MAJOR, and specifically that the Telegram→AI boundary is closed tightly enough — the only
+MVP1 AI input is Gmail-only pre-merge evidence, and combined Gmail+Telegram state never returns to
+AI.
+
+Re-review is owed at any source-policy change, quarterly, and whenever a gate adds a new trust
+boundary (`../../core/SOURCE_POLICY.md`). The per-gate verification table at the end of this file
+is what each later gate is measured against — adoption here is not a claim that those tests have
+run.
 
 ## Threat catalogue (TDD §37)
 
