@@ -671,13 +671,15 @@ approval hash has authorized itself. The boundary is held by choice, and saying 
 2. ~~Read the candidate, then set `GATE_MANIFEST_APPROVED_HASH_G1`~~ — **done 2026-09-11** (§10).
    The operator read the bytes, agreed, and adopted them; the variable is set and the scope check
    passes. Read §10.1 before treating this as a fully mechanical separation: it is not one yet.
-3. Merge PR #1. **INV-20, and it is now the only thing left blocking the gate** — the checks are
-   green, so what remains is authority, not evidence.
+3. ~~Merge PR #1~~ — **done 2026-09-11** (`mergedAt` confirmed via `gh pr view 1`).
 4. ~~`gh auth login`~~ — **done**, by the operator, during an earlier plan.
-5. Decide and apply branch protection (§6).
-6. **The one this document most wants an answer to:** decide the credential model of §3.1. A
-   fine-grained token, a hand-operated admin path, or an explicit acceptance that these controls
-   are procedural. Whichever is chosen, the documents in §4 must end up saying the same thing the
-   token actually permits.
+5. ~~Decide and apply branch protection (§6)~~ — **done 2026-09-11**, ruleset `PDCC`
+   (`core/RISK_REGISTER.md` R12).
+6. ~~Decide the credential model of §3.1~~ — **decided 2026-09-11** (`core/RISK_REGISTER.md` R13):
+   no second GitHub identity; separation is procedural, not mechanical, and no document in this
+   repository may claim otherwise.
 
-G1 is **not** closed. G2 does not begin.
+**This section's own six items are now all resolved.** That closes the specific list of operator
+actions this section tracked — it is not itself a G1 closure verdict. G1 closes on its own
+fresh-context review and a `G1_CLOSURE_REPORT.md`, not by this checklist alone reaching zero
+remaining rows.
