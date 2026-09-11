@@ -559,7 +559,9 @@ name, base and purpose (satisfying §14 via §20 — branch creation is reversib
 
 ### 12.1 Hash mismatch
 
-**FACT.** Branch `gate/g1-hash-control`, base `origin/main` @ `005b8e6`, PR #10. Run `34654217044`
+**FACT.** Branch `gate/g1-hash-control`, base `origin/main` @ `63a5425` (the tip at the moment the
+branch was created; `005b8e6` is PR #10's own merge commit, not its base — corrected here after
+GPT-PM's round-1 review of this section found the two conflated). PR #10. Run `34654217044`
 (rerun after each variable change, since GitHub Actions reads repository variables live at
 execution time — the run that fired automatically on PR creation, before the variable was flipped,
 read the correct value and is not evidence of anything).
@@ -580,9 +582,14 @@ rerun again**, both steps report `success`. PR #10 was merged for its durable
 
 ### 12.2 forbidden_paths
 
-**FACT.** Branch `gate/g1-forbidden-control`, base `origin/main` @ `005b8e6`, PR #11 (closed
+**FACT.** Branch `gate/g1-forbidden-control`, base `origin/main` @ `005b8e6` — one commit ahead of
+the `63a5425` the branch-creation approval named explicitly, that one commit being PR #10's own
+merge (§12.1), which the same GPT-PM exchange had just approved. A documented base deviation, not a
+claim that the exact-base approval literally covered this branch's actual creation point; the
+technical control evidence below is unaffected by which of the two commits the branch started from,
+since neither touches `governance/operator-approvals/**`. PR #11 (closed
 unmerged). Commit `998831d` appended one line to `governance/operator-approvals/README.md`, which
-`g1.yaml` lists under `forbidden_paths`. Run `34654474743`:
+`g1.yaml` lists under `forbidden_paths`. Run `34654474743` (REFUSE):
 
 ```
 Manifest hash matches the operator-approved value.
@@ -595,12 +602,17 @@ skipped — and the message is textually distinct from §11's `outside G1's appr
 as the manifest's own comments describe: forbidden paths get their own refusal, not the generic
 out-of-scope one. Commit `ad2a407` reverted the edit in the same PR; `git diff origin/main HEAD --
 governance/operator-approvals/README.md` reports zero lines, confirming byte-identity with `main`.
-The restored-green run then passed both steps. PR #11 was closed **unmerged** — `main` was never
-touched by this branch.
+The restored-green state was then verified on a **separate** run, `34654532030` (Governance,
+success) at head `ad2a407ebbc804964e5cc24326bfbaf5f5943fe9` — not the same run id as the REFUSE
+above; the two runs were confirmed distinct via
+`gh api repos/xLZDx/Personal_Decision_Command_Center/actions/runs?per_page=20` filtered by that
+head SHA. PR #11 was closed **unmerged** — `main` was never touched by this branch.
 
 ### 12.3 Test-deletion guard, deletion half
 
-**FACT.** Branch `gate/g1-deletion-control`, base `origin/main` @ `005b8e6`, PR #12 (closed
+**FACT.** Branch `gate/g1-deletion-control`, base `origin/main` @ `005b8e6` — same base deviation as
+§12.2, same reason: created after PR #10 merged, one commit ahead of the named `63a5425`. PR #12
+(closed
 unmerged). Commit `a3e6cf3` deleted `tests/policy/codeowners.test.mjs`. Run `34654709448`, step
 "Test-deletion guard" (in the `verify` job, not `governance` — `governance` passed, correctly,
 since no path in this diff falls outside `allowed_paths`):
@@ -624,13 +636,26 @@ file was never touched.
 | --------------------------- | ------------------------ | --------------------------------------------------------------------------------------------- |
 | Scope (`allowed_paths`)     | PASS and REFUSE          | §10 (pass), §11 (refuse, run `34640409639`)                                                   |
 | Hash mismatch               | REFUSE and restored PASS | §12.1, run `34654217044` (both directions, same run id)                                       |
-| `forbidden_paths`           | REFUSE and restored PASS | §12.2, run `34654474743`                                                                      |
+| `forbidden_paths`           | REFUSE and restored PASS | §12.2, REFUSE run `34654474743`, restored-PASS run `34654532030` (distinct runs)              |
 | Test-deletion (delete half) | REFUSE                   | §12.3, run `34654709448` — restoration not applicable, the file was never deleted from `main` |
 
-Every mechanical control this repository's governance workflow can produce has now been observed
-refusing at least once, on a real CI run, with the exact log line quoted above it rather than
-paraphrased. None of the four PRs that produced this evidence altered `main` beyond what it already
-was, except PR #10's single decision-log line.
+Every mechanical control this negative-control campaign exercised (§11, §12.1–§12.3) has now been
+observed refusing at least once, on a real CI run, with the exact log line quoted above it rather
+than paraphrased — three of the four refusals in the `governance` job (scope, hash mismatch,
+`forbidden_paths`), the fourth (test-deletion's deletion half) in the separate `verify` job, as
+noted in §12.3. This does not extend to every mechanical control the whole workflow can in
+principle produce, only to the ones these four PRs (§11's PR #7, §12.1's PR #10, §12.2's PR #11,
+§12.3's PR #12) were built to exercise.
+
+Of those four, three (PR #10, #11, #12) were closed **unmerged** and never touched `main` at all —
+each existed solely to produce the CI evidence quoted above; the only trace any of them left is
+PR #10's own merged decision-log entry (49 lines in `core/DECISION_LOG.md`, recording the
+hash-mismatch result). PR #7 is different and is not part of that "left no trace" claim: it was
+merged, and it legitimately carries real content beyond a decision-log line — the report-correction
+pair and a decision-log wording fix (§11 above). Its `.gitignore` scope-refusal instrument was
+reverted before merge, but the rest of its diff is intended, durable change, not a side effect to
+minimize. This paragraph is scoped to these four negative-control PRs; it is not a claim about the
+whole G1 history.
 
 ## 13. Operator boundary — nothing below is the implementer's
 

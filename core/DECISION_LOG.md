@@ -5,6 +5,42 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #13 round-2: GPT-PM's three MAJOR findings on the evidence write-up, all fixed
+
+GPT-PM's round-1 review of PR #13 (`gate/g1-evidence-update`) returned `VERDICT: MAJOR` with three
+findings, all independently re-verified against primary sources before any fix began (per
+`~/.claude/CLAUDE.md` §3/§23 — a reviewer's finding is a claim to check, not something to act on
+unread):
+
+1. **Base-SHA self-contradiction.** §12.1 stated `gate/g1-hash-control`'s base was `005b8e6` —
+   that is PR #10's own merge commit, not its base. Re-derived from this session's own earlier
+   `git rev-parse origin/main` output: the real base was `63a5425`. Fixed in §12.1; the same
+   base-deviation documentation (created after PR #10 merged, one commit ahead of the
+   `63a5425` the branch-creation APPROVE named explicitly) was added to §12.2 and §12.3, which
+   share the same actual base (`005b8e6`) for the same reason.
+2. **Wrong run id cited for `forbidden_paths`' "both directions."** `34654474743` had been cited
+   for both the REFUSE and the restored-PASS observation; it is only the REFUSE run. Verified via
+   `gh api repos/xLZDx/Personal_Decision_Command_Center/actions/runs?per_page=20` filtered by
+   `head_sha=ad2a407ebbc804964e5cc24326bfbaf5f5943fe9`: the restored-PASS run is a distinct run,
+   `34654532030` (Governance, success). Fixed in §12.2's FACT block, the §12.4 table, and
+   `core/PLAN_MASTER_GATES.md`'s G1 status cell — all three now cite both run ids separately.
+3. **§12.4's narrative overstated its own width.** "Every mechanical control this repository's
+   governance workflow can produce" conflated the `verify`-job test-deletion refusal with the
+   `governance`-job refusals, and "except PR #10's single decision-log line" undercounted a real
+   49-line entry while reading as a claim about the whole G1 history (which includes PR #7's larger
+   merged diff). Narrowed to name the four specific negative-control PRs (§11's PR #7, §12.1's
+   PR #10, §12.2's PR #11, §12.3's PR #12), state which job each refusal fired in, and separate
+   PR #7 (merged, real content) from PR #10/#11/#12 (three closed unmerged, one merged with only
+   its decision-log entry as durable content) rather than treating all four the same way.
+
+All three fixes applied to `governance/plans/G1_PREADOPTION_EVIDENCE.md` §12.2/§12.3/§12.4 and to
+`core/PLAN_MASTER_GATES.md`'s G1 row on `gate/g1-evidence-update`; prettier run over both files
+before commit. Sent to GPT-PM as round 2 for verification before merge under `~/.claude/CLAUDE.md`
+§24 (a fresh, correlated APPROVE on this exact head plus green required checks authorizes the
+merge).
+
+---
+
 ## 2026-09-12 — G1's last three negative controls executed; operator authorized autonomous MVP1 completion
 
 **Decision A — the three remaining negative controls (`forbidden_paths`, hash-mismatch, the
