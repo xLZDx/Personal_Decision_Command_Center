@@ -5,6 +5,112 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — GPT-PM-authorized PR merge: INV-20 narrowed for this project, confirmed globally
+
+**Decision:** the operator asked, first for this project, then confirmed globally across every
+project, that Claude may merge a PR once GPT-PM has independently reviewed the exact final head and
+returned a genuine `VERDICT: APPROVE`, and this project's own required checks (`verify`,
+`governance`) are green on that same head. Recorded as `~/.claude/CLAUDE.md` §24
+(GPT-PM-authorized PR merge). For this repository specifically, the authority-surface carve-out in
+that section means: `governance/gate-manifests/**`, `governance/operator-approvals/**`,
+`.github/CODEOWNERS`, and branch-protection/ruleset settings themselves still need the operator's
+own separate authorization, even with a clean APPROVE and green checks — an ordinary
+`.github/workflows/**` content change (e.g. this session's G1-M2/ungated-path work) is covered if
+it was part of the exact diff GPT-PM reviewed.
+
+**Why:** raised after the operator manually merged PR #3 and asked why they still had to click
+merge themselves. Two things were verified with GPT-PM directly before acting, rather than taken on
+the operator's report of a separate conversation (global CLAUDE.md §§3/16/23):
+
+1. Does GPT-PM's APPROVE override INV-20 ("the implementer does not merge its own gate")? GPT-PM's
+   answer, project-scoped: yes, given explicit operator delegation + its own APPROVE on the exact
+   final head + green required checks + the PR not touching an authority-surface path -- and
+   explicitly NOT a general position for other repositories (each needs its own delegation, which
+   the operator then gave, globally, in the same exchange).
+2. The operator's own reasoning for preferring "GPT-PM reviews AND merges" over "Claude merges
+   after GPT-PM's APPROVE" was that author and merger would then be different actors. Verified
+   directly: GPT-PM's GitHub connector authenticates as the same `xLZDx` identity Claude's own `gh`
+   uses (see `governance/plans/G1_PREADOPTION_EVIDENCE.md` §3.1 / R13 -- same root cause). No actor
+   separation exists today either way. The operator was told this plainly and chose the fallback
+   ("Claude merges, strictly as GPT-PM's decision's executor") rather than the unavailable one.
+
+**Evidence:** PM Bridge exchange, this session, project `D:\Repo\Personal_Decision_Command_Center`,
+request ids `7f3a2c1e-9b4d-4e6a-8f2c-1d5e6a7b8c9d` (INV-20 ruling) and
+`3d8b6e2f-1a4c-4f9e-8b7d-2e6f9c0a1b3d` (identity-separation question; first attempt failed
+not-started on an unreachable conversation, retried with the same request_id per the tool's own
+instruction, second attempt returned the quoted answer).
+
+**How to apply:** before merging any PR on this basis, actually check -- not assume -- that the
+APPROVE names the current final head (a later commit makes it stale), the same head has `verify`
+and `governance` both green, the PR is mergeable, and the diff does not touch the authority-surface
+paths listed above. `red-01`/`gov-01` findings and any BLOCKER/MAJOR still block exactly as before
+-- this changes who may click merge once every other gate condition already holds, not what those
+conditions are.
+
+---
+
+## 2026-09-11 — The floor for "Gate: NONE" PRs is code under scripts/verify/, not a YAML manifest
+
+**Decision:** `governance/gate-manifests/_floor.yaml` (the fixed allow-list for an ungated PR,
+drafted earlier this session) was abandoned before being committed anywhere reachable from `main`,
+and replaced by `scripts/verify/check-floor-scope.mjs` -- a plain `.mjs` module exporting
+`ALLOWED_PATHS`/`FORBIDDEN_PATHS` and a `run()`, reusing `checkScope`/`changedPathsFrom` from
+`check-gate-scope.mjs` rather than re-implementing scope evaluation.
+
+**Why:** every real gate manifest forbids editing `governance/gate-manifests/**`, by design
+(INV-28 / NM3) -- a gate-labeled PR cannot land a new or edited manifest, because that PR's own
+diff would then be validated against a file the same diff had just written. The floor manifest,
+living in that same directory, forbade the identical thing of itself, for the identical reason.
+Tracing both paths a "Gate: NONE" mechanism would ever use to introduce it:
+
+- A `Gate: G1`-labeled PR: `g1.yaml`'s own `forbidden_paths` already blocks
+  `governance/gate-manifests/**/*.yaml` -- the PR adding the new file would trip that rule against
+  itself.
+- A `Gate: NONE`-labeled PR: `_floor.yaml`'s own `forbidden_paths` blocked
+  `governance/gate-manifests/**`, which covers itself -- the PR introducing it would be evaluated
+  against the very file it is adding, and reject its own addition.
+
+Neither path can ever land it, and this session's branch protection (R12) removed the only
+remaining path -- a direct push to `main` is no longer possible at all. This was found by tracing
+the two check paths against the file just written, not by inspection alone; the design was already
+on disk before the conflict surfaced.
+
+**Resolution:** move the rules out of `governance/gate-manifests/` entirely. As plain code under
+`scripts/verify/*.mjs`, the floor is exactly as protected as `check-gate-scope.mjs` and
+`governance.yml` are -- changeable through whichever gate's own manifest permits editing
+`scripts/verify/**`, no more and no less. `FORBIDDEN_PATHS` still blocks
+`governance/gate-manifests/**` and the other sensitive paths, so an ungated PR still cannot grant
+itself broader authority merely by being ungated -- the protection is unchanged; only its housing
+and the ceremony around changing it are.
+
+**Evidence:** `npm run test` -- 64/64 (13 new, in `tests/policy/floor-scope.test.mjs`).
+`npm run verify:mutation` -- 34/34 mutations killed, 4 new for `check-floor-scope.mjs`'s `run()`
+(exits 0 despite violations; proceeds past a missing `BASE_SHA`/`HEAD_SHA`; treats a failed
+`git diff` as an empty one; stops passing `FORBIDDEN_PATHS` into `checkScope`).
+
+**Also discovered, unrelated to the redesign above:** running the suite locally on this machine
+intermittently fails to even load `check-gate-scope.mjs` under vitest, with a misleading
+`SyntaxError` pointed at the _importing_ test file's module-specifier string. Root cause, confirmed
+by bisection: `check-gate-scope.mjs` contains one `import.meta.url` reference (its CLI-runnable
+guard), and Vite's SSR module transform corrupts the load when the file's line endings are CRLF --
+this machine's global `core.autocrlf=true` rewrites the working-tree copy to CRLF on ordinary git
+operations (checkout, stash, branch switch), even though the committed blob is and has always been
+LF (`git cat-file -p HEAD:scripts/verify/check-gate-scope.mjs` -- 0 CRLF pairs, byte-identical to a
+from-scratch LF rewrite of the working copy). `g1.yaml` already carries a version of this warning,
+but about hash computation, not about the suite failing to load at all. No repository content
+changed to work around this -- the working tree was simply re-normalized to match the already-
+correct committed bytes.
+
+**How to apply:** a new file that must be exactly as protected as the enforcement mechanism, but
+is not itself a per-gate scope grant, belongs under `scripts/verify/` (or another path a relevant
+gate's manifest already allows) -- not under `governance/gate-manifests/`, which is reachable by no
+PR at all once INV-28's forbidden-path pattern is applied consistently on both the gated and
+ungated side. Separately: if a future session on this machine sees vitest fail to parse an
+unrelated-looking import statement, check whether the imported file mixes `import.meta` with CRLF
+before assuming the file itself is broken.
+
+---
+
 ## 2026-09-11 — G0 CPU probe run; NB1 resolved; the operator's first two branch-GO approvals
 
 **Decision:** the operator ran the G0 empirical CPU probe on a fresh Cloudflare Free account. Both
