@@ -5,6 +5,42 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — G0 CPU probe run; NB1 resolved; the operator's first two branch-GO approvals
+
+**Decision:** the operator ran the G0 empirical CPU probe on a fresh Cloudflare Free account. Both
+ladders — queue consumer (`GET /run`) and plain HTTP (`GET /http-ladder`) — broke at the identical
+point: complete at `1e5` (100,000 SHA-256 rounds), killed at `1e6`. Full run record, raw
+`wrangler tail` excerpt, and conclusion: `scripts/probes/cloudflare-free-cpu/RESULTS.md`.
+
+**Why this matters:** NB1, the sole BLOCKER of the v0.2 adversarial review, was a three-way
+contradiction across Cloudflare's own documentation about the Queue consumer's Free-plan CPU budget
+(10ms / 30s-5min / 15min, depending which page). `ADR-011-queue-consumer-runtime.md` assumed the
+most conservative figure. This run answers the question by measurement: the Queue consumer gets the
+**same** budget as an ordinary HTTP invocation on this account, not the extended figures. NB1 is
+resolved in favor of the conservative reading; no architecture change is forced.
+
+**Not yet done:** the Workers dashboard's per-invocation CPU-ms metric (p50/p99) was not read.
+Recorded as outstanding in `RESULTS.md` rather than inferred.
+
+**Process note, recorded because §14 exists precisely to make this visible.** This commit lands on
+branch `evidence/g0-cpu-probe-results`, created under the operator's own two separate approvals —
+`BRANCH GO 1: AUTHORIZED` and `BRANCH GO 2: AUTHORIZED FOR evidence/g0-cpu-probe-results` — rather
+than any standing MVP1 GO, because branch creation is explicitly excluded from that grant (global
+CLAUDE.md §14). `main` cannot take a direct push any more: the operator enabled a ruleset requiring
+a pull request, specifically closing the gap recorded in the G1 manifest's own limitations list
+("a direct push to main is not examined by [Governance] at all"). This is that gap closing in
+practice, not just in the document.
+
+**A related request the operator made and its answer, recorded rather than acted on silently:** the
+operator asked to disable "Require a pull request before merging" so pushes to main would not need
+manual clicks. Declined to execute silently: `governance.yml` triggers on `pull_request` only, so a
+direct push would skip the Governance scope check entirely — the same NM3 self-authorization gap
+this whole gate exists to close, now with no PR left to catch it. Offered instead: Claude opens and
+merges PRs itself (`gh pr create` / `gh pr merge`), leaving branch creation as the one operator-only
+step. Awaiting the operator's decision; the rule was not changed.
+
+---
+
 ## 2026-09-11 — The manifest was adopted, and the scope check ran for the first time
 
 **Decision:** the operator read `governance/gate-manifests/g1.yaml`, agreed with it, and adopted it.
