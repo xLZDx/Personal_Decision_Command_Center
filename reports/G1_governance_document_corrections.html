@@ -396,13 +396,15 @@
   <dl>
     <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ c0e4a08</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ ec30155</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Copy page" data-done="Copied"
           data-fail="Select manually">Copy page</button>
 </div>
 <!-- report-conform:end -->
+
+
 
   <div class="verdict">
     <span class="stamp">VERDICT: APPROVE · 0 BLOCKER / 0 MAJOR</span>
@@ -565,7 +567,9 @@
             <h3>"remote CI currently executes nothing (R11)"</h3>
             <p>
               Found by me, not by the review. R11 is closed: the repository is public, Actions are
-              free, and both checks really do run and pass on every commit.
+              free, and both checks really do execute on every PR head. "Pass" is the wrong word:
+              a head that violates policy is supposed to fail, and one in this very PR deliberately
+              did.
             </p>
           </div>
         </div>
@@ -575,7 +579,16 @@
         replaced with a table of what actually is owed: the ruleset evidence — <strong>done</strong>;
         both negative controls — <strong>no</strong>. And the honest closing sentence no longer says
         "enforcement is not verified at all": the hash step has been observed both refusing and
-        passing, while the scope step has been observed <em>passing only</em>.
+        passing, while the scope step had, as of that block, been observed <em>passing only</em>.
+      </p>
+      <p class="note">
+        <strong>Update, same day, after this block.</strong> The scope step has now been observed in
+        the other direction too: run <code>34640409639</code> (job <code>103398420489</code>, head
+        <code>98716b3</code>) refused with <code>::error file=.gitignore::outside G1's approved
+        scope</code>, and the hash step before it <strong>succeeded</strong> — so step 6 genuinely
+        executed rather than being skipped. Of four changed paths, exactly one was refused. The
+        section 07 row below is updated; the paragraph above is left as written so it stays visible
+        what changed and when.
       </p>
     </div>
   </section>
@@ -725,8 +738,9 @@
             <tr>
               <td>Refusal control on the scope step</td>
               <td>me</td>
-              <td>Needs a PR touching a path outside <code>allowed_paths</code>. So far the step has
-                been observed <strong>passing only</strong></td>
+              <td><strong>DONE</strong> the same day, PR #7: run <code>34640409639</code> refused,
+                naming <code>.gitignore</code>; the hash step before it passed. Both directions of
+                the mechanism have now been observed</td>
             </tr>
             <tr>
               <td>Hash-mismatch control</td>
@@ -762,6 +776,8 @@
     </div>
   </section>
 </div>
+
+
 
 <!-- report-conform:script:begin -->
 <script>

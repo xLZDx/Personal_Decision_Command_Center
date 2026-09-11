@@ -395,13 +395,15 @@
   <dl>
     <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ c0e4a08</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ ec30155</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Копировать страницу" data-done="Скопировано"
           data-fail="Выделите вручную">Копировать страницу</button>
 </div>
 <!-- report-conform:end -->
+
+
 
   <div class="verdict">
     <span class="stamp">VERDICT: APPROVE · 0 BLOCKER / 0 MAJOR</span>
@@ -562,7 +564,9 @@
             <h3>«remote CI currently executes nothing (R11)»</h3>
             <p>
               Найдено мной, а не ревью. R11 закрыт: репозиторий публичный, Actions бесплатны,
-              обе проверки реально идут и проходят на каждом коммите.
+              обе проверки реально исполняются на каждом head’е PR. «Проходят» — не то слово:
+              head, нарушающий политику, обязан падать, и один такой в этом же PR намеренно
+              упал.
             </p>
           </div>
         </div>
@@ -572,7 +576,16 @@
         действительно должно: доказательство ruleset — <strong>сделано</strong>; оба отрицательных
         контроля — <strong>нет</strong>. И честная итоговая фраза больше не говорит «enforcement не
         проверен вообще»: шаг хеша наблюдался и отказывающим, и проходящим, а шаг scope —
-        <em>только проходящим</em>.
+        на момент того блока <em>только проходящим</em>.
+      </p>
+      <p class="note">
+        <strong>Обновление того же дня, после этого блока.</strong> Шаг scope теперь наблюдался и в
+        обратную сторону: прогон <code>34640409639</code> (job <code>103398420489</code>, head
+        <code>98716b3</code>) отказал с <code>::error file=.gitignore::outside G1's approved
+        scope</code>, причём шаг хеша перед ним <strong>прошёл</strong> — значит шаг 6 действительно
+        исполнился, а не был пропущен. Из четырёх изменённых путей отказ получил ровно один. Строка
+        таблицы в разделе 07 ниже обновлена; абзац выше оставлен как он был написан, чтобы видно
+        было, что именно изменилось и когда.
       </p>
     </div>
   </section>
@@ -719,8 +732,9 @@
             <tr>
               <td>Контроль отказа на шаге scope</td>
               <td>я</td>
-              <td>Нужен PR, трогающий путь вне <code>allowed_paths</code>. Сейчас шаг наблюдался
-                <strong>только проходящим</strong></td>
+              <td><strong>СДЕЛАНО</strong> в тот же день, PR #7: прогон <code>34640409639</code>
+                отказал, назвав <code>.gitignore</code>; шаг хеша перед ним прошёл. Обе стороны
+                механизма теперь наблюдались</td>
             </tr>
             <tr>
               <td>Контроль несовпадения хеша</td>
@@ -756,6 +770,8 @@
     </div>
   </section>
 </div>
+
+
 
 <!-- report-conform:script:begin -->
 <script>
