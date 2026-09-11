@@ -5,6 +5,33 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #13 merged (VERDICT: APPROVE, round 3); S13's stale checklist corrected
+
+PR #13 (`gate/g1-evidence-update`) merged as `a2a2794` after GPT-PM's round-3, correlated,
+`VERDICT: APPROVE` on the exact final head `025eac0` (final round, receipt = PR #13 comment
+`5184131065`). Merge conditions verified per `~/.claude/CLAUDE.md` §24 before merging: exact-head
+match, both required checks (`governance`, `verify`) green, `mergeable`/`mergeStateStatus: CLEAN`,
+and the diff (`core/DECISION_LOG.md`, `core/PLAN_MASTER_GATES.md`,
+`governance/plans/G1_PREADOPTION_EVIDENCE.md`, `governance/plans/G1_REMEDIATION_PLAN.md`) is not an
+authority-surface change (no `gate-manifests/**`, `operator-approvals/**`, branch-protection, or
+CODEOWNERS edit).
+
+While preparing the fresh-context G1 closure review, found `G1_PREADOPTION_EVIDENCE.md` §13's own
+six-item operator-boundary checklist was stale: it still listed PR #1's merge, branch protection,
+and the credential-model decision as open. All three were already resolved — PR #1 merged
+2026-09-11 (`gh pr view 1`), branch protection is ruleset `PDCC` (R12, closed), and the credential
+model was decided the same day (R13, closed). Corrected on the same branch, pushed as a follow-up
+commit rather than a new branch (no new branch created — same already-authorized
+`gate/g1-evidence-update`), opened as PR #14.
+
+PR #14 round 1 (`review.js --base a2a2794`, correlated) returned `VERDICT: MINOR`: item 1's own
+fix left a present-tense "What exists is a candidate" sentence sitting next to item 2's own record
+that adoption was already completed — both true at different times, contradictory read together.
+Fixed to read as history ("At this step what existed was only a candidate; adoption ... was
+completed at step 2 ... now also done"). Sent for round 2.
+
+---
+
 ## 2026-09-12 — PR #13 round-2: GPT-PM's three MAJOR findings on the evidence write-up, all fixed
 
 GPT-PM's round-1 review of PR #13 (`gate/g1-evidence-update`) returned `VERDICT: MAJOR` with three
