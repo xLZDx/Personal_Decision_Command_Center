@@ -6,3 +6,5 @@ verdict) live here, authored by the operator/governance authority, not by the im
 manifests.
 
 No approval records exist yet — G0 is in progress.
+
+<!-- operator control 2026-09-12: exercising the forbidden_paths refusal; this line is reverted in the next commit -->
