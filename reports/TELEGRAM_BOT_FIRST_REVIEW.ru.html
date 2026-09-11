@@ -1,0 +1,1025 @@
+<title>Бот вместо TDLib</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Архитектурное предложение · Ревью</p>
+    <h1>Бот вместо TDLib</h1>
+    <p class="standfirst">
+      Предложение состоит из двух половин. Транспорт принят. Модель согласия была отклонена — а
+      затем отклонение не устояло: оператор возразил, первоисточники проверили, и выяснилось, что
+      и ревьюер, и исполнитель читали не тот документ.
+    </p>
+    <div class="masthead-meta">
+      <span>11 сентября 2026</span>
+      <span>2 раунда GPT-PM + проверка первоисточников</span>
+      <span>3 параллельных ревьюера</span>
+      <span>СТАТУС: PROPOSED, НЕ ПРИНЯТО</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/manifest-proposals-g2-g10 @ 57d889c</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Копировать страницу" data-done="Скопировано"
+          data-fail="Выделите вручную">Копировать страницу</button>
+</div>
+<!-- report-conform:end -->
+
+  <div class="verdict">
+    <span class="stamp">ТРАНСПОРТ ПРИНЯТ · ВОПРОС ПО AI ОТКРЫТ ЗАНОВО</span>
+    <p>
+      Раунд 1 — <strong>BLOCKER</strong>: GPT-PM разрезал предложение надвое, транспорт принял,
+      модель consent-gated AI отклонил. Раунд 2 — <strong>APPROVE</strong> на исправления к
+      собственному ruling. <strong>Затем основание отклонения было выбито.</strong> Content
+      Licensing Terms сами выводят легитимного бота из-под себя и переадресуют в Bot Platform
+      Developer Terms, где действуют другие клаузулы и другой, достижимый стандарт согласия.
+      Вопрос по AI — <em>не решён</em>, а не «запрещён».
+    </p>
+    <p class="who">
+      GPT-PM · раунд 1 → VERDICT: BLOCKER · раунд 2 (request id e1a7c53b-9d28-4f61-b0c4-3a6f8e21d7c4)
+      → VERDICT: APPROVE · возражение оператора · перепроверка на первоисточниках · ruling и
+      поправка записаны в core/DECISION_LOG.md
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">01</span>
+      <div><h2>Что было предложено</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Две вещи в одном документе. <strong>Первая — транспорт:</strong> заменить
+        пользовательский коннектор на TDLib, живущий на постоянно включённом Utility Host, на
+        <strong>Telegram-бота</strong>, подключённого к вашему собственному аккаунту через
+        Business / connected-bot API. По умолчанию — только личная переписка один на один, без
+        групп. Это снимает TDLib, файл сессии, локальный спул, Cloudflare Tunnel и Content Gateway.
+      </p>
+      <p>
+        <strong>Вторая — модель согласия:</strong> четыре класса допуска
+        (<code>TG_AI_DENY_DEFAULT</code>, <code>TG_AI_ALLOW_DIRECT_INTERACTION</code>,
+        <code>TG_AI_ALLOW_CHAT_SCOPE</code>, <code>TG_AI_ALLOW_MESSAGE_SCOPE</code>), объект
+        <code>AIConsentGrant</code> и правки INV-03A / 04A / 05A / 26A, после которых часть
+        содержимого Telegram получала бы право доходить до AI.
+      </p>
+      <div class="note">
+        <strong>Половины разделены намеренно.</strong> Они независимы: бот-транспорт не требует
+        модели согласия, а модель согласия не требует бота. Слитые в один документ, они читались
+        как один пакет — и принятие транспорта протаскивало бы за собой изменение инвариантов,
+        которое отдельного обсуждения не получило.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02</span>
+      <div><h2>Отклонение и почему оно не устояло</h2></div>
+    </div>
+    <div class="flow">
+      <p class="kicker">Как рассуждал ревьюер</p>
+      <p>
+        Content Licensing Terms содержат исключение под согласие, и этот вариант <strong>уже был
+        рассмотрен и отклонён в этом же репозитории</strong> 10 сентября:
+        <code>docs/architecture/EXTERNAL_ASSUMPTIONS.md</code>, строки 81–95. Исключение требует
+        «explicit, informed, affirmative and <strong>continued</strong> consent» от <strong>всех
+        релевантных пользователей</strong> — то есть от собеседников, — привязано к конкретному
+        чату и непередаваемо. Для обычных двусторонних переписок это недостижимо. Исполнитель
+        рекомендовал впустить самый узкий класс, GPT-PM отказал и в нём.
+      </p>
+      <div class="defect">
+        <h3>Это рассуждение опиралось на предпосылку, которую текст не подтверждает</h3>
+        <p>
+          Оператор возразил. Вместо того чтобы повторить вердикт, первоисточники были перечитаны —
+          и предпосылка «режим AI для данных из Bot API задают Content Licensing Terms»
+          <strong>не подтвердилась</strong>. Тот же документ, где живёт запрет, дословно говорит:
+        </p>
+        <p class="why">
+          «Telegram permits access to data required to launch and operate a legitimate third-party
+          Telegram Client, <strong>Telegram Bot</strong>, or Telegram Mini App» — при соблюдении
+          соответствующих Terms of Service.
+        </p>
+        <p>
+          То есть легитимный бот переадресуется в <strong>Bot Platform Developer Terms</strong>.
+          Эта фраза была записана в §B ещё 10 сентября, но прочитана как разрешение на
+          <em>доступ</em>; что она переадресует и режим <em>использования</em>, замечено не было.
+          Достаёт ли запрет на AI-использование до законно полученных ботом данных — из текста
+          <strong>не следует ни в ту, ни в другую сторону</strong>. Это <code>UNKNOWN</code>, а не
+          факт.
+        </p>
+      </div>
+      <p class="kicker">Раскрытие Telegram берёт на себя</p>
+      <p>
+        Privacy Policy §6.5, дословно: <em>«If you message a Business user who connected a chatbot
+        to their account, depending on their settings, <strong>you may be effectively communicating
+        with a bot</strong>, and it will receive basic data about you as detailed in section 6.3
+        above.»</em> Это условие, которое принимает каждый пользователь Telegram. Претензия о
+        скрытом перехвате без ведома второй стороны этим <strong>снимается</strong>.
+      </p>
+      <div class="note">
+        <strong>Плашки в чате при этом нет.</strong> Ни Privacy Policy, ни
+        <code>core.telegram.org/api/business</code>, ни <code>/api/bots/connected-business-bots</code>
+        не описывают никакой видимой собеседнику метки; отраслевой источник утверждает, что её нет
+        вовсе. На аргумент это не влияет — раскрытие в политике как инструмент сильнее элемента
+        интерфейса, — но утверждать про плашку нельзя.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02a</span>
+      <div><h2>Настоящее ограничение — не там, где его искали обе стороны</h2></div>
+    </div>
+    <div class="flow">
+      <div class="block">
+        <p class="kicker">Bot Developer Terms §5.4(iv)</p>
+        <p class="mono">
+          «never disclose message contents, files or other data you obtained or processed through or
+          in connection with Telegram Business <strong>to third parties (including third-party
+          APIs)</strong> without the user's authorization»
+        </p>
+      </div>
+      <p>
+        Отправка содержимого Telegram во внешнюю модель — это ровно «disclosure to a third-party
+        API». Нужна «the user's authorization». <strong>Чья именно — текст не разрешает.</strong>
+        В том же §5.4 пункт (v) говорит «business account owner» прямым текстом, то есть документ
+        умеет различать владельца и собеседника, — и в (iv) этого словосочетания нет. Двусмысленность
+        настоящая; доказать любое прочтение текстом нельзя.
+      </p>
+      <div class="block">
+        <p class="kicker">Bot Developer Terms §4.3, абзац 2 — прямое разрешение</p>
+        <p class="mono">
+          «you are free to use data submitted directly and voluntarily to your TPA by users,
+          provided that you clearly inform them of the data's intended use and they give their
+          individual, explicit, active and revocable consent»
+        </p>
+      </div>
+      <p>
+        Стандарт другой и <strong>достижимый</strong>: «individual, explicit, active and
+        <em>revocable</em>» вместо «continued consent from all relevant users». Он требует ясного
+        информирования о назначении — то есть именно того, что делает вариант B в разделе 10.
+      </p>
+      <p>
+        И абзац 1 того же §4.3 запрещает сбор, <strong>нацеленный на создание</strong> датасетов,
+        моделей и AI-продуктов. Personal Decision OS ничего не создаёт и не обучает — он потребляет
+        чужую модель. Это другое действие, чем запрещённое.
+      </p>
+      <div class="alarm">
+        <h3>Вывод, который я обязан назвать честно</h3>
+        <p>
+          Вопрос AI по Telegram <strong>открыт заново и не решён</strong>. Он не «запрещён» и не
+          «разрешён». Найденный ревьюером запрет — это находка к проверке, а не вето; проверка
+          показала, что основание не держится. Решение — за оператором, варианты в разделе 10.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">03</span>
+      <div><h2>Два инварианта, которые предложение удаляло молча</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Предложение называет INV-03, 04, 05 и 26. Ещё два инварианта оно отменяет фактически, но
+        не упоминает ни разу. Оба помечены в <code>docs/architecture/TDD.md:176</code> как
+        неприкосновенные без ADR, независимого ревью и вашего одобрения.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Инварианты, затронутые предложением, но в нём не названные.</caption>
+          <thead>
+            <tr><th>Инвариант</th><th>Текст</th><th>Что с ним делает предложение</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>INV-14</code><br><span class="mono">TDD.md:192</span></td>
+              <td>Сырое содержимое Telegram по умолчанию не хранится в центральной Decision DB</td>
+              <td>Центральное хранение — ровно то, что бот-модель вводит. Это единственный
+                инвариант, который поправка реально меняет по существу</td>
+            </tr>
+            <tr>
+              <td><code>INV-30</code><br><span class="mono">TDD.md:208</span></td>
+              <td>Полнотекстовый drill-down Telegram использует шифрование прикладного уровня
+                end-to-end между Content Gateway и PWA</td>
+              <td>Удаление Content Gateway удаляет предмет инварианта. Свойство при этом никуда
+                не девается — его нужно переносить, а не терять</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">Почему это важнее формальности</p>
+      <p>
+        Поправка, которая не называет инвариант, который она отменяет, проходит ревью как
+        «упрощение». Настоящая цена всплывает позже — когда выясняется, что удалённое свойство
+        было обязательством, а не украшением. Именно так и вышло: см. раздел 05.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">04</span>
+      <div><h2>Утверждение про ADR-011 неверно</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        §17 предложения утверждает, что после снятия TDLib предзаданный fallback ADR-011 больше не
+        требует хоста. <code>core/adr/ADR-011-queue-consumer-runtime.md</code>, строки 65–73,
+        говорит прямо обратное:
+      </p>
+      <div class="block">
+        <p class="mono">
+          «…the queue consumer switches to Cloudflare's documented <strong>HTTP pull consumer</strong>
+          running on the already-required connector host (same host as the Telegram TDLib
+          connector)…»
+        </p>
+        <p class="mono">
+          «…nightly D1 export/compress/encrypt/upload-to-R2 runs on the connector host
+          (<code>host/backup-agent/</code>), never inside a Worker»
+        </p>
+      </div>
+      <p>
+        <strong>Снятие Telegram-коннектора не снимает хост — оно снимает одну из двух его работ.</strong>
+        Вторая — pull-consumer fallback по R8 и ночной бэкап — остаётся. <strong>Utility Host
+        сохраняется.</strong> GPT-PM подтвердил это отдельным пунктом ruling.
+      </p>
+      <div class="note">
+        Это меняет и заявленный масштаб упрощения. Уходят TDLib, сессия, спул, туннель и шлюз —
+        это реальный выигрыш. Хост не уходит.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">05</span>
+      <div><h2>Проверенные факты</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Каждая строка ниже получена чтением первоисточника, а не пересказом. Метка — по
+        классификации глобального контракта: <code>FACT</code> — проверено на первоисточнике,
+        <code>HYPOTHESIS</code> — правдоподобно, но доказать нечем.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Факты, на которых держится транспорт, и один, который держится хуже прочих.</caption>
+          <thead>
+            <tr><th>Метка</th><th>Факт</th><th>Источник</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="chip done">FACT</span></td>
+              <td>Подключённые боты доступны <strong>без Premium</strong>. Два независимых
+                извлечения совпали</td>
+              <td>Блог Telegram 07.05.2026 («every Telegram user can connect a bot to their
+                profile»); <code>core.telegram.org/api/business</code> («connected bots are also
+                available to non-Premium users»)</td>
+            </tr>
+            <tr>
+              <td><span class="chip block">FACT</span></td>
+              <td><strong>§4.4(a)</strong>: «Make sure user data is always encrypted at rest and
+                stored separately from its encryption key». <em>Безусловно</em> — никакой оговорки
+                про возможности платформы</td>
+              <td>Bot Platform Developer Terms, прочитано напрямую</td>
+            </tr>
+            <tr>
+              <td><span class="chip block">FACT</span></td>
+              <td><strong>§4.2</strong>: удаление по запросу, удаление когда хранение больше не
+                необходимо, удаление всех данных при прекращении работы приложения.
+                <strong>§4.3</strong>: независимый лимит назначения — не собирать, не хранить, не
+                агрегировать и не обрабатывать сверх существенно необходимого</td>
+              <td>Bot Platform Developer Terms</td>
+            </tr>
+            <tr>
+              <td><span class="chip done">FACT</span></td>
+              <td>Content Licensing Terms <strong>сами выводят</strong> легитимного бота из-под
+                себя и переадресуют в Bot Developer Terms</td>
+              <td><code>telegram.org/tos/content-licensing</code> — «permits access to data required
+                to launch and operate a legitimate third-party Telegram Client, Telegram Bot, or
+                Telegram Mini App»</td>
+            </tr>
+            <tr>
+              <td><span class="chip done">FACT</span></td>
+              <td>Telegram сам раскрывает собеседнику, что бот может получать его данные — в
+                политике, которую принимает каждый пользователь</td>
+              <td>Privacy Policy §6.5, дословно приведено в разделе 02</td>
+            </tr>
+            <tr>
+              <td><span class="chip hist">UNKNOWN</span></td>
+              <td>Достаёт ли запрет на AI-использование до данных, законно полученных ботом, —
+                из текста не следует ни в ту, ни в другую сторону. И чья «authorization»
+                требуется в §5.4(iv) — тоже</td>
+              <td>Content Licensing Terms + Bot Developer Terms §5.4; обе двусмысленности
+                текстуальные, а не предположительные</td>
+            </tr>
+            <tr>
+              <td><span class="chip hist">НЕ ПОДТВЕРЖДЕНО</span></td>
+              <td>Видимой собеседнику плашки «чат управляется ботом» в документации нет</td>
+              <td>Privacy Policy, <code>/api/business</code>, <code>/api/bots/connected-business-bots</code>
+                — все молчат; отраслевой источник утверждает, что метки нет</td>
+            </tr>
+            <tr>
+              <td><span class="chip part">HYPOTHESIS</span></td>
+              <td>Юридические документы Telegram отстали от продуктовых: Privacy Policy §6.5 и Bot
+                Developer ToS §5.4 <em>до сих пор</em> пишут «Telegram Business subscribers», тогда
+                как блог и API-документация говорят «любой пользователь». Читается как
+                несинхронизированная редактура, но доказать, какая формулировка обязывает,
+                нельзя</td>
+              <td>Privacy Policy §6.5; Bot Developer ToS §5.4</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">06</span>
+      <div><h2>Регрессия в вердикте самого ревьюера</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        В раунде 1 GPT-PM предложил заменить INV-30 формулировкой с оговоркой — «encrypted at rest
+        <strong>where platform capability permits</strong>». Эта оговорка недоступна.
+      </p>
+      <div class="defect">
+        <p>
+          §4.4(a) безусловен. На D1 в рамках HARD_ZERO нет ключа, удерживаемого оператором на
+          стороне платформы. Значит формулировка «где платформа позволяет» вычислялась бы как
+          <strong>«D1 не даёт ничего, следовательно не требуется ничего»</strong> — ровно тот
+          молчаливый даунгрейд, который <code>core/adr/ADR-007</code>:54 уже запрещает.
+        </p>
+      </div>
+      <p>
+        Поднято во втором раунде. GPT-PM принял поправку и снял оговорку. Заодно это ещё раз
+        уменьшает заявленное упрощение: центральное хранение <em>возвращает</em> обязательство
+        шифровать с раздельным хранением ключа — концептуально ту же машинерию, что предложение
+        удаляло вместе с ECDH-конвертом, только переназначенную.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">07</span>
+      <div><h2>Новые тексты инвариантов — как постановлено, но не принято</h2></div>
+    </div>
+    <div class="flow">
+      <div class="block">
+        <p class="kicker">INV-30A — шифрование хранимых данных Telegram</p>
+        <p>
+          Любые данные пользователей Telegram, удерживаемые сервисом, ДОЛЖНЫ быть зашифрованы в
+          покое до записи, а ключ шифрования ДОЛЖЕН храниться отдельно от зашифрованных данных.
+          Никакое исходное содержимое Telegram в открытом виде не может быть записано в D1,
+          бэкапы R2, логи, метрики, очереди, фикстуры CI или эквивалентные долговременные
+          хранилища. Расшифровка допускается только после аутентифицированного и авторизованного
+          запроса доказательства. Ответы, несущие исходное содержимое, помечаются
+          <code>no-store</code> и никогда не попадают в кеши service worker.
+        </p>
+      </div>
+      <div class="block">
+        <p class="kicker">INV-14A — минимизация, ограничение назначения и удаление</p>
+        <p>
+          Данные пользователей Telegram могут удерживаться централизованно только в объёме,
+          существенно необходимом для работы явно документированной функции Personal Decision OS.
+          Система НЕ ДОЛЖНА собирать, хранить, агрегировать или обрабатывать данные Telegram сверх
+          этой операционной необходимости. Удерживаемые данные ДОЛЖНЫ удаляться без неоправданной
+          задержки: по запросу там, где он применим; когда они больше не нужны сервису; и когда
+          приложение прекращает работу — кроме случаев, где действующее соглашение о хранении или
+          юридическая обязанность разрешают иное. Конкретные TTL, распространение правок и
+          удалений, поведение при отключении, «надгробия» и порядок стирания бэкапов определяются
+          политикой хранения и не могут ослабить этот инвариант.
+        </p>
+      </div>
+      <p>
+        Расслоение намеренное: <strong>INV-14A — неснижаемый договорный пол</strong>,
+        <code>DATA_RETENTION_POLICY.md</code> — операционные детали. Формулировки, представляющие
+        центральное хранение Telegram как продуктовое предпочтение, подлежат удалению: в бот-модели
+        минимизация и удаление — договорные обязательства.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">08</span>
+      <div><h2>Три предусловия до принятия</h2></div>
+    </div>
+    <div class="flow">
+      <div class="ask">
+        <h3>1 · Эмпирическая проверка на вашем аккаунте без Premium</h3>
+        <p>
+          Весь транспорт стоит на этом факте, а юридические и продуктовые документы Telegram
+          расходятся. Проверка стоит минуту и решает вопрос лучше любого дальнейшего чтения.
+        </p>
+        <ul>
+          <li>Убедиться, что <code>Settings → Chat Automation</code> существует <em>без</em> Premium.</li>
+          <li>Подключить тестового бота с включённым Secretary Mode в BotFather.</li>
+          <li>Убедиться, что приходит <code>BusinessConnection</code> и <code>getMe</code> отдаёт
+            <code>can_connect_to_business</code>.</li>
+          <li>Провести по одному обычному личному сообщению в каждую сторону через документированный
+            путь Bot API.</li>
+          <li>Записать клиент, платформу, версию, дату.</li>
+        </ul>
+        <p>
+          <strong>Важное различие:</strong> проверка доказывает техническую доступность для вашего
+          аккаунта. Она <em>не</em> доказывает, какая формулировка Telegram обязывает юридически.
+          Расхождение §6.5 / §5.4 остаётся принятым нерешённым противоречием документации — его
+          нельзя молча «закрыть» успешным тестом.
+        </p>
+      </div>
+      <div class="ask">
+        <h3>2 · Где живёт ключ — открытое проектное решение</h3>
+        <p>
+          GPT-PM намеренно не выбрал вариант: это обязательное решение SEC/PRIV до принятия, а не
+          импровизация внутри G4. Три кандидата, у каждого своя цена:
+        </p>
+        <ul>
+          <li><strong>Utility Host</strong> — доступность доказательств Telegram снова зависит от
+            постоянно включённого хоста.</li>
+          <li><strong>Ключ в PWA</strong> — усложняет приём вебхуков, работу с нескольких
+            устройств, восстановление и бэкапы.</li>
+          <li><strong>Envelope-шифрование, KEK в секрет-сторе отдельно от D1</strong> — технически
+            проще, но не должно выбираться без threat-model-ревью.</li>
+        </ul>
+        <p>
+          Принять поправку нельзя, пока custody, восстановление, ротация и семантика бэкапов не
+          получат независимо отревьюенный дизайн.
+        </p>
+      </div>
+      <div class="ask">
+        <h3>3 · Снимок §B по документам Bot API</h3>
+        <p>
+          <code>docs/architecture/EXTERNAL_ASSUMPTIONS.md</code> §B сегодня <strong>не содержит ни
+          одной строки про Bot API</strong> — там зафиксированы только API Terms и Content
+          Licensing, с хешами от 10 сентября. Поправка целиком опирается на факты, которых файл не
+          записывает. Нужен снимок той же формы: URL, дата извлечения, SHA-256, дословные цитаты —
+          включая противоречащие Privacy Policy §6.5 и Bot ToS §5.4.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">09</span>
+      <div><h2>Что переносится в критерии приёмки G4</h2></div>
+    </div>
+    <div class="flow">
+      <ul>
+        <li>Боту нужен <strong>Secretary Mode</strong>, включённый в BotFather;
+          <code>getMe</code> раскрывает <code>can_connect_to_business</code>.</li>
+        <li>Отметка сообщений прочитанными — <strong>не автоматическая</strong>: она опциональна и
+          ограничена правом <code>can_read_messages</code>. Это снимает опасение по API Terms §1.4
+          для бота, работающего только на приём.</li>
+        <li>Ответ и отметка прочтения ограничены чатами, активными за последние 24 часа.</li>
+        <li>Недоставленные обновления Telegram хранит <strong>не более 24 часов</strong> — значит
+          D1 становится долговременной записью сразу после приёма.</li>
+        <li>Две страницы документации мертвы: <code>telegram.org/faq_business</code> — пустая
+          оболочка, <code>core.telegram.org/api/bots/business</code> отдаёт «Page not found».</li>
+      </ul>
+      <div class="note">
+        <strong>PR #4 поставлен на HOLD</strong> тем же вердиктом: в девяти предложениях манифестов
+        есть G4, чей объём существенно изменится, если поправка будет принята.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">10</span>
+      <div><h2>Что от вас нужно</h2></div>
+    </div>
+    <div class="flow">
+      <p class="kicker">Решение первое и главное: режим AI для Telegram</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Три варианта после того, как основание для AI_DENY перестало держаться.</caption>
+          <thead>
+            <tr><th class="num-col">Вар.</th><th>Что это значит</th><th>Цена</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="num-col">A</td>
+              <td>Признать, что режим задаёт §5.4(iv), и трактовать «the user» как владельца
+                бизнес-аккаунта, то есть вас. AI по личной переписке открывается; обязательствами
+                остаются §4.4(a) шифрование с раздельным ключом, §4.2 удаление, §4.3 лимит
+                назначения</td>
+              <td>Двусмысленность прочтения принимается как осознанный риск и заносится в
+                <code>core/RISK_REGISTER.md</code></td>
+            </tr>
+            <tr>
+              <td class="num-col">B</td>
+              <td><strong>Рекомендуется.</strong> То же, плюс явное раскрытие: бот при первом
+                контакте сообщает собеседнику, что переписка обрабатывается ассистентом. Это
+                закрывает <em>оба</em> прочтения «the user» сразу и удовлетворяет §4.3 абз. 2
+                («clearly inform them of the data's intended use»)</td>
+              <td>Одно автоматическое сообщение на новый чат</td>
+            </tr>
+            <tr>
+              <td class="num-col">C</td>
+              <td>Оставить AI_DENY, как постановил GPT-PM в раунде 1</td>
+              <td>Telegram остаётся источником фактов без AI-обработки в MVP1</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">Остальные открытые пункты</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Открытые пункты, требующие именно вашего решения.</caption>
+          <thead>
+            <tr><th>Пункт</th><th class="num-col">Цена</th><th>Почему не могу сам</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Проверка <code>Settings → Chat Automation</code> без Premium</td>
+              <td class="num-col">~1 мин</td>
+              <td>Нужен ваш личный аккаунт Telegram</td>
+            </tr>
+            <tr>
+              <td>Решение: принимать ли поправку транспорта в принципе</td>
+              <td class="num-col">—</td>
+              <td>Меняет INV-14 и INV-30, помеченные в <code>TDD.md:176</code> как требующие
+                вашего одобрения</td>
+            </tr>
+            <tr>
+              <td>Мерж PR #2 и PR #4</td>
+              <td class="num-col">~1 мин</td>
+              <td>§24, изъятие про поверхность полномочий: оба диффа несут записи о прошлых
+                авторизациях</td>
+            </tr>
+            <tr>
+              <td>R13 — модель учётных данных GitHub</td>
+              <td class="num-col">—</td>
+              <td>Один аккаунт на всё; разделение сегодня процедурное, не механическое</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">Порядок, если решите двигаться</p>
+      <p>
+        Ваш выбор A / B / C → эмпирическая проверка аккаунта → снимок §B по документам Bot API
+        (плюс двусмысленность §5.4(iv) записывается как принятый риск) → дизайн хранения ключа и
+        ревью SEC/PRIV → ADR → независимое ревью → ваше одобрение → INV-14A / INV-30A и, при A или
+        B, замена INV-03 / 04 / 05 / 26 → пересборка манифеста G4.
+        <strong>Закрытие G1 идёт своим треком и от этого не зависит.</strong>
+      </p>
+      <div class="alarm">
+        <h3>Пока — не внедряется ничего</h3>
+        <p>
+          <code>AIConsentGrant</code>, четыре класса допуска и INV-03A / 04A / 05A / 26A
+          <strong>не записаны ни в один документ</strong>. Непринятое предложение, оставленное
+          лежать в дереве, читается следующей сессией как принятое — это отдельный способ
+          проиграть.
+        </p>
+        <p>
+          Ровно так же снята с обращения и формулировка «Telegram — AI_DENY, потому что это
+          запрещают Content Licensing Terms». Она больше не опирается ни на что: управляющий
+          документ для данных из Bot API — Bot Platform Developer Terms, а действующие клаузулы —
+          §5.4(iv), §4.3 и §4.4(a).
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->

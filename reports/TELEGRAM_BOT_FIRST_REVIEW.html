@@ -1,0 +1,1025 @@
+<title>A Bot Instead of TDLib</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Architecture proposal · Review</p>
+    <h1>A Bot Instead of TDLib</h1>
+    <p class="standfirst">
+      The proposal has two halves. The transport was accepted. The consent model was rejected — and
+      then the rejection did not hold: the operator objected, the primary sources were checked, and it
+      turned out that both the reviewer and the implementer had been reading the wrong document.
+    </p>
+    <div class="masthead-meta">
+      <span>11 September 2026</span>
+      <span>2 GPT-PM rounds + primary-source verification</span>
+      <span>3 parallel reviewers</span>
+      <span>STATUS: PROPOSED, NOT ADOPTED</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/manifest-proposals-g2-g10 @ 57d889c</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+  <div class="verdict">
+    <span class="stamp">TRANSPORT ACCEPTED · THE AI QUESTION REOPENED</span>
+    <p>
+      Round 1 — <strong>BLOCKER</strong>: GPT-PM cut the proposal in two, accepted the transport,
+      and rejected the consent-gated AI model. Round 2 — <strong>APPROVE</strong> on the corrections to
+      its own ruling. <strong>Then the basis for the rejection was knocked out.</strong> The Content
+      Licensing Terms themselves route a legitimate bot out from under their own scope and redirect it
+      to the Bot Platform Developer Terms, where different clauses and a different, attainable consent
+      standard apply. The AI question is <em>unresolved</em>, not "prohibited".
+    </p>
+    <p class="who">
+      GPT-PM · round 1 → VERDICT: BLOCKER · round 2 (request id e1a7c53b-9d28-4f61-b0c4-3a6f8e21d7c4)
+      → VERDICT: APPROVE · operator's objection · re-verification against the primary sources · the
+      ruling and the amendment recorded in core/DECISION_LOG.md
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">01</span>
+      <div><h2>What was proposed</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Two things in one document. <strong>The first is the transport:</strong> replace the
+        user-account connector built on TDLib, living on an always-on Utility Host, with a
+        <strong>Telegram bot</strong> connected to your own account through the
+        Business / connected-bot API. By default — one-to-one private conversations only, no
+        groups. This removes TDLib, the session file, the local spool, the Cloudflare Tunnel and the Content Gateway.
+      </p>
+      <p>
+        <strong>The second is the consent model:</strong> four access classes
+        (<code>TG_AI_DENY_DEFAULT</code>, <code>TG_AI_ALLOW_DIRECT_INTERACTION</code>,
+        <code>TG_AI_ALLOW_CHAT_SCOPE</code>, <code>TG_AI_ALLOW_MESSAGE_SCOPE</code>), an
+        <code>AIConsentGrant</code> object and amendments to INV-03A / 04A / 05A / 26A, after which part
+        of the Telegram content would be allowed to reach the AI.
+      </p>
+      <div class="note">
+        <strong>The halves are separated deliberately.</strong> They are independent: the bot transport does not require
+        the consent model, and the consent model does not require the bot. Merged into a single document, they read
+        as one package — and accepting the transport would have dragged along a change to the invariants
+        that never got a discussion of its own.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02</span>
+      <div><h2>The rejection and why it did not hold</h2></div>
+    </div>
+    <div class="flow">
+      <p class="kicker">How the reviewer reasoned</p>
+      <p>
+        The Content Licensing Terms contain a consent exception, and that option <strong>had already been
+        considered and rejected in this very repository</strong> on 10 September:
+        <code>docs/architecture/EXTERNAL_ASSUMPTIONS.md</code>, lines 81–95. The exception requires
+        "explicit, informed, affirmative and <strong>continued</strong> consent" from <strong>all
+        relevant users</strong> — that is, from the correspondents — is tied to a specific
+        chat and is non-transferable. For ordinary two-party conversations this is unattainable. The implementer
+        recommended admitting the narrowest class; GPT-PM refused even that one.
+      </p>
+      <div class="defect">
+        <h3>That reasoning rested on a premise the text does not support</h3>
+        <p>
+          The operator objected. Instead of repeating the verdict, the primary sources were re-read —
+          and the premise that "the AI regime for Bot API data is set by the Content Licensing Terms"
+          <strong>was not confirmed</strong>. The very document where the prohibition lives says, verbatim:
+        </p>
+        <p class="why">
+          "Telegram permits access to data required to launch and operate a legitimate third-party
+          Telegram Client, <strong>Telegram Bot</strong>, or Telegram Mini App" — subject to compliance with
+          the corresponding Terms of Service.
+        </p>
+        <p>
+          That is, a legitimate bot is redirected to the <strong>Bot Platform Developer Terms</strong>.
+          This sentence was recorded in §B as far back as 10 September, but was read as permission for
+          <em>access</em>; that it also redirects the regime of <em>use</em> went unnoticed.
+          Whether the ban on AI use reaches data lawfully obtained by a bot
+          <strong>does not follow in either direction</strong> from the text. That is <code>UNKNOWN</code>, not a
+          fact.
+        </p>
+      </div>
+      <p class="kicker">Telegram takes the disclosure on itself</p>
+      <p>
+        Privacy Policy §6.5, verbatim: <em>"If you message a Business user who connected a chatbot
+        to their account, depending on their settings, <strong>you may be effectively communicating
+        with a bot</strong>, and it will receive basic data about you as detailed in section 6.3
+        above."</em> This is a term every Telegram user accepts. The objection about
+        covert interception without the other party's knowledge is thereby <strong>removed</strong>.
+      </p>
+      <div class="note">
+        <strong>There is, however, no badge in the chat.</strong> Neither the Privacy Policy, nor
+        <code>core.telegram.org/api/business</code>, nor <code>/api/bots/connected-business-bots</code>
+        describes any marker visible to the correspondent; an industry source claims there is none
+        at all. This does not affect the argument — disclosure in a policy is a stronger instrument than an
+        interface element — but no claim about a badge can be made.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02a</span>
+      <div><h2>The real constraint is not where either side was looking for it</h2></div>
+    </div>
+    <div class="flow">
+      <div class="block">
+        <p class="kicker">Bot Developer Terms §5.4(iv)</p>
+        <p class="mono">
+          "never disclose message contents, files or other data you obtained or processed through or
+          in connection with Telegram Business <strong>to third parties (including third-party
+          APIs)</strong> without the user's authorization"
+        </p>
+      </div>
+      <p>
+        Sending Telegram content to an external model is exactly a "disclosure to a third-party
+        API". "The user's authorization" is required. <strong>Whose exactly — the text does not settle.</strong>
+        In the same §5.4, item (v) says "business account owner" in so many words, so the document
+        is capable of distinguishing the owner from the correspondent — and in (iv) that phrase is absent. The ambiguity is
+        genuine; no reading can be proved from the text.
+      </p>
+      <div class="block">
+        <p class="kicker">Bot Developer Terms §4.3, paragraph 2 — an explicit permission</p>
+        <p class="mono">
+          "you are free to use data submitted directly and voluntarily to your TPA by users,
+          provided that you clearly inform them of the data's intended use and they give their
+          individual, explicit, active and revocable consent"
+        </p>
+      </div>
+      <p>
+        The standard is different and <strong>attainable</strong>: "individual, explicit, active and
+        <em>revocable</em>" instead of "continued consent from all relevant users". It requires clear
+        information about the purpose — that is, precisely what option B in section 10 does.
+      </p>
+      <p>
+        And paragraph 1 of the same §4.3 prohibits collection <strong>aimed at creating</strong> datasets,
+        models and AI products. Personal Decision OS creates nothing and trains nothing — it consumes
+        someone else's model. That is a different act from the prohibited one.
+      </p>
+      <div class="alarm">
+        <h3>The conclusion I am obliged to state honestly</h3>
+        <p>
+          The Telegram AI question is <strong>reopened and unresolved</strong>. It is neither "prohibited" nor
+          "permitted". The prohibition the reviewer found is a finding to be verified, not a veto; verification
+          showed that the basis does not hold. The decision is the operator's; the options are in section 10.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">03</span>
+      <div><h2>Two invariants the proposal removed silently</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The proposal names INV-03, 04, 05 and 26. Two further invariants it repeals in effect, but
+        never mentions once. Both are marked in <code>docs/architecture/TDD.md:176</code> as
+        untouchable without an ADR, an independent review and your approval.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Invariants affected by the proposal but not named in it.</caption>
+          <thead>
+            <tr><th>Invariant</th><th>Text</th><th>What the proposal does to it</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>INV-14</code><br><span class="mono">TDD.md:192</span></td>
+              <td>Raw Telegram content is by default not stored in the central Decision DB</td>
+              <td>Central storage is exactly what the bot model introduces. This is the only
+                invariant the amendment genuinely changes in substance</td>
+            </tr>
+            <tr>
+              <td><code>INV-30</code><br><span class="mono">TDD.md:208</span></td>
+              <td>Full-text Telegram drill-down uses application-layer end-to-end encryption
+                between the Content Gateway and the PWA</td>
+              <td>Removing the Content Gateway removes the invariant's subject. The property itself does not
+                go anywhere — it has to be carried over, not lost</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">Why this matters more than a formality</p>
+      <p>
+        An amendment that does not name the invariant it repeals passes review as a
+        "simplification". The real price surfaces later — when it turns out that the removed property
+        was an obligation, not an ornament. That is exactly what happened: see section 05.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">04</span>
+      <div><h2>The claim about ADR-011 is wrong</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        §17 of the proposal asserts that once TDLib is removed, the pre-defined ADR-011 fallback no longer
+        requires a host. <code>core/adr/ADR-011-queue-consumer-runtime.md</code>, lines 65–73,
+        says exactly the opposite:
+      </p>
+      <div class="block">
+        <p class="mono">
+          "…the queue consumer switches to Cloudflare's documented <strong>HTTP pull consumer</strong>
+          running on the already-required connector host (same host as the Telegram TDLib
+          connector)…"
+        </p>
+        <p class="mono">
+          "…nightly D1 export/compress/encrypt/upload-to-R2 runs on the connector host
+          (<code>host/backup-agent/</code>), never inside a Worker"
+        </p>
+      </div>
+      <p>
+        <strong>Removing the Telegram connector does not remove the host — it removes one of its two jobs.</strong>
+        The second — the R8 pull-consumer fallback and the nightly backup — remains. <strong>The Utility Host
+        stays.</strong> GPT-PM confirmed this in a separate item of the ruling.
+      </p>
+      <div class="note">
+        This also changes the claimed scale of the simplification. TDLib, the session, the spool, the tunnel and the gateway go —
+        that is a real gain. The host does not go.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">05</span>
+      <div><h2>Verified facts</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Every line below comes from reading a primary source, not from a retelling. The label follows the
+        classification of the global contract: <code>FACT</code> — verified against the primary source,
+        <code>HYPOTHESIS</code> — plausible, but with nothing to prove it.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>The facts the transport rests on, and one that rests worse than the rest.</caption>
+          <thead>
+            <tr><th>Label</th><th>Fact</th><th>Source</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="chip done">FACT</span></td>
+              <td>Connected bots are available <strong>without Premium</strong>. Two independent
+                retrievals agreed</td>
+              <td>Telegram blog 07.05.2026 ("every Telegram user can connect a bot to their
+                profile"); <code>core.telegram.org/api/business</code> ("connected bots are also
+                available to non-Premium users")</td>
+            </tr>
+            <tr>
+              <td><span class="chip block">FACT</span></td>
+              <td><strong>§4.4(a)</strong>: "Make sure user data is always encrypted at rest and
+                stored separately from its encryption key". <em>Unconditionally</em> — no caveat
+                about platform capability</td>
+              <td>Bot Platform Developer Terms, read directly</td>
+            </tr>
+            <tr>
+              <td><span class="chip block">FACT</span></td>
+              <td><strong>§4.2</strong>: deletion on request, deletion when retention is no longer
+                necessary, deletion of all data when the application ceases operation.
+                <strong>§4.3</strong>: an independent purpose limit — do not collect, do not store, do not
+                aggregate and do not process beyond what is essentially necessary</td>
+              <td>Bot Platform Developer Terms</td>
+            </tr>
+            <tr>
+              <td><span class="chip done">FACT</span></td>
+              <td>The Content Licensing Terms <strong>themselves route</strong> a legitimate bot out from
+                under their own scope and redirect it to the Bot Developer Terms</td>
+              <td><code>telegram.org/tos/content-licensing</code> — "permits access to data required
+                to launch and operate a legitimate third-party Telegram Client, Telegram Bot, or
+                Telegram Mini App"</td>
+            </tr>
+            <tr>
+              <td><span class="chip done">FACT</span></td>
+              <td>Telegram itself discloses to the correspondent that a bot may receive their data — in
+                a policy every user accepts</td>
+              <td>Privacy Policy §6.5, quoted verbatim in section 02</td>
+            </tr>
+            <tr>
+              <td><span class="chip hist">UNKNOWN</span></td>
+              <td>Whether the ban on AI use reaches data lawfully obtained by a bot
+                does not follow in either direction from the text. Nor does whose "authorization"
+                is required in §5.4(iv)</td>
+              <td>Content Licensing Terms + Bot Developer Terms §5.4; both ambiguities are
+                textual, not speculative</td>
+            </tr>
+            <tr>
+              <td><span class="chip hist">NOT ESTABLISHED</span></td>
+              <td>There is no correspondent-visible "this chat is managed by a bot" badge in the documentation</td>
+              <td>Privacy Policy, <code>/api/business</code>, <code>/api/bots/connected-business-bots</code>
+                — all silent; an industry source claims there is no marker</td>
+            </tr>
+            <tr>
+              <td><span class="chip part">HYPOTHESIS</span></td>
+              <td>Telegram's legal documents lag behind the product ones: Privacy Policy §6.5 and Bot
+                Developer ToS §5.4 <em>still</em> say "Telegram Business subscribers", whereas
+                the blog and the API documentation say "any user". It reads as an
+                unsynchronized edit, but which wording is binding cannot be
+                proved</td>
+              <td>Privacy Policy §6.5; Bot Developer ToS §5.4</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">06</span>
+      <div><h2>A regression in the reviewer's own verdict</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        In round 1 GPT-PM proposed replacing INV-30 with a wording carrying a caveat — "encrypted at rest
+        <strong>where platform capability permits</strong>". That caveat is unavailable.
+      </p>
+      <div class="defect">
+        <p>
+          §4.4(a) is unconditional. On D1 under HARD_ZERO there is no key held by the operator on
+          the platform side. So the wording "where the platform permits" would evaluate to
+          <strong>"D1 gives nothing, therefore nothing is required"</strong> — exactly the
+          silent downgrade that <code>core/adr/ADR-007</code>:54 already forbids.
+        </p>
+      </div>
+      <p>
+        Raised in the second round. GPT-PM accepted the correction and removed the caveat. This also once more
+        reduces the claimed simplification: central storage <em>brings back</em> the obligation to
+        encrypt with separate key storage — conceptually the same machinery the proposal
+        was removing along with the ECDH envelope, only reassigned.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">07</span>
+      <div><h2>New invariant texts — as ruled, but not adopted</h2></div>
+    </div>
+    <div class="flow">
+      <div class="block">
+        <p class="kicker">INV-30A — Telegram stored-data encryption</p>
+        <p>
+          Any Telegram user data retained by the service MUST be encrypted at rest before
+          persistence, and the encryption key MUST be stored separately from the encrypted data.
+          No plaintext Telegram source content may be persisted in D1,
+          R2 backups, logs, metrics, queues, CI fixtures, or equivalent durable
+          stores. Decryption is permitted only after an authenticated and authorized
+          evidence request. Responses carrying source content are
+          <code>no-store</code> and must never enter service-worker caches.
+        </p>
+      </div>
+      <div class="block">
+        <p class="kicker">INV-14A — Telegram minimization, purpose limitation and deletion</p>
+        <p>
+          Telegram user data may be retained centrally only to the extent
+          essential to operate an explicitly documented Personal Decision OS service function.
+          The system MUST NOT collect, store, aggregate or process Telegram data beyond
+          that operational necessity. Retained Telegram user data MUST be deleted without undue
+          delay when deletion is requested where applicable, when it is no longer necessary for the service, and when
+          the Telegram TPA ceases operation except where an expressly valid retention agreement or
+          legal obligation permits otherwise. Detailed TTLs, edit/delete propagation,
+          disconnect behavior, tombstones and backup-erasure procedures are defined in the
+          source-aware retention policy and may not weaken this invariant.
+        </p>
+      </div>
+      <p>
+        The layering is deliberate: <strong>INV-14A is the non-reducible contractual floor</strong>,
+        <code>DATA_RETENTION_POLICY.md</code> holds the operational detail. Wordings that present
+        central Telegram storage as a product preference are to be removed: in the bot model
+        minimization and deletion are contractual obligations.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">08</span>
+      <div><h2>Three preconditions before adoption</h2></div>
+    </div>
+    <div class="flow">
+      <div class="ask">
+        <h3>1 · An empirical check on your account without Premium</h3>
+        <p>
+          The whole transport stands on this fact, and Telegram's legal and product documents
+          diverge. The check costs a minute and settles the question better than any further reading.
+        </p>
+        <ul>
+          <li>Confirm that <code>Settings → Chat Automation</code> exists <em>without</em> Premium.</li>
+          <li>Connect a test bot with Secretary Mode enabled in BotFather.</li>
+          <li>Confirm that a <code>BusinessConnection</code> arrives and that <code>getMe</code> returns
+            <code>can_connect_to_business</code>.</li>
+          <li>Pass one ordinary private message in each direction through the documented
+            Bot API path.</li>
+          <li>Record the client, platform, version and date.</li>
+        </ul>
+        <p>
+          <strong>An important distinction:</strong> the check proves technical availability for your
+          account. It does <em>not</em> prove which Telegram wording is legally binding.
+          The §6.5 / §5.4 divergence remains an accepted unresolved documentation contradiction — it
+          cannot be silently "closed" by a successful test.
+        </p>
+      </div>
+      <div class="ask">
+        <h3>2 · Where the key lives — an open design decision</h3>
+        <p>
+          GPT-PM deliberately did not pick an option: this is a mandatory SEC/PRIV decision before adoption, not
+          an improvisation inside G4. Three candidates, each with its own price:
+        </p>
+        <ul>
+          <li><strong>Utility Host</strong> — the availability of Telegram evidence again depends on an
+            always-on host.</li>
+          <li><strong>The key in the PWA</strong> — complicates webhook reception, work from several
+            devices, recovery and backups.</li>
+          <li><strong>Envelope encryption, the KEK in a secret store separate from D1</strong> — technically
+            simpler, but must not be chosen without a threat-model review.</li>
+        </ul>
+        <p>
+          The amendment cannot be adopted until custody, recovery, rotation and backup semantics have
+          an independently reviewed design.
+        </p>
+      </div>
+      <div class="ask">
+        <h3>3 · A §B snapshot of the Bot API documents</h3>
+        <p>
+          <code>docs/architecture/EXTERNAL_ASSUMPTIONS.md</code> §B today <strong>contains not a
+          single line about the Bot API</strong> — only the API Terms and Content
+          Licensing are recorded there, with hashes from 10 September. The amendment rests entirely on facts the file does not
+          record. A snapshot of the same shape is needed: URL, retrieval date, SHA-256, verbatim quotes —
+          including the contradictory Privacy Policy §6.5 and Bot ToS §5.4.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">09</span>
+      <div><h2>What carries over into the G4 acceptance criteria</h2></div>
+    </div>
+    <div class="flow">
+      <ul>
+        <li>The bot needs <strong>Secretary Mode</strong> enabled in BotFather;
+          <code>getMe</code> exposes <code>can_connect_to_business</code>.</li>
+        <li>Marking messages as read is <strong>not automatic</strong>: it is optional and
+          limited by the <code>can_read_messages</code> right. This removes the API Terms §1.4 concern
+          for a receive-only bot.</li>
+        <li>Replying and marking as read are limited to chats active in the last 24 hours.</li>
+        <li>Telegram keeps undelivered updates for <strong>no more than 24 hours</strong> — which means
+          D1 becomes the long-term record immediately upon reception.</li>
+        <li>Two documentation pages are dead: <code>telegram.org/faq_business</code> is an empty
+          shell, and <code>core.telegram.org/api/bots/business</code> returns "Page not found".</li>
+      </ul>
+      <div class="note">
+        <strong>PR #4 was put on HOLD</strong> by the same verdict: among the nine manifest proposals
+        there is G4, whose scope will change substantially if the amendment is adopted.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">10</span>
+      <div><h2>What is needed from you</h2></div>
+    </div>
+    <div class="flow">
+      <p class="kicker">The first and principal decision: the AI regime for Telegram</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Three options now that the basis for AI_DENY has stopped holding.</caption>
+          <thead>
+            <tr><th class="num-col">Opt.</th><th>What it means</th><th>Price</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="num-col">A</td>
+              <td>Accept that the regime is set by §5.4(iv), and read "the user" as the owner of the
+                business account, that is, you. AI over private conversations opens up; the obligations
+                that remain are §4.4(a) encryption with a separate key, §4.2 deletion, §4.3 the purpose
+                limit</td>
+              <td>The ambiguity of the reading is accepted as a conscious risk and entered into
+                <code>core/RISK_REGISTER.md</code></td>
+            </tr>
+            <tr>
+              <td class="num-col">B</td>
+              <td><strong>Recommended.</strong> The same, plus an explicit disclosure: on first
+                contact the bot tells the correspondent that the conversation is processed by an assistant. This
+                closes <em>both</em> readings of "the user" at once and satisfies §4.3 para. 2
+                ("clearly inform them of the data's intended use")</td>
+              <td>One automatic message per new chat</td>
+            </tr>
+            <tr>
+              <td class="num-col">C</td>
+              <td>Keep AI_DENY, as GPT-PM ruled in round 1</td>
+              <td>Telegram remains a source of facts with no AI processing in MVP1</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">The remaining open items</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Open items that require your decision specifically.</caption>
+          <thead>
+            <tr><th>Item</th><th class="num-col">Price</th><th>Why I cannot do it myself</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Check <code>Settings → Chat Automation</code> without Premium</td>
+              <td class="num-col">~1 min</td>
+              <td>Your personal Telegram account is required</td>
+            </tr>
+            <tr>
+              <td>Decision: whether to adopt the transport amendment at all</td>
+              <td class="num-col">—</td>
+              <td>It changes INV-14 and INV-30, marked in <code>TDD.md:176</code> as requiring
+                your approval</td>
+            </tr>
+            <tr>
+              <td>Merging PR #2 and PR #4</td>
+              <td class="num-col">~1 min</td>
+              <td>§24, the authority-surface carve-out: both diffs carry records of past
+                authorizations</td>
+            </tr>
+            <tr>
+              <td>R13 — the GitHub credentials model</td>
+              <td class="num-col">—</td>
+              <td>One account for everything; the separation today is procedural, not mechanical</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">The order, if you decide to move</p>
+      <p>
+        Your choice of A / B / C → the empirical account check → the §B snapshot of the Bot API documents
+        (plus the §5.4(iv) ambiguity recorded as an accepted risk) → the key-storage design and the
+        SEC/PRIV review → ADR → independent review → your approval → INV-14A / INV-30A and, under A or
+        B, replacement of INV-03 / 04 / 05 / 26 → rebuilding the G4 manifest.
+        <strong>Closing G1 runs on its own track and does not depend on this.</strong>
+      </p>
+      <div class="alarm">
+        <h3>For now — nothing is being implemented</h3>
+        <p>
+          <code>AIConsentGrant</code>, the four access classes and INV-03A / 04A / 05A / 26A
+          are <strong>not written into any document</strong>. An unadopted proposal left
+          lying in the tree reads to the next session as adopted — that is a separate way
+          to lose.
+        </p>
+        <p>
+          In exactly the same way, the wording "Telegram is AI_DENY because the Content Licensing Terms
+          forbid it" has been withdrawn from circulation. It no longer rests on anything: the governing
+          document for Bot API data is the Bot Platform Developer Terms, and the operative clauses are
+          §5.4(iv), §4.3 and §4.4(a).
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
