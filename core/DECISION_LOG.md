@@ -115,6 +115,144 @@ about the corpus the guard actually faces.
 **How to apply:** adding a test file in a new extension is now a one-line change in
 `TEST_EXTENSIONS`, and the corpus assertion fails loudly if someone forgets. Do not re-encode the
 extension rule anywhere else — the second copy is the defect, not the wrong value in it.
+## 2026-09-11 — G2 preflight audited: 1 of 3 done (unmerged), 2 never attempted; RESULTS.md over-claimed
+
+**Why this was checked:** the operator asked what the state of G2 actually is. `PLAN_MASTER_GATES.md`
+said only `BLOCKED — needs G1 closure first, then G2-PREFLIGHT-01/02/03`, which names the gate but
+not which of the three are real. Audited each against the repository rather than against that line.
+
+**G2 is blocked by two independent things, not one.** First, `G0_CLOSURE_REPORT.md`: "G2 does not
+begin until G1 closes properly" — G1 is remediated but has no final verdict and no
+`G1_CLOSURE_REPORT.md`. Second, the three preflight items, whose real state is:
+
+- **G2-PREFLIGHT-01** (Free-account queue-consumer CPU probe) — **done, but not on `main`.** The
+  measurement is real: queue-consumer ladder completes at 1e5 and is killed at 1e6, with raw
+  `wrangler tail` output. Two caveats the file states about itself: the dashboard p50/p99 CPU-ms
+  reading was never captured (it calls that non-blocking), and the Free plan label comes from the
+  account's creation rather than a dashboard re-check. The evidence lives in PR #2, still open.
+- **G2-PREFLIGHT-02** (real HTTP pull + ack on the same Free account) — **never attempted.**
+  `scripts/probes/cloudflare-free-cpu/wrangler.toml` declares `[[queues.consumers]]`, a PUSH
+  consumer; the single `msg.ack()` in `src/probe.js` is the push-batch API. An HTTP pull consumer
+  is a different mechanism (REST pull/ack) and appears nowhere in the repository.
+- **G2-PREFLIGHT-03** (record the D1 <=50-queries-per-invocation budget in the quota harness) —
+  **not done.** The constraint itself is recorded in five prose places (`EXTERNAL_ASSUMPTIONS.md`
+  marks it VERIFIED, plus ADR-011, `TDD_ERRATA.md`, R10, the closure report), but the item says _in
+  the quota harness_, and R10's own mitigation says that harness "must count queries per
+  invocation, not just CPU". `scripts/quota/` exists as an empty placeholder — `git ls-files` finds
+  0 files in it. Note the circularity: the harness is itself part of G2's declared scope.
+
+**Defect found and corrected in the same pass.** `RESULTS.md`'s Conclusion asserted that "the
+pull-consumer fallback (ADR-011) stays the answer for any future step that needs MORE than ~10ms of
+consumer CPU on Free". That states an availability nobody has measured — R9 says Free-plan
+eligibility for pull consumers is unpublished, and PREFLIGHT-02 exists precisely to settle it. The
+measurement in that file is untouched; only the interpretive sentence was narrowed, and the file now
+says plainly that the fallback's availability is UNVERIFIED and that this run did not test it. Left
+unmerged, the original wording would have landed on `main` as a claim broader than its own evidence.
+
+**Implementation state of G2: zero, as expected for a blocked gate.** `apps/`, `services/`,
+`infra/`, `host/` and `connectors/` all contain 0 tracked files; there is no D1 schema, no
+migration and no `.sql` anywhere in the repository. The only tracked source is
+`packages/contracts/` (7 files).
+
+**How to apply:** PREFLIGHT-02 is the one with architectural consequence, not PREFLIGHT-01 — the
+closure report already states that if pull consumers turn out to be unavailable on Free, ADR-011
+must stop describing one as a fallback. Design G2 to need no more than ~10ms of consumer CPU and
+one batched D1 query, and treat the pull consumer as unavailable until measured.
+
+---
+
+## 2026-09-11 — PR #2 declared `Gate: NONE`; it is operator-merge-only under §24's own carve-out
+
+**Decision:** PR #2 (`evidence/g0-cpu-probe-results`) now declares `Gate: NONE` in its body, and
+its merge stays with the operator rather than moving to Claude under the merge authority recorded
+in the entry below.
+
+**Why the declaration was needed:** PR #2's `governance` check was RED, and correctly so. Its body
+predated the ungated-path work and still asserted that the Governance workflow "will not trigger a
+manifest/scope check on it (it only evaluates PRs whose branch/body names a gate)". After PR #3
+that sentence is false, deliberately: `governance.yml` now refuses a PR that declares no gate at
+all. The workflow log is explicit -- `This PR declares no gate` -- so the mechanism this project
+just built was doing exactly its job against this project's own open PR. Verified before editing,
+by running the CI script locally over the real base/head pair
+(`BASE_SHA=1361c7d HEAD_SHA=e4330c8 node scripts/verify/check-floor-scope.mjs` -> exit 0, 4 changed
+paths, none forbidden): `core/DECISION_LOG.md`, both report files, and
+`scripts/probes/cloudflare-free-cpu/RESULTS.md`.
+
+**Why Claude does not merge it, despite §24:** global `~/.claude/CLAUDE.md` §24 lets Claude merge
+on a fresh GPT-PM APPROVE with required checks green -- _except_ where the diff is itself an
+authority surface, and it names "an approval/decision-log entry recording a past authorization" as
+exactly that class. This PR's diff contains the entry immediately below, which records the merge
+authorization itself. Merging it under that authorization would be the self-referential loop the
+carve-out exists to prevent. So it waits for the operator's own click, and no GPT-PM round was
+spent asking for an APPROVE that could not have authorized the merge anyway.
+
+**Also corrected, same commit:** `core/PLAN_MASTER_GATES.md` described G1 as `HOLD ... NOT
+gate-approved / GPT-PM: REJECT` and item E (the CPU probe) as `PENDING`. Both were stale against
+observable state: `GATE_MANIFEST_APPROVED_HASH_G1` is set (`gh variable list`), PR #1 merged
+2026-09-11T09:45Z, PR #3 merged, ruleset `PDCC` is active on `main`, and the probe was run. The
+row now says REMEDIATED, NOT YET CLOSED and names what is actually still missing -- a final verdict
+and a `G1_CLOSURE_REPORT.md` -- rather than either leaving a false REJECT standing or letting the
+implementer quietly promote its own gate to CLOSED (INV-20).
+
+**Verified NOT started, on the operator's direct question:** G3 (Gmail) and G4 (Telegram) have no
+implementation of any kind. `connectors/gmail/`, `connectors/telegram-tdlib/` and
+`connectors/common/` exist but are empty (`git ls-files connectors/` returns nothing); there is no
+`g3.yaml`/`g4.yaml`, no G3/G4 plan under `governance/plans/`, and the only source files mentioning
+Gmail or Telegram are the contract types (`packages/contracts/src/event.ts`, `provenance.ts`) and
+`scripts/verify/check-secrets.mjs`. The operator's credentials exist locally, which is a
+prerequisite, not a gate: each of G3 and G4 still needs its own manifest and its own GO.
+
+**Ruleset detail worth recording, because it narrows R13:** the `PDCC` ruleset reports
+`current_user_can_bypass: "never"`, requires `governance` + `verify`, allows 0 approving reviews,
+and blocks deletion and non-fast-forward on `main`. R13 (one admin-scoped identity behind
+everything) said such controls are procedural rather than mechanical. That is still true of the
+ruleset's _existence_ -- an admin token can edit or delete the ruleset itself -- but it is not true
+of bypassing it in place, which this field says cannot be done at all. State the distinction rather
+than repeating the broader claim.
+
+---
+
+## 2026-09-11 — GPT-PM-authorized PR merge: INV-20 narrowed for this project, confirmed globally
+
+**Decision:** the operator asked, first for this project, then confirmed globally across every
+project, that Claude may merge a PR once GPT-PM has independently reviewed the exact final head and
+returned a genuine `VERDICT: APPROVE`, and this project's own required checks (`verify`,
+`governance`) are green on that same head. Recorded as `~/.claude/CLAUDE.md` §24
+(GPT-PM-authorized PR merge). For this repository specifically, the authority-surface carve-out in
+that section means: `governance/gate-manifests/**`, `governance/operator-approvals/**`,
+`.github/CODEOWNERS`, and branch-protection/ruleset settings themselves still need the operator's
+own separate authorization, even with a clean APPROVE and green checks — an ordinary
+`.github/workflows/**` content change (e.g. this session's G1-M2/ungated-path work) is covered if
+it was part of the exact diff GPT-PM reviewed.
+
+**Why:** raised after the operator manually merged PR #3 and asked why they still had to click
+merge themselves. Two things were verified with GPT-PM directly before acting, rather than taken on
+the operator's report of a separate conversation (global CLAUDE.md §§3/16/23):
+
+1. Does GPT-PM's APPROVE override INV-20 ("the implementer does not merge its own gate")? GPT-PM's
+   answer, project-scoped: yes, given explicit operator delegation + its own APPROVE on the exact
+   final head + green required checks + the PR not touching an authority-surface path -- and
+   explicitly NOT a general position for other repositories (each needs its own delegation, which
+   the operator then gave, globally, in the same exchange).
+2. The operator's own reasoning for preferring "GPT-PM reviews AND merges" over "Claude merges
+   after GPT-PM's APPROVE" was that author and merger would then be different actors. Verified
+   directly: GPT-PM's GitHub connector authenticates as the same `xLZDx` identity Claude's own `gh`
+   uses (see `governance/plans/G1_PREADOPTION_EVIDENCE.md` §3.1 / R13 -- same root cause). No actor
+   separation exists today either way. The operator was told this plainly and chose the fallback
+   ("Claude merges, strictly as GPT-PM's decision's executor") rather than the unavailable one.
+
+**Evidence:** PM Bridge exchange, this session, project `D:\Repo\Personal_Decision_Command_Center`,
+request ids `7f3a2c1e-9b4d-4e6a-8f2c-1d5e6a7b8c9d` (INV-20 ruling) and
+`3d8b6e2f-1a4c-4f9e-8b7d-2e6f9c0a1b3d` (identity-separation question; first attempt failed
+not-started on an unreachable conversation, retried with the same request_id per the tool's own
+instruction, second attempt returned the quoted answer).
+
+**How to apply:** before merging any PR on this basis, actually check -- not assume -- that the
+APPROVE names the current final head (a later commit makes it stale), the same head has `verify`
+and `governance` both green, the PR is mergeable, and the diff does not touch the authority-surface
+paths listed above. `red-01`/`gov-01` findings and any BLOCKER/MAJOR still block exactly as before
+-- this changes who may click merge once every other gate condition already holds, not what those
+conditions are.
 
 ---
 
@@ -177,6 +315,43 @@ PR at all once INV-28's forbidden-path pattern is applied consistently on both t
 ungated side. Separately: if a future session on this machine sees vitest fail to parse an
 unrelated-looking import statement, check whether the imported file mixes `import.meta` with CRLF
 before assuming the file itself is broken.
+
+---
+
+## 2026-09-11 — G0 CPU probe run; NB1 resolved; the operator's first two branch-GO approvals
+
+**Decision:** the operator ran the G0 empirical CPU probe on a fresh Cloudflare Free account. Both
+ladders — queue consumer (`GET /run`) and plain HTTP (`GET /http-ladder`) — broke at the identical
+point: complete at `1e5` (100,000 SHA-256 rounds), killed at `1e6`. Full run record, raw
+`wrangler tail` excerpt, and conclusion: `scripts/probes/cloudflare-free-cpu/RESULTS.md` (reran
+through prettier one commit later, after PR #2's `verify` job caught an un-formatted push).
+
+**Why this matters:** NB1, the sole BLOCKER of the v0.2 adversarial review, was a three-way
+contradiction across Cloudflare's own documentation about the Queue consumer's Free-plan CPU budget
+(10ms / 30s-5min / 15min, depending which page). `ADR-011-queue-consumer-runtime.md` assumed the
+most conservative figure. This run answers the question by measurement: the Queue consumer gets the
+**same** budget as an ordinary HTTP invocation on this account, not the extended figures. NB1 is
+resolved in favor of the conservative reading; no architecture change is forced.
+
+**Not yet done:** the Workers dashboard's per-invocation CPU-ms metric (p50/p99) was not read.
+Recorded as outstanding in `RESULTS.md` rather than inferred.
+
+**Process note, recorded because §14 exists precisely to make this visible.** This commit lands on
+branch `evidence/g0-cpu-probe-results`, created under the operator's own two separate approvals —
+`BRANCH GO 1: AUTHORIZED` and `BRANCH GO 2: AUTHORIZED FOR evidence/g0-cpu-probe-results` — rather
+than any standing MVP1 GO, because branch creation is explicitly excluded from that grant (global
+CLAUDE.md §14). `main` cannot take a direct push any more: the operator enabled a ruleset requiring
+a pull request, specifically closing the gap recorded in the G1 manifest's own limitations list
+("a direct push to main is not examined by [Governance] at all"). This is that gap closing in
+practice, not just in the document.
+
+**A related request the operator made and its answer, recorded rather than acted on silently:** the
+operator asked to disable "Require a pull request before merging" so pushes to main would not need
+manual clicks. Declined to execute silently: `governance.yml` triggers on `pull_request` only, so a
+direct push would skip the Governance scope check entirely — the same NM3 self-authorization gap
+this whole gate exists to close, now with no PR left to catch it. Offered instead: Claude opens and
+merges PRs itself (`gh pr create` / `gh pr merge`), leaving branch creation as the one operator-only
+step. Awaiting the operator's decision; the rule was not changed.
 
 ---
 

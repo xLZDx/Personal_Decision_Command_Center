@@ -1,0 +1,535 @@
+<title>Ungated PR и право на merge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead { border-bottom: 2px solid var(--ink); padding: 56px 0 20px; margin-bottom: 0; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600; font-size: var(--step-4); line-height: 1.12; letter-spacing: -0.015em;
+    text-wrap: balance; margin: 0 0 12px;
+  }
+
+  .standfirst { font-size: var(--step-1); color: var(--ink-2); max-width: var(--measure); margin: 0 0 18px; text-wrap: pretty; }
+
+  .masthead-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.78rem; color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600; font-size: var(--step-3); line-height: 1.22; letter-spacing: -0.01em;
+    text-wrap: balance; margin: 0 0 6px;
+  }
+  h3 { font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: var(--step-1); line-height: 1.35; margin: 0 0 6px; }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.78rem; color: var(--ink-3); padding-top: 6px; white-space: nowrap; }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono { font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace; font-size: 0.87em; }
+  code { background: var(--surface-2); border-radius: 3px; padding: 0.1em 0.34em; word-break: break-word; }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.82rem; line-height: 1.55;
+    background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+    padding: 14px 16px; margin: 0; overflow-x: auto; white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; align-items: start;
+    background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--pass);
+    padding: 20px 22px; margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 600; font-size: 0.8rem; letter-spacing: 0.08em;
+    color: var(--pass); background: var(--pass-soft); border: 1px solid var(--pass); padding: 4px 10px; white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who { grid-column: 2; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.76rem; color: var(--ink-3); margin-top: 6px; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption { text-align: left; font-size: 0.8rem; color: var(--ink-3); padding: 0 0 8px; max-width: var(--measure); }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+    background: var(--surface-2); border-bottom: 1px solid var(--rule-2); position: sticky; top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; color: var(--ink-3); white-space: nowrap; }
+
+  .chip {
+    display: inline-block; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.7rem;
+    letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border: 1px solid currentColor; white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+
+  .note {
+    background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--rule-2);
+    padding: 16px 18px; font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+  .note.warn { border-left-color: var(--warn); }
+
+  .limits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .limits li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; max-width: var(--measure); font-size: 0.95rem; }
+  .limits .tag {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.7rem; letter-spacing: 0.06em;
+    color: var(--ink-3); border: 1px solid var(--rule-2); padding: 1px 6px; white-space: nowrap;
+  }
+
+  .kicker { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+
+  blockquote {
+    margin: 0; padding: 2px 0 2px 16px; border-left: 2px solid var(--rule-2);
+    color: var(--ink-2); font-size: 0.95rem; max-width: var(--measure);
+  }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 2px solid var(--ink); font-size: 0.85rem; color: var(--ink-3); max-width: var(--measure); }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Гейт G1 · Ungated-путь и merge-авторизация</p>
+    <h1>Evidence-PR наконец мержится — и кто теперь может нажать merge</h1>
+    <p class="standfirst">
+      После branch protection любой PR без объявленного гейта падал безусловно — включая PR с
+      доказательствами G0. Закрыто кодом, а не манифестом: первый вариант манифеста физически не
+      мог попасть в main ни одним путём. Попутно — новое правило: Claude может сам смержить PR
+      после проверенного APPROVE от GPT-PM.
+    </p>
+    <div class="masthead-meta">
+      <span>11 сентября 2026</span>
+      <span>PR #3 смержен</span>
+      <span>64 теста · 34 мутации</span>
+      <span>PR #2 — в процессе конверсии</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; evidence/g0-cpu-probe-results @ 1c59677</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Копировать страницу" data-done="Скопировано"
+          data-fail="Выделите вручную">Копировать страницу</button>
+</div>
+<!-- report-conform:end -->
+
+  <div class="verdict">
+    <span class="stamp">64/64 · 34/34 · CI зелёный</span>
+    <p>
+      <code>npm run test</code> — 64/64 (13 новых). <code>npm run verify:mutation</code> — 34/34
+      убито (4 новых). PR #3 в настоящем CI: <code>governance</code> — 8с, <code>verify</code> —
+      23с, оба success.
+    </p>
+    <p class="who">Внутреннее ревью: локальные тесты + мутации, реальный CI. Отдельного раунда
+      GPT-PM именно по этому диффу в этом заходе не запрашивалось — оба обращения к GPT-PM были
+      про право на merge (§6), не про содержимое кода.</p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 1</span>
+      <div><h2>Дефект: манифест для ungated PR не мог попасть в main никак</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        До этой правки <code>governance.yml</code> требовал от <em>любого</em> PR объявить гейт —
+        иначе шаг 4 падал безусловно. Пока push на <code>main</code> был возможен напрямую, это не
+        мешало. Но в этой же сессии появился branch protection, требующий PR и зелёный
+        <code>governance</code> — и PR с доказательствами G0 (сам CPU-пробник) перестал мержиться
+        вообще, потому что не принадлежит ни одному гейту.
+      </p>
+      <p>
+        Первый план — добавить <code>Gate: NONE</code>, читающий фиксированный
+        <code>governance/gate-manifests/_floor.yaml</code> — оказался неисполнимым по конструкции.
+        <code>INV-28</code> запрещает любому PR-гейту трогать
+        <code>governance/gate-manifests/**</code>: diff не может валидироваться по манифесту, который
+        этот же diff мог только что переписать. Файл <code>_floor.yaml</code>, лежащий в том же
+        каталоге, запрещал ровно то же самое — себе самому.
+      </p>
+      <div class="note warn">
+        <p><strong>Оба пути введения файла отказывали ему одинаково:</strong> PR с гейтом
+          <code>G1</code> отказал бы по правилу <code>g1.yaml</code>; PR без гейта отказал бы по
+          собственному правилу нового файла, применённому к самому себе в той же проверке. Ни один
+          PR — гейтованный или нет — не мог физически внести этот файл в main.</p>
+      </div>
+      <p>
+        Найдено не осмотром, а трассировкой: правило было написано и уже лежало в рабочем дереве до
+        того, как конфликт стал очевиден.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 2</span>
+      <div><h2>Решение: код вместо файла-манифеста</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Правила floor'а переехали из YAML под <code>governance/gate-manifests/</code> в обычный
+        <code>.mjs</code>-модуль <code>scripts/verify/check-floor-scope.mjs</code> — путь, уже
+        разрешённый манифестом G1 (<code>scripts/verify/*.mjs</code>). Как обычный код он защищён
+        ровно так же, как сам <code>governance.yml</code>: меняется тем гейтом, чей манифест
+        разрешает трогать <code>scripts/verify/**</code> — не больше и не меньше. Список запретов
+        (<code>governance/gate-manifests/**</code>, записи об одобрениях, замороженный TDD, сам
+        workflow и CODEOWNERS) не изменился ни на пункт — изменился только адрес правила и церемония
+        его правки.
+      </p>
+      <p>
+        Функция переиспользует <code>checkScope</code>/<code>changedPathsFrom</code> из
+        <code>check-gate-scope.mjs</code> — один проверенный движок сопоставления путей, а не два.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Доказательства для нового кода, до коммита</caption>
+          <thead><tr><th>Проверка</th><th>Результат</th></tr></thead>
+          <tbody>
+            <tr><td><code>npm run test</code></td><td class="num-col">64/64 (13 новых — <code>tests/policy/floor-scope.test.mjs</code>)</td></tr>
+            <tr><td><code>npm run verify:mutation</code></td><td class="num-col">34/34 убито (4 новых для <code>run()</code>)</td></tr>
+            <tr><td>Мутации <code>check-floor-scope.mjs</code></td><td>выход 0 при нарушении · пропуск проверки <code>BASE_SHA</code>/<code>HEAD_SHA</code> · упавший <code>git diff</code> читается как пустой · <code>FORBIDDEN_PATHS</code> не передаётся в <code>checkScope</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 3</span>
+      <div><h2>Побочная находка: CRLF + <code>import.meta.url</code> ломает vitest локально</h2></div>
+    </div>
+    <div class="note">
+      <p>
+        Прогон тестов на этой машине иногда падал с <code>SyntaxError</code>, указывающим на
+        импорт-строку совершенно другого файла. Причина, подтверждённая бисекцией:
+        <code>check-gate-scope.mjs</code> содержит одно вхождение <code>import.meta.url</code>, и
+        SSR-трансформация Vite портит загрузку, когда файл лежит с CRLF-концами строк. Локальный
+        <code>core.autocrlf=true</code> переписывает рабочую копию в CRLF при обычных git-операциях
+        (checkout, stash), хотя закоммиченный blob — и всегда был — LF
+        (<code>git cat-file -p HEAD:…</code> — 0 пар CRLF). Содержимое репозитория не менялось для
+        обхода: рабочая копия просто пересобрана в то, что уже лежит в коммите.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 4</span>
+      <div><h2>PR #3 — смержен оператором</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        <a href="https://github.com/xLZDx/Personal_Decision_Command_Center/pull/3">PR #3</a> —
+        <code>ac26d04</code>, оба чека зелёные в настоящем CI. INV-20 требовал ручного мержа
+        оператором для этого гейта — именно это и произошло. Сразу после — вопрос от оператора:
+        почему нужно нажимать merge каждый раз самому. Это привело к §6.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 5</span>
+      <div>
+        <h2>Право на merge: два раунда с GPT-PM, не с моих слов</h2>
+        <p class="kicker">Проверено напрямую, а не принято по пересказу оператора</p>
+      </div>
+    </div>
+    <div class="flow">
+      <p>
+        Оператор передал: GPT-PM сказал, что имеет все права на merge. Прежде чем действовать —
+        два прямых вопроса самому GPT-PM, в той же сессии, а не по пересказу.
+      </p>
+      <h3>Раунд 1 — снимает ли APPROVE требование INV-20</h3>
+      <p>
+        Да, для этого проекта: явная делегация оператором + APPROVE GPT-PM на точный финальный
+        head + зелёные обязательные чеки. С обязательным исключением — PR, который сам меняет
+        <code>governance/gate-manifests/**</code>, записи одобрений, настройки branch
+        protection/ruleset, авто-merge не получает даже с чистым APPROVE: нужна отдельная явная
+        авторизация оператора. Правка <code>.github/workflows/**</code> покрывается, если входила
+        в одобренный diff — как раз случай PR #3.
+      </p>
+      <h3>Раунд 2 — может ли GPT-PM смержить сам, как отдельный actor</h3>
+      <div class="note warn">
+        <p>
+          <strong>Нет настоящего разделения актора.</strong> GPT-PM технически имеет
+          write-доступ (<code>merge_pull_request</code>, review) через свой GitHub-коннектор — но
+          коннектор авторизован под тем же аккаунтом <code>xLZDx</code>, что и мой <code>gh</code>.
+          Для GitHub «merge от GPT-PM» и «merge от Claude» — один и тот же actor; собственный
+          review GPT-PM с этого коннектора может быть отклонён GitHub как self-approval. Тот же
+          корень, что у R13.
+        </p>
+      </div>
+      <p>
+        Оператору сказано об этом прямо, без сглаживания. Принято решение: Claude выполняет merge
+        механически, как исполнитель проверенного решения GPT-PM — логическое разделение
+        решающего и исполняющего, а не разделение аккаунтов на уровне GitHub.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 6</span>
+      <div><h2>Записано как правило — глобально и в этом проекте</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Оператор подтвердил масштаб явно — не один проект, а все: <code>~/.claude/CLAUDE.md</code>
+        §24 (новая секция). Условия: свежий APPROVE именно на текущий head; head не менялся после
+        APPROVE; все обязательные чеки зелёные на этом же head; PR mergeable; обычный способ мержа,
+        без bypass/force/отключения проверок; PR не трогает поверхность полномочий (манифесты,
+        записи одобрений, CODEOWNERS, настройки protection) — для такого нужна отдельная явная
+        авторизация оператора. Планка — именно <code>VERDICT: APPROVE</code>, а не «в целом
+        одобрено» или пересказ вердикта.
+      </p>
+      <p>
+        В этом проекте это же зафиксировано в <code>core/DECISION_LOG.md</code> с указанием, какие
+        конкретно пути здесь считаются поверхностью полномочий: <code>governance/gate-manifests/**</code>,
+        <code>governance/operator-approvals/**</code>, <code>.github/CODEOWNERS</code>, настройки
+        ruleset. Global CLAUDE.md — источник правила; decision log — как оно применяется именно
+        здесь.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 7</span>
+      <div><h2>Что осталось открытым</h2></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Пункт</th><th>Статус</th><th>Хвост</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>PR #2 (доказательства CPU-пробника)</td>
+            <td><span class="chip part">В процессе</span></td>
+            <td><code>main</code> смержен в ветку <code>evidence/g0-cpu-probe-results</code>; осталось добавить <code>Gate: NONE</code> в тело PR, запушить, проверить чеки, смержить по правилу §5–6</td>
+          </tr>
+          <tr>
+            <td>Gmail OAuth (G3)</td>
+            <td><span class="chip part">В процессе</span></td>
+            <td>Учётные данные сохранены оператором локально (<code>.env.gmail-oauth-client.json</code>), Claude их не видел</td>
+          </tr>
+          <tr>
+            <td>Telegram api_id/api_hash (G4)</td>
+            <td><span class="chip done">Готово</span></td>
+            <td><code>.env</code> проверен структурно (без чтения значений): <code>TELEGRAM_API_ID</code> — 8 цифр, <code>TELEGRAM_API_HASH</code> — 32 символа</td>
+          </tr>
+          <tr>
+            <td>Ветка <code>gate/g1-ungated-pr-path</code></td>
+            <td><span class="chip part">Осталось удалить</span></td>
+            <td>Смержена через PR #3; удаление — рутинная git-операция, не блокирует</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Отчёт составлен исполнителем и описывает работу исполнителя. Право на merge, описанное в §5–6,
+      проверено напрямую с GPT-PM в этой же сессии, а не принято на слово; ответственность за
+      решения в этом изменении остаётся на мне.
+    </p>
+  </footer>
+</div>
+
+
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
