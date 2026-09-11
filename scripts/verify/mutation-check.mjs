@@ -218,6 +218,41 @@ const MUTATIONS = [
     to: "return out.split('\\0');",
   },
 
+  // The floor guard for "Gate: NONE" PRs. Same reasoning as check-gate-scope.mjs above: this
+  // exists to refuse things, so every mutation below makes it refuse less.
+  {
+    label: 'check-floor-scope.mjs: run() exits 0 despite forbidden-path violations',
+    file: 'scripts/verify/check-floor-scope.mjs',
+    from: '-- name the gate it belongs to instead.`,\n    );\n    return 1;',
+    to: '-- name the gate it belongs to instead.`,\n    );\n    return 0;',
+  },
+  {
+    label: 'check-floor-scope.mjs: run() proceeds with a missing required environment variable',
+    file: 'scripts/verify/check-floor-scope.mjs',
+    from:
+      '      logError(`::error::${name} is not set; refusing to run a check that cannot be complete.`);\n' +
+      '      return 1;',
+    to:
+      '      logError(`::error::${name} is not set; refusing to run a check that cannot be complete.`);\n' +
+      '      return 0;',
+  },
+  {
+    label: 'check-floor-scope.mjs: run() treats a failed git diff as a clean, empty diff',
+    file: 'scripts/verify/check-floor-scope.mjs',
+    from:
+      '    logError(`::error::could not list the changed paths: ${error.message}`);\n' +
+      '    return 1;',
+    to:
+      '    logError(`::error::could not list the changed paths: ${error.message}`);\n' +
+      '    return 0;',
+  },
+  {
+    label: 'check-floor-scope.mjs: run() stops passing FORBIDDEN_PATHS into checkScope',
+    file: 'scripts/verify/check-floor-scope.mjs',
+    from: 'checkScope({ changedPaths, allowed: ALLOWED_PATHS, forbidden: FORBIDDEN_PATHS });',
+    to: 'checkScope({ changedPaths, allowed: ALLOWED_PATHS, forbidden: [] });',
+  },
+
   // CODEOWNERS is the only control that actually enforces anything here (merge authority; CI is
   // detection), so dropping a path from it is the highest-consequence silent edit in the repo.
   // These mutate the data rather than code, which is exactly right: the guard IS the assertion.

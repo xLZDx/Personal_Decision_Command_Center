@@ -19,6 +19,18 @@ name: Governance
 # for the full list of what this does and does not protect against -- notably that a PR editing
 # `.github/**` edits the checks that police it, which is why `.github/**` is CODEOWNERS-protected
 # and why merge authority, not CI, is the control that actually enforces.
+#
+# UNGATED PATH ("Gate: NONE"): not every PR belongs to a gate -- recording evidence, fixing a typo,
+# a dependency bump. Before this path existed, EVERY PR failed step 4 unconditionally unless it
+# declared a real gate, which became a hard block the moment `main` required this workflow to pass
+# (a repository ruleset now does). A PR whose body contains "Gate: NONE" is checked by
+# check-floor-scope.mjs instead of check-gate-scope.mjs: everything is allowed except a short list
+# of paths that stay sensitive regardless of gate (see that file's header for why its rules are
+# plain code under scripts/verify/ rather than a YAML file under governance/gate-manifests/ --
+# short version: no PR, gated or ungated, could ever have legally introduced the latter). This is
+# not a weaker check bolted on beside the real one -- it is the SAME checkScope/changedPathsFrom
+# engine, so an ungated PR still gets its changed paths evaluated against something. There is no
+# path through this workflow that evaluates zero scope against a diff.
 
 on:
   pull_request:
@@ -45,25 +57,37 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
-          # Branch `gate/g1-something` -> G1; otherwise a `Gate: G1` line in the PR body.
+          # Branch `gate/g1-something` -> G1; a `Gate: G1` line in the PR body; or `Gate: NONE` for
+          # a PR that legitimately belongs to no gate.
           gate=""
           if [[ "$BRANCH" =~ ^gate/([gG][0-9]+) ]]; then
             gate="${BASH_REMATCH[1]}"
+            gate="${gate^^}"
           elif [[ "$PR_BODY" =~ [Gg]ate:[[:space:]]*([gG][0-9]+) ]]; then
             gate="${BASH_REMATCH[1]}"
+            gate="${gate^^}"
+          elif [[ "$PR_BODY" =~ [Gg]ate:[[:space:]]*[Nn][Oo][Nn][Ee] ]]; then
+            gate="NONE"
           fi
-          gate="${gate^^}"
           if [[ -z "$gate" ]]; then
             echo "::error::This PR declares no gate. Name the branch gate/g<N>-... or put a"
-            echo "::error::'Gate: G<N>' line in the PR body. A change with no gate has no approved"
-            echo "::error::scope, which is the thing this check exists to require."
+            echo "::error::'Gate: G<N>' line in the PR body -- or 'Gate: NONE' if this change"
+            echo "::error::legitimately belongs to no gate. A change with no declaration has no"
+            echo "::error::approved scope, which is the thing this check exists to require."
             exit 1
           fi
           echo "gate=$gate" >> "$GITHUB_OUTPUT"
-          echo "Resolved gate: $gate"
+          if [[ "$gate" == "NONE" ]]; then
+            echo "Resolved gate: NONE -- checked against the fixed floor scope"
+            echo "(scripts/verify/check-floor-scope.mjs) instead of a per-gate manifest."
+            echo "Everything is allowed except the paths that stay sensitive regardless of gate."
+          else
+            echo "Resolved gate: $gate"
+          fi
 
       - name: Verify manifest hash against operator-controlled state
         id: manifest
+        if: steps.gate.outputs.gate != 'NONE'
         env:
           GATE: ${{ steps.gate.outputs.gate }}
           ALL_VARS: ${{ toJSON(vars) }}
@@ -110,11 +134,19 @@ jobs:
           echo "Manifest hash matches the operator-approved value."
           echo "manifest=$manifest" >> "$GITHUB_OUTPUT"
 
-      # Reachable only when the step above exited 0, so the manifest read here is the verified one.
-      - name: Check changed paths against the verified manifest
+      # For a real gate, reachable only when the hash step above exited 0 -- the manifest it
+      # verified is passed on unchanged. For GATE=NONE that step did not run at all (there is no
+      # manifest file to verify), and this step runs the fixed floor script instead -- see that
+      # script's header for why its rules are code rather than a manifest file.
+      - name: Check changed paths against the verified scope
         env:
           GATE: ${{ steps.gate.outputs.gate }}
           MANIFEST: ${{ steps.manifest.outputs.manifest }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/verify/check-gate-scope.mjs
+        run: |
+          if [[ "$GATE" == "NONE" ]]; then
+            node scripts/verify/check-floor-scope.mjs
+          else
+            node scripts/verify/check-gate-scope.mjs
+          fi
