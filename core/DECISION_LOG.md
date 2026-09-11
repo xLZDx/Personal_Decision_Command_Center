@@ -49,6 +49,16 @@ the deliverable, the file change was the instrument.
 that path lands the same three lines. Until then use `.env`, as the operator's setup steps already
 say.
 
+**The same defect class, caught in this PR's own deliverable.** GPT-PM's round-1 review of PR #7
+returned a MAJOR: the report pair committed earlier in this same PR still said the scope step had
+been observed _"passing only"_, and that both checks _"run and pass on every commit"_ — while this
+PR was in the act of disproving the first and the second erases deliberate policy failures. Two
+incompatible statements of G1's state, shipped together. Both languages were corrected: the
+"passing only" sentence is bounded to the block it describes rather than deleted, with a dated
+update beneath it naming the run, and the remaining-items row moves to DONE. A report is a durable
+artifact; a claim in it that was true when written and false by the time it merges is still a false
+claim on `main`.
+
 ---
 
 ## 2026-09-11 — R13 CLOSED as an accepted risk: one identity, separation stays procedural
