@@ -1,0 +1,624 @@
+# NON-BINDING IMPLEMENTER PROPOSAL — G7.
+# This file does not authorize any mutation.
+# Only an operator-authored or operator-adopted copy at
+# governance/gate-manifests/g7.yaml, plus the operator-set repository variable
+# GATE_MANIFEST_APPROVED_HASH_G7, has authority (INV-28).
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL
+# EXCLUSIVITY. The authenticated implementation session is technically capable
+# of setting that repository variable and of changing the repository's admin
+# settings; the separation is procedural until the credential model in
+# ../gate-manifests/g1.yaml limitation 5 is resolved.
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS FILE IS, AND WHERE IT MUST NOT BE PUT
+#
+# It is a draft written for the operator to read, reject, edit or adopt, in the
+# shape ../gate-manifests/README.md describes and in the voice
+# ../gate-manifests/g1.yaml established. It deliberately does NOT live in
+# governance/gate-manifests/: a manifest an implementer can edit in their own
+# branch has no authority at all, and that directory is additionally forbidden
+# to EVERY pull request on this repository — every adopted per-gate manifest
+# forbids it, and scripts/verify/check-floor-scope.mjs forbids it for an
+# ungated ("Gate: NONE") PR. So a file placed there by an implementer could not
+# be merged even if someone tried.
+#
+# The name is G7_MANIFEST_PROPOSAL.yaml rather than g7.yaml so that a draft can
+# never be mistaken for the authoritative manifest at a glance in a listing.
+#
+# Nothing here is approved. The scope below is an argument, not a ruling.
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+  - WRITTEN_BEFORE_ANY_G7_PLAN_EXISTS
+
+authored_by: Claude (implementer)
+authored_on: 2026-09-11
+gate: G7
+
+# The Governance workflow resolves the gate from a branch named `gate/g7-...`
+# or from a `Gate: G7` line in the PR body
+# (.github/workflows/governance.yml, "Resolve the gate this PR belongs to").
+# This field is metadata; the resolver never reads it. Creating the branch is
+# its own authorization question under the global CLAUDE.md branch rules and is
+# not granted by adopting this manifest.
+branch: gate/g7-pwa-push
+
+# ---------------------------------------------------------------------------
+# PLAN PROVENANCE — DELIBERATELY EMPTY, AND THAT IS NOT AN OVERSIGHT
+#
+# ../gate-manifests/g1.yaml pins `plan_id`, `plan_source_commit`,
+# `plan_source_blob`, `plan_source_bytes` and `plan_hash` to immutable objects.
+# None of those values can exist yet: G7 has no plan. `governance/plans/` today
+# contains G0_PLAN.md, G1_MANIFEST_PROPOSAL.yaml, G1_PREADOPTION_EVIDENCE.md and
+# G1_REMEDIATION_PLAN.md, and nothing for G2..G10.
+#
+# Printing a placeholder hash here would be worse than leaving the field out:
+# nothing in CI verifies plan_hash (limitation 3 below), so a wrong value would
+# never be caught, and a human auditing this file would read a fabricated
+# provenance pin as a real one.
+#
+# ORDER OF OPERATIONS THIS IMPLIES, and it matters: the G7 plan is written
+# first (governance/plans/G7_PLAN.md, per .claude/skills/pdos-gates/SKILL.md
+# §3), the operator reviews the scope AGAINST that plan, and only then is a
+# manifest adopted and its hash set. Adopting this file as-is, before a plan
+# exists, would approve a scope derived from the TDD alone — which is what it
+# is, and which the operator should weigh accordingly.
+plan_id: UNASSIGNED — no G7 plan exists as of 2026-09-11
+plan_hash: NOT_APPLICABLE — see the block above; do not invent a value
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: G7 — the PWA shell and Today view, evidence
+  drill-down for both sources, and opaque Web Push, per docs/architecture/TDD.md
+  §83 (G7), §32, §33/§33.1, §43, §49 and the PWA/Push Definition of Done at §75.
+  This gate builds the CLIENT half of the system and the notification sender. It
+  does not build the Telegram Content Gateway or the content-request broker
+  (ADR-007 assigns their verification to G4), does not extend the AI boundary,
+  and does not change any governance, CI or architecture-authority surface.
+
+# ---------------------------------------------------------------------------
+# THE PRIVACY BOUNDARY THIS GATE IS ACTUALLY DEFENDING
+#
+# Read this before reading the path list. Two invariants make G7 a higher-risk
+# gate than "a UI gate" sounds, and the path list below is shaped by both.
+#
+# 1. OPAQUE PUSH (INV-11, ADR-008, TDD §32). A Web Push payload may contain no
+#    source-derived content — not a sender name, a message excerpt, a topic
+#    title, a decision question, a source-derived deadline, or a project label
+#    derived from source. The allowed shape is
+#    {type, notification_id, schema_version}; the client wakes and performs an
+#    authenticated state fetch. This is not a UI preference, it is the reason
+#    the notification path exists in the form it does: FCM/APNs and the OS
+#    notification history see every payload. The residual accepted risk (R7,
+#    INV-31) is that those intermediaries still observe THAT a push happened and
+#    WHEN. That residual is accepted; content is not.
+#
+#    Consequence for this manifest: services/notification/** is in scope because
+#    G7 must write that sender, and because the proof that the payload is opaque
+#    (TDD §74 "opaque push payload test clean", §75 "push payload inspected and
+#    proven opaque") has to be an executable test in this gate, not an assertion
+#    in a report. Nothing about a path list can prove opacity — only a test that
+#    fails when a title is added to the payload can.
+#
+# 2. TELEGRAM CONTENT NEVER REACHES AI (INV-03/04/05/26). The drill-down in this
+#    gate renders evidence from BOTH sources, and the Telegram half arrives as
+#    ciphertext that the PWA decrypts locally (INV-30, ADR-007, TDD §33.3). That
+#    plaintext exists, in the browser, inside code this gate writes. It must not
+#    reach an AI call, a log, a metric, an analytics data point, a service-worker
+#    cache, a CI fixture, or an error report (INV-12, TDD §43 "Service Worker
+#    MUST NOT cache authenticated message bodies or decrypted Telegram content").
+#
+#    Consequence for this manifest: the AI surfaces are OUT of scope and stay
+#    out — packages/policy/**, packages/provenance/**, services/processor/**,
+#    services/decision/** and services/resolver/** are all absent from
+#    allowed_paths, so a G7 diff cannot widen the provenance gate or the AI
+#    serializer. But state the limit honestly: apps/pwa/** IS in scope, and a
+#    scope check sees a changed PATH, never a call. Nothing in this file
+#    prevents client code from POSTing decrypted Telegram text to an AI
+#    endpoint. The control for that is the policy test required below plus
+#    review by priv-01/ai-01 — not this manifest. A manifest that claimed
+#    otherwise would be the more dangerous document.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# WHAT THIS LIST IS SCOPED TO: the permissible MERGE SCOPE of the G7 pull
+# request. The check runs `git diff BASE_SHA...HEAD_SHA` over the cumulative
+# range from the main base to the PR head, so this is "what may legitimately
+# arrive on main through this gate's PR", not "what is left to do".
+#
+# Derived from: TDD §83's one-line G7 scope, §75 (PWA/Push DoD), §32 (opaque
+# push), §33/§33.1 (drill-down), §43 (PWA security), §49 (product surfaces),
+# §62 (the mandatory resilience cases that belong to a client), and the actual
+# directory skeleton on disk. The runtime tree is empty today — apps/, services/,
+# infra/, host/ and connectors/ contain zero tracked files, and the only tracked
+# source is packages/contracts/ — so every entry below describes where code WILL
+# live, taken from TDD §55's repository structure rather than invented.
+#
+# Grammar is the segment-bounded one scripts/verify/check-gate-scope.mjs
+# enforces, NOT shell globbing: `*` matches within one path segment and never
+# crosses `/`; `**` is a whole segment and matches any number of segments;
+# every other character, `.` included, is literal. There is no bare `**` in this
+# file — such an entry makes the check unable to refuse anything, and the
+# checker warns about it on every run for that reason.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # The gate's primary deliverable: the PWA itself (TDD §55 apps/pwa/{src,tests,
+  # public}). Taken as one subtree rather than three, deliberately. The
+  # narrower alternative — apps/pwa/src/**, apps/pwa/tests/**,
+  # apps/pwa/public/** — would exclude the app's own package.json, its build
+  # config and its web app manifest, which are exactly the files a PWA needs and
+  # exactly the files whose names cannot be predicted before the framework is
+  # chosen. A manifest that has to be re-approved (new hash, new operator
+  # review) every time a config file appears is a manifest that will be widened
+  # under time pressure, which is the failure mode this mechanism exists to
+  # prevent. The subtree contains no governance, CI or policy surface.
+  #
+  # One overlap to be aware of, since the check cannot express it: the owner-only
+  # /ops dashboard of TDD §48 will live under this same subtree
+  # (apps/pwa/src/ops/**) and belongs to G8, not to G7. This pattern structurally
+  # covers it. G7 builds the product surfaces of §49 — Today, Decisions, Streams,
+  # Topics/Intents, Knowledge, Search — and leaves OPS to the gate that defines
+  # what the metrics behind it mean.
+  - apps/pwa/**
+
+  # The opaque push sender. ADR-008's own "Consequences" section names this
+  # directory: services/notification/ never builds a payload from TopicDisplay
+  # or decision text, only from {type, notification_id, schema_version}. Web
+  # Push subscription registration/expiry handling lives here or in the API
+  # below.
+  - services/notification/**
+
+  # The authenticated read surface the client actually calls: the Today
+  # projection, evidence references, the push-subscription endpoints, and the
+  # Gmail drill-down proxy of TDD §33.1 (PWA -> API/Gmail source adapter ->
+  # Gmail API, `Cache-Control: no-store`, service-worker caching forbidden).
+  #
+  # THIS IS THE WIDEST ENTRY IN THE LIST AND THE ONE TO CHALLENGE FIRST. The
+  # whole API subtree is in scope because the client cannot be built without
+  # its endpoints, and no finer split exists yet — services/api/ has zero
+  # tracked files, so there is no real file layout to name. It is NOT licence to
+  # re-open decision logic delivered by G6: a diff that rewrites unrelated API
+  # surface is a scope change needing a new plan and a new GO, and widening a
+  # manifest to fit a diff is never the fix. The scope check cannot tell those
+  # apart — see limitation 1 below — so this one rests on review, not on CI.
+  - services/api/**
+
+  # Deployment and edge configuration for the client: Pages/Workers static
+  # assets, the Cloudflare Access application boundary the iOS standalone
+  # login/re-login case exercises (TDD §75), and the security headers of §43
+  # (strict CSP, no unsafe-eval, Referrer-Policy, Permissions-Policy,
+  # X-Content-Type-Options, Trusted Types where practical).
+  #
+  # Honest caveat, same class as the entry above: infra/cloudflare/ is also
+  # where G2's D1 and Queue bindings will live. This gate must not alter them,
+  # and the path check cannot see the difference. Two specific things to look
+  # for when reviewing a G7 diff that touches this directory: a new Analytics
+  # Engine binding reachable from a code path that handles decrypted content
+  # (INV-12), and any relaxation of a CSP or cache header that §43 requires.
+  - infra/cloudflare/**
+
+  # Web Push subscriptions are durable state (endpoint, keys, expiry), so this
+  # gate adds at least one migration. Migrations are append-only by convention,
+  # and an additive file is the normal shape here — but the scope check sees a
+  # changed path, not an append, so EDITING a migration G2 already applied would
+  # pass this check while being a scope violation. CI migration validation
+  # (TDD §61) is the control for that, not this file.
+  - infra/migrations/**
+
+  # Client-facing product documentation for the Today view and the drill-down
+  # flow. Segment-bounded: files directly in docs/product/, no subdirectory.
+  - docs/product/*.md
+
+  # The PWA adds a genuinely new attack surface — a browser client that holds
+  # decrypted Telegram plaintext, a service worker, a push subscription, and an
+  # Access session in iOS standalone mode. TDD §74 requires the threat model to
+  # be current at a gate that changes it. Named as a single file: the rest of
+  # docs/architecture/ is out of scope, and TDD.md and TDD_ERRATA.md are
+  # explicitly forbidden below.
+  #
+  # NOTE, because it is easy to misread this list: allowing a path here does NOT
+  # bypass .github/CODEOWNERS. /docs/architecture/ is owned by @xLZDx, so a PR
+  # touching this file still needs the operator's review wherever branch
+  # protection requires code-owner review. Manifest scope and review authority
+  # are two different controls; this file only relaxes the first one.
+  - docs/architecture/THREAT_MODEL.md
+
+  # Durable decisions taken during the gate — the framework choice, the
+  # notification-permission flow, anything decided about iOS standalone
+  # behaviour. A decision that exists only in a chat log is invisible to
+  # gov-01 and red-01 (.claude/skills/pdos-gates/SKILL.md §7).
+  - core/DECISION_LOG.md
+
+  # R6 (source deleted before drill-down) and R7 (push timing metadata
+  # observable by FCM/APNs) are both G7-verified rows. R7 in particular must end
+  # this gate with real evidence behind its ACCEPTED/INFO status rather than a
+  # forecast.
+  - core/RISK_REGISTER.md
+
+  # The gate ledger's own status row, updated at closure.
+  - core/PLAN_MASTER_GATES.md
+
+  # The gate plan itself, in the shape .claude/skills/pdos-gates/SKILL.md §3
+  # requires. Named rather than governance/plans/*.md so that G0_PLAN.md,
+  # G1_REMEDIATION_PLAN.md, G1_PREADOPTION_EVIDENCE.md and any LATER gate's
+  # manifest proposal all stay out of scope — a gate must not be able to edit
+  # another gate's record, and a manifest proposal for G8 must not ride into
+  # main inside G7's pull request.
+  - governance/plans/G7_PLAN.md
+
+  # The fresh-context reviews this gate must produce (universal DoD item 21).
+  # `**` as the last segment covers the subtree and, because the separator is
+  # part of the pattern, never the bare directory name. Residual, stated rather
+  # than hidden: this subtree also holds G0's and G1's adopted reviews, so the
+  # pattern permits editing an earlier gate's review record. The check sees a
+  # changed path, not a direction; if that matters to you, narrow this to named
+  # files once the review filenames are known.
+  - governance/reviews/**
+
+  # The closure report. Does not exist yet.
+  - governance/G7_CLOSURE_REPORT.md
+
+  # The mandated Russian + English report pair. Segment-bounded, so it reaches
+  # reports/ and no subdirectory. TDD §55 sketches `reports/gate-*/`
+  # subdirectories; the repository has never used them — every report to date is
+  # flat in reports/ — and this entry follows the repository, not the sketch.
+  - reports/*.html
+
+  # Real end-to-end journeys (install, Today, drill-down, push wake -> state
+  # fetch) and the §62 resilience cases that belong to a client: push lost or
+  # delayed -> open-sync correct, PWA offline, source message deleted before
+  # drill-down, iOS standalone Access login and re-login.
+  - tests/e2e/**
+  - tests/resilience/**
+
+  # The security tests of §74 that this gate owns: push payload proven opaque,
+  # CSP/security headers verified, service worker proven not to cache message
+  # bodies or decrypted Telegram content, AI/source-derived fields rendered as
+  # inert plain text with a length cap.
+  - tests/security/**
+
+  # Fixtures for the above. READ INV-12 BEFORE ADDING ONE: raw message bodies
+  # never enter CI fixtures. A "realistic" Telegram or Gmail body pasted into a
+  # fixture file is a direct invariant violation, it is permanent once
+  # committed, and scripts/verify/check-secrets.mjs will not catch it — that
+  # scanner looks for token and key patterns, not for message text.
+  - tests/fixtures/**
+
+  # Domain policy tests, restricted to TypeScript by extension on purpose. The
+  # governance policy tests that guard this very mechanism — gate-scope,
+  # floor-scope, CODEOWNERS — are `.mjs` (they run under bare node, before any
+  # build and without `npm ci`, so a broken dependency tree cannot disable a
+  # governance check). Allowing `*.ts` lets G7 add, for example, a test proving
+  # the push payload builder cannot emit a source-derived field, while leaving
+  # the `.mjs` guards that police this gate untouchable by it.
+  - tests/policy/*.ts
+
+  # Workspace wiring for a new app. npm workspaces already include `apps/*`
+  # (package.json), so adding the PWA's dependencies necessarily moves the root
+  # lockfile; tsconfig and the vitest include list need the new source and test
+  # globs; eslint needs browser/service-worker globals. These are toolchain
+  # surfaces, not governance surfaces — but note that vitest.config.ts is where
+  # `passWithNoTests: false` lives, and scripts/verify/assert-tests-ran.mjs
+  # exists precisely because that setting could be quietly removed.
+  - package.json
+  - package-lock.json
+  - tsconfig.json
+  - vitest.config.ts
+  - eslint.config.js
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# Everything not in allowed_paths is already out of scope, and the checker
+# reports it as such. The entries here are a different class: touching one would
+# be the implementer editing an object that defines or proves the constraints on
+# the implementer. They get their own refusal, with its own message.
+#
+# `governance/gate-manifests/**` is the blanket form here, not g1.yaml's
+# narrower `**/*.yaml` + `**/*.yml` pair. g1 needed the split because G1's own
+# deliverable included governance/gate-manifests/README.md; G7 has no business
+# in that directory at all, so the whole of it can be refused.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # INV-28. A gate PR that could carry its own authorizing manifest would be
+  # validating a diff against a file that same diff had just written — NM3 from
+  # the v0.2 adversarial review, and the reason the hash check runs BEFORE the
+  # scope check in .github/workflows/governance.yml.
+  - governance/gate-manifests/**
+
+  # The operator's own record of what they approved. An implementer that can
+  # write approvals can manufacture the evidence that it was approved.
+  - governance/operator-approvals/**
+
+  # The frozen architecture baseline, INV-01..INV-31 included.
+  - docs/architecture/TDD.md
+
+  # TDD_ERRATA.md is NORMATIVE and outranks TDD.md on concrete details — the
+  # .github/CODEOWNERS comment says so explicitly, and records that GPT-PM
+  # caught the errata being created as a new authority surface outside the trust
+  # boundary the same change was tightening. An implementer able to write
+  # errata can declare a restriction superseded without touching any other
+  # operator-owned path.
+  #
+  # THIS IS A DEPARTURE FROM g1.yaml, WHICH ALLOWED IT, AND THE DIFFERENCE IS
+  # DELIBERATE: G1's own deliverable was the governance mechanism, so recording
+  # E-001 (the one-workflow layout) inside that gate was the gate's actual work.
+  # G7 implements already-adopted architecture. If G7 discovers that the TDD is
+  # wrong about something concrete, the correct move is to stop and hand the
+  # operator a correction — not to write the correction and then rely on it.
+  - docs/architecture/TDD_ERRATA.md
+
+  # CI cannot police its own definition. For `pull_request` events GitHub runs
+  # the workflow as it exists in the PR's merge commit, so a PR that edits these
+  # files edits the checks that police it. Both are already forbidden to every
+  # UNGATED PR by scripts/verify/check-floor-scope.mjs; a feature gate should
+  # not hold authority that an ungated PR is denied.
+  #
+  # ci.yml is included and not carved out, even though it is "only" the build
+  # workflow: it runs the secret scan, the test-deletion guard and the
+  # assert-tests-ran count check, so editing it is editing enforcement.
+  #
+  # KNOWN COST, STATED PLAINLY — SEE THE OPERATOR QUESTION AT THE BOTTOM. TDD
+  # §61 requires a gate-level "PWA build" in CI, and today .github/workflows/
+  # ci.yml has no build step at all. Under this manifest G7 cannot add one.
+  # That work has to arrive some other way, and the operator has to choose
+  # which; the alternative — letting the gate that introduces the build also
+  # edit the pipeline that verifies it — is the thing this entry refuses.
+  - .github/workflows/**
+  - .github/CODEOWNERS
+
+  # The enforcement mechanism itself. g1.yaml ALLOWED scripts/verify/*.mjs
+  # because writing those checks was G1's deliverable; carrying that forward
+  # into a feature gate would let a PWA pull request rewrite the checker that
+  # polices it, and rewrite the floor scope that polices ungated PRs —
+  # check-floor-scope.mjs's own header notes that its rules are "changeable
+  # through whichever gate's own manifest permits editing scripts/verify/*.mjs".
+  # /scripts/verify/ is CODEOWNERS-owned for the same reason.
+  #
+  # Named file by file rather than as scripts/verify/** so that
+  # mutation-check.mjs can stay in scope — see the operator question about it
+  # below. A verify script added in the future is not in this list, but is also
+  # not in allowed_paths, so it is still refused; only the error message is
+  # weaker ("outside G7's approved scope" rather than "forbidden").
+  - scripts/verify/check-gate-scope.mjs
+  - scripts/verify/check-floor-scope.mjs
+  - scripts/verify/check-secrets.mjs
+  - scripts/verify/check-test-deletion.mjs
+  - scripts/verify/assert-tests-ran.mjs
+
+  # Policy-sensitive files (TDD §57(13), .github/CODEOWNERS). G7 changes neither
+  # source policy nor retention, and the adopted ADRs are what this gate
+  # IMPLEMENTS — ADR-001 (PWA-first), ADR-007 (the content path), ADR-008
+  # (opaque push). A gate that could amend the ADR it is being measured against
+  # could approve its own deviation; if ADR-008 genuinely needs revision, that
+  # is an operator/GPT-PM action outside this PR, exactly like the manifest.
+  - core/SOURCE_POLICY.md
+  - core/DATA_RETENTION_POLICY.md
+  - core/adr/**
+
+# ---------------------------------------------------------------------------
+# Everything below this line is governance metadata carried by convention.
+# State it honestly: scripts/verify/check-gate-scope.mjs reads `allowed_paths`
+# and `forbidden_paths` and NOTHING ELSE. These fields are documentation for a
+# human reviewer, not enforcement.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+  - ux-01
+  - sec-01
+  - priv-01
+  - gov-01
+  - red-01 (last, only after every other selected role has returned APPROVE)
+
+policy_sensitive_files:
+  - services/notification/**
+  - apps/pwa/**
+  - infra/cloudflare/**
+  - docs/architecture/THREAT_MODEL.md
+
+# ---------------------------------------------------------------------------
+# operator_acceptance_dependencies
+#
+# THE IMPLEMENTER CANNOT SATISFY THESE ALONE, AND NO AMOUNT OF CODE OR CI CLOSES
+# THEM. TDD §75's DoD is written against real hardware, and §62's resilience
+# list repeats it ("iOS standalone Home Screen Access login and re-login"). An
+# emulator does not produce this evidence: iOS Web Push exists only for a Home
+# Screen web app on a real iOS 16.4+ device (TDD §65, Apple), Cloudflare Access
+# login behaviour in standalone mode is a real-browser/real-session behaviour,
+# and "push payload inspected and proven opaque" means inspected on the wire on
+# a device that actually received it.
+#
+# Plan the gate so these are the LAST step and so the implementer's own work is
+# complete and testable before they are requested — but do not let the gate be
+# reported as DONE without them. A closure report that cites emulator results
+# for any line below is not evidence; it is a substitution.
+# ---------------------------------------------------------------------------
+
+operator_acceptance_dependencies:
+  - Real Android device — PWA installs, opens, and receives a Web Push.
+  - Real iPhone (iOS 16.4+) — added to the Home Screen, opens in standalone mode.
+  - Real iPhone — Web Push received while installed to the Home Screen.
+  - Cloudflare Access login completed in iOS standalone Home Screen mode.
+  - Re-login after session expiry completed in that same standalone mode.
+  - Push payload captured from a real delivery and inspected for opacity.
+  - Full Telegram drill-down exercised on a real device against live source content.
+  - Apple/Google account and device availability — operator-held, not implementer-held.
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why
+#
+#   services/content-request-broker/**   ADR-007 assigns steps 2-4/8 of the
+#   host/content-gateway/**              content auth chain to the broker and
+#                                        steps 6-7 to the gateway, and states
+#                                        "Verification owed at gate time (G4)".
+#                                        G7 CONSUMES that path and decrypts in
+#                                        the client; it does not build or amend
+#                                        it. If the drill-down UI cannot work
+#                                        without changing the broker, that is a
+#                                        G4 defect and needs its own plan — not
+#                                        a wider G7 manifest. Flagged as an
+#                                        operator question below, because this
+#                                        is the seam most likely to bite.
+#
+#   packages/**                          Including packages/contracts/**. The
+#                                        push envelope and the Today projection
+#                                        are DATA CONTRACTS; letting a client
+#                                        gate edit shared contract types is how
+#                                        a provenance-carrying type quietly
+#                                        loses a field. If G7 genuinely needs a
+#                                        new contract type, that is visible
+#                                        before implementation starts and can be
+#                                        added to this list by name at adoption
+#                                        time. See the operator question.
+#
+#   packages/policy/**,                  The AI/provenance boundary. Absent on
+#   packages/provenance/**,              purpose: a client gate must not be able
+#   services/processor/**,               to widen the gate that keeps Telegram
+#   services/resolver/**,                ancestry out of AI (INV-03/04/05/26).
+#   services/decision/**
+#
+#   connectors/**                        G3/G4 territory.
+#
+#   host/**, scripts/backup/**,          G8 territory (observability,
+#   scripts/restore/**, scripts/ops/**   retention, backup, first restore).
+#
+#   docs/runbooks/**                     No runbook carries a G7 marker; each
+#                                        placeholder names G1, G2, G3, G4 or G8.
+#
+#   README.md, CLAUDE.md, AGENTS.md,     Housekeeping. It does not need to widen
+#   CONTRIBUTING.md, .prettierignore     a gate: an ungated "Gate: NONE" PR is
+#                                        checked against the floor scope, which
+#                                        allows everything except the sensitive
+#                                        paths. That route exists so that a
+#                                        typo fix never becomes an argument for
+#                                        a broader gate manifest.
+#
+#   tests/unit/**, tests/contract/**,    Service and package tests live beside
+#   tests/integration/**, tests/quota/** their code under services/**/tests and
+#                                        packages/**/tests (vitest.config.ts
+#                                        include list), so the client's own unit
+#                                        tests are already covered by
+#                                        apps/pwa/** and services/api/**.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN ONCE ITS HASH IS APPROVED
+#
+#   1. It cannot tell an addition from a rewrite. services/api/**,
+#      infra/cloudflare/** and infra/migrations/** are the three entries where
+#      that matters most: the check sees a changed path, never whether the
+#      change added an endpoint or gutted one G6 delivered, and never whether a
+#      migration was appended or an applied one was edited.
+#   2. It cannot see a CALL. Nothing here prevents client code from sending
+#      decrypted Telegram plaintext to an AI endpoint, to an analytics binding,
+#      or into a service-worker cache. Only tests prove those, which is why
+#      tests/security/** and tests/policy/*.ts are in scope and why §75's
+#      "service worker does not cache message bodies" is a test, not a review
+#      note.
+#   3. The `Gate: G7` label that selects this manifest comes from the branch
+#      name or the PR body, both written by the implementer. A PR labelled for a
+#      different gate is checked against a different manifest (limitation 6 in
+#      ../GATE_MANIFEST_INTEGRITY.md).
+#   4. Nothing checks plan_hash — and in this file there is nothing to check.
+#      governance.yml verifies only THIS FILE's own sha256 against the
+#      operator-held repository variable.
+#   5. The check runs on `pull_request` only. A direct push to main is not
+#      examined by it at all.
+#   6. THE APPROVAL HASH IS NOT OUT OF THE IMPLEMENTER'S REACH. Measured
+#      2026-09-10: the session's credential is a classic PAT with `repo`,
+#      `workflow` and `admin:org`, and `.permissions.admin` is true on this
+#      repository. The separation is procedural. Detail in
+#      ../plans/G1_PREADOPTION_EVIDENCE.md §3.1.
+#   7. AND THE ONE THIS FILE ADDS BY EXISTING: an implementer drafted it, before
+#      any G7 plan existed. The only thing between that and a self-authorized
+#      scope is the operator reading these bytes — and, here, reading them
+#      against a plan that does not yet exist.
+#
+# ---------------------------------------------------------------------------
+# QUESTIONS ONLY THE OPERATOR CAN SETTLE
+#
+#   Q1. THE CI BUILD STEP. TDD §61 requires a gate-level "PWA build"; ci.yml has
+#       no build step; this manifest forbids .github/workflows/**. And note the
+#       structural corner: check-floor-scope.mjs forbids .github/** to ungated
+#       PRs too, so if every gate manifest also forbids it, NO pull request can
+#       change a workflow — only a direct commit to main, which the `PDCC`
+#       ruleset may or may not permit. Choose one: (a) you make the ci.yml change
+#       yourself, outside the gate; (b) this manifest names
+#       `.github/workflows/ci.yml` as allowed, with governance.yml and CODEOWNERS
+#       still forbidden; (c) the PWA build is wired into `npm run verify` via
+#       package.json — already in scope — so no workflow edit is needed. (c) is
+#       the implementer's recommendation; it keeps the authority surface shut.
+#
+#   Q2. THE BROKER SEAM. If G4 has not yet been built when G7 starts, the
+#       Telegram drill-down has nothing to call and §75's "full Telegram
+#       drill-down works" cannot be satisfied inside G7 at all. Do you want G7
+#       sequenced strictly after G4, or do you want the Telegram half of the
+#       drill-down explicitly deferred out of G7's DoD? The manifest cannot
+#       answer this; it only refuses to let G7 build G4's half quietly.
+#
+#   Q3. CONTRACTS. If the opaque push envelope type should live in
+#       packages/contracts/, add the two named paths at adoption time — e.g.
+#       `packages/contracts/src/push.ts` and
+#       `packages/contracts/tests/push.test.ts` — rather than the subtree. Naming
+#       them fixes the filenames; allowing the subtree lets a client gate edit
+#       every shared contract. The implementer prefers the named pair.
+#
+#   Q4. MUTATION COVERAGE. scripts/verify/mutation-check.mjs holds a hardcoded
+#       MUTATIONS list, so proving a NEW guard is genuinely tested requires
+#       editing it. It is deliberately left out of forbidden_paths but is also
+#       not in allowed_paths, so today it is refused as out-of-scope. Add it to
+#       allowed_paths if you want G7 to prove its new guards; it is an evidence
+#       harness, not a CI gate (it is not run by ci.yml at all), so the risk is
+#       weakened evidence rather than weakened enforcement.
+#
+#   Q5. SCOPE OF services/api/**. This is the entry a reviewer should push back
+#       on hardest. If you would rather bound it, the honest narrower form is a
+#       named subdirectory convention (e.g. services/api/src/today/**,
+#       services/api/src/push/**, services/api/src/evidence/**) — but that
+#       invents a layout the TDD does not specify, and a layout invented in a
+#       manifest becomes binding on code nobody has written yet.
+#
+# ---------------------------------------------------------------------------
+# HOW ADOPTION WORKS, AND WHY NO HASH IS PRINTED HERE
+#
+# Do NOT copy this file byte-for-byte into governance/gate-manifests/g7.yaml:
+# the copy would carry `status: NON_BINDING_PROPOSAL / HAS_NO_AUTHORITY`, so the
+# binding manifest would assert about itself that it has no authority. Adoption
+# means editing at least the header and the status block — and the moment
+# anything is edited, the sha256 changes. Any hash printed here would therefore
+# be the hash of the wrong bytes.
+#
+#   1. operator   Review and edit this proposal against the G7 plan, once that
+#                 plan exists. Narrowing is always safe; widening is the thing
+#                 to be suspicious of.
+#   2. operator   Write the result to governance/gate-manifests/g7.yaml, in its
+#                 own commit on main, NOT inside the gate PR — that path is
+#                 forbidden above, so a gate PR carrying it fails the Governance
+#                 check, correctly.
+#   3. operator   Compute its sha256 from the committed LF bytes. A hash taken
+#                 from a Windows working copy with CRLF endings will NOT match
+#                 what the runner computes.
+#   4. operator   Set repository variable GATE_MANIFEST_APPROVED_HASH_G7 to that
+#                 value. Settings -> Secrets and variables -> Actions ->
+#                 Variables.
+#   5. anyone     Open the gate PR. The Governance check now reaches the scope
+#                 step instead of failing closed at the hash step.
+#
+# Step 4 is what makes any of this real. Until it is done the Governance check
+# fails closed at the hash step, the scope step is never reached, and G7 has no
+# enforced scope — which is the correct behaviour.
+# ---------------------------------------------------------------------------

@@ -5,6 +5,300 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — Telegram Bot-first transport reviewed; the AI question reopened on a document-scope correction
+
+**Status: PROPOSED, NOT ADOPTED.** Nothing in the repository changes as a result of this entry. It
+records a completed review round so the ruling is not left living only inside a ChatGPT
+conversation. Adoption needs an ADR, an independent review, and the operator's own approval, because
+the amendment deletes two invariants that `docs/architecture/TDD.md:176` marks "non-negotiable
+without ADR + independent review + operator approval".
+
+**What was proposed (by the operator):** replace MVP1's Telegram transport — a user-account TDLib
+connector on an always-on Utility Host — with a Telegram **Bot** connected to the operator's own
+account through the Business/connected-bot API, receiving only personal 1:1 chats by default, no
+groups. Alongside the transport change the proposal carried a **consent-gated AI model**: four
+eligibility classes (`TG_AI_DENY_DEFAULT`, `TG_AI_ALLOW_DIRECT_INTERACTION`,
+`TG_AI_ALLOW_CHAT_SCOPE`, `TG_AI_ALLOW_MESSAGE_SCOPE`), an `AIConsentGrant` object, and amended
+INV-03A/04A/05A/26A that would have let some Telegram content reach AI.
+
+**Ruling — the two halves were split, and only one survived.**
+
+*Transport: ACCEPTED in principle.* The Bot-first path is materially simpler and stays inside
+HARD_ZERO. It removes TDLib, the user session file, the local spool, the Cloudflare Tunnel and the
+Content Gateway.
+
+*Consent-gated AI: REJECTED in round 1 — and that rejection's factual basis was then knocked out
+the same day by the operator, see the next entry section.* GPT-PM ruled Telegram **fully AI_DENY**
+in MVP1, narrower than the implementer's own recommendation (I had argued for admitting only
+`TG_AI_ALLOW_DIRECT_INTERACTION`). The ruling rested on `EXTERNAL_ASSUMPTIONS.md` §B lines 81-95,
+which quote the Content Licensing consent exception verbatim and record the decision to decline it:
+it requires "explicit, informed, affirmative and continued consent" from **all relevant users** —
+the operator's counterparties — scoped to a specific chat and non-transferable, which is not
+practically reachable for ordinary two-party chats.
+
+**That reasoning assumed the Content Licensing Terms govern Bot API data. They say otherwise.** See
+"The document-scope correction" below. `INV-03/04/05/26` stand unamended for now because no
+replacement has been adopted — not because the AI question is settled.
+
+**The document-scope correction — the operator was right, and the implementer had the wrong
+governing document.** Challenged on the consent point, I re-read the primary sources instead of
+restating the ruling. Three findings, all `FACT`, all read directly:
+
+- **The Content Licensing Terms carve Bot access out of themselves**, verbatim: *"Telegram permits
+  access to data required to launch and operate a legitimate third-party Telegram Client, **Telegram
+  Bot**, or Telegram Mini App"*, conditioned on compliance with the relevant Terms of Service — i.e.
+  it routes a legitimate bot to the **Bot Platform Developer Terms**. §B recorded this sentence on
+  2026-09-10 but it was read as permitting *access* only; it also redirects the compliance regime.
+  The ruling's premise — that the Content Licensing AI prohibition and its unreachable consent
+  exception govern Bot API data — is therefore not established. Whether the AI-use prohibition
+  nonetheless reaches lawfully-received bot data is genuinely ambiguous in the text and cannot be
+  resolved from it: `UNKNOWN`, not `FACT` in either direction.
+- **Telegram itself makes the disclosure to the counterparty**, at platform level, in the Privacy
+  Policy every user accepts: *"If you message a Business user who connected a chatbot to their
+  account, depending on their settings, you may be effectively communicating with a bot, and it will
+  receive basic data about you as detailed in section 6.3 above."* The "covert interception without
+  the other party's knowledge" objection does not survive this. **No in-chat badge exists**, though —
+  the Privacy Policy, `core.telegram.org/api/business` and `/api/bots/connected-business-bots` are
+  all silent on any counterparty-visible label, and an industry source states there is none. The
+  policy disclosure is the stronger instrument anyway.
+- **The operative constraint is elsewhere than either party was looking.** Bot Developer Terms
+  **§5.4(iv)**: *"never disclose message contents, files or other data you obtained or processed
+  through or in connection with Telegram Business to third parties (including third-party APIs)
+  without the user's authorization."* Sending Telegram content to an external model IS disclosure to
+  a third-party API. **Whose** authorization is textually ambiguous: §5.4(v) says "business account
+  owner" explicitly where it means the owner, and (iv) does not use that phrase. Alongside it,
+  **§4.3 paragraph 2** grants an express permission: *"you are free to use data submitted directly
+  and voluntarily to your TPA by users, provided that you clearly inform them of the data's intended
+  use and they give their individual, explicit, active and revocable consent"* — a different and
+  reachable standard from Content Licensing's "continued consent from all relevant users". And
+  §4.3 paragraph 1 prohibits collection *"aimed at creating large datasets, machine learning models
+  and AI products"*; this system creates none — it consumes a third-party model.
+
+**Consequence:** the AI question for Telegram is **reopened and unresolved**, pending the operator's
+decision. It is not "rejected", and it is not "permitted". Three options were put to the operator:
+(A) treat §5.4(iv)'s "the user" as the business account owner and accept the ambiguity as a recorded
+risk; (B) the same, plus a first-contact disclosure message from the bot, which satisfies both
+readings of "the user" and §4.3 paragraph 2 at the cost of one automatic message per new chat;
+(C) keep AI_DENY as ruled. **B is the implementer's recommendation.**
+
+**OPERATOR DECISION, same day: option B.** Verbatim: *"Вариант В и го переключайся"* — Cyrillic "В"
+is Latin "B". So the direction for Telegram AI eligibility is: treat Bot Platform Developer Terms
+as the governing document, **and** have the bot send a first-contact disclosure to the counterparty
+stating that the conversation is processed by an assistant. That disclosure is what makes the choice
+defensible under BOTH readings of §5.4(iv)'s "the user" at once, and it is the "clearly inform them
+of the data's intended use" limb of §4.3 paragraph 2.
+
+**What this decision does and does not authorize.** It settles the DIRECTION. It does not by itself
+amend an invariant, and it does not start implementation: INV-14/INV-30 remain non-negotiable under
+`TDD.md:176` until an ADR plus independent review plus the operator's approval of the amended text
+exists, and the three adoption preconditions above (empirical account check, key-custody design with
+SEC/PRIV review, §B snapshot of the Bot API documents) are unchanged by it. The revocability limb of
+§4.3 paragraph 2 — "individual, explicit, active and **revocable** consent" — still needs a design:
+a disclosure the counterparty cannot act on is an announcement, not consent, so an opt-out path and
+its effect on already-retained content must be specified before G4 can claim this clause.
+
+**Two invariants the proposal deleted silently, and that the review restored:**
+
+- **INV-14** (`TDD.md:192`) "Telegram raw content is not stored in central Decision DB by default" —
+  central retention is exactly what the Bot-first model introduces, so this invariant is the one the
+  amendment actually changes. It was not named in the proposal at all.
+- **INV-30** (`TDD.md:208`) "Telegram full-content drill-down uses application-layer encryption
+  end-to-end between Content Gateway and PWA" — deleting the Content Gateway deletes this
+  invariant's subject. Also unnamed.
+
+**A false claim in the proposal, corrected:** §17 asserted that ADR-011's pre-approved fallback no
+longer needs a host. `core/adr/ADR-011-queue-consumer-runtime.md:65-73` says the opposite, verbatim —
+the HTTP pull-consumer fallback runs "on the already-required connector host (same host as the
+Telegram TDLib connector)", and the nightly backup "runs on the connector host
+(`host/backup-agent/`), never inside a Worker". Removing the Telegram connector does **not** remove
+the host; it removes one of the host's two jobs. The **Utility Host is retained.**
+
+**Verified facts that made the transport plausible:**
+
+- `FACT` — connected bots are available **without Premium**. Two independent retrievals agreed:
+  Telegram's blog of 2026-05-07 ("every Telegram user can connect a bot to their profile") and
+  `core.telegram.org/api/business` ("connected bots are also available to non-Premium users").
+  HARD_ZERO survives.
+- `FACT` — Bot Platform Developer Terms **§4.4(a)**, fetched and read directly: *"Make sure user data
+  is always encrypted at rest and stored separately from its encryption key."* Unconditional. No
+  platform-capability qualifier.
+- `FACT` — **§4.2** requires deletion on request, deletion once retention is no longer necessary, and
+  deletion of all data when the TPA ceases operating. **§4.3** adds an independent purpose limit:
+  "not to use your TPA to collect, store, aggregate or process data beyond what is essential for the
+  operation of your services."
+- `HYPOTHESIS` — Telegram's **legal** documents still carry the *old* gating language while the
+  product documents carry the new: Privacy Policy §6.5 and Bot Developer ToS §5.4 both still say
+  "Telegram Business subscribers". This reads as stale drafting rather than a live contradiction, but
+  it cannot be shown which wording Telegram intends to bind, so it stays a hypothesis and is carried
+  as an accepted unresolved documentation inconsistency — never silently "resolved" by the empirical
+  test below.
+
+**A regression in the reviewer's own first ruling, found and corrected in round 2.** GPT-PM had
+proposed replacing INV-30 with "...encrypted at rest **where platform capability permits**...". That
+hedge is not available: §4.4(a) is unconditional, and on D1 under HARD_ZERO the hedge would evaluate
+to "the platform offers nothing, therefore nothing is required" — the silent downgrade
+`core/adr/ADR-007`:54 already forbids. GPT-PM accepted the correction and dropped the hedge.
+
+**The amended invariant texts, as ruled (not yet adopted):**
+
+> **INV-30A — Telegram stored-data encryption.** Any Telegram user data retained by the service MUST
+> be encrypted at rest before persistence, and the encryption key MUST be stored separately from the
+> encrypted data. No plaintext Telegram source content may be persisted in D1, R2 backups, logs,
+> metrics, queues, CI fixtures, or equivalent durable stores. Decryption is permitted only after an
+> authenticated and authorized evidence request. Responses carrying source content are no-store and
+> must never enter service-worker caches.
+
+> **INV-14A — Telegram minimization, purpose limitation and deletion.** Telegram user data may be
+> retained centrally only to the extent essential to operate an explicitly documented Personal
+> Decision OS service function. The system MUST NOT collect, store, aggregate or process Telegram
+> data beyond that operational necessity. Retained Telegram user data MUST be deleted without undue
+> delay when deletion is requested where applicable, when it is no longer necessary for the service,
+> and when the Telegram TPA ceases operation except where an expressly valid retention agreement or
+> legal obligation permits otherwise. Detailed TTLs, edit/delete propagation, disconnect behavior,
+> tombstones and backup-erasure procedures are defined in the source-aware retention policy and may
+> not weaken this invariant.
+
+**Three preconditions before adoption — all required:**
+
+1. **Key custody is an open design decision, deliberately not settled here.** Utility-Host custody
+   makes Telegram evidence availability depend on an always-on host again; PWA-held custody
+   complicates webhook ingestion, multi-device use, recovery and backups; envelope encryption with
+   the KEK in a secret store separate from D1 is a third candidate. Custody + recovery + rotation +
+   backup semantics need an independently reviewed design before the amendment can be adopted.
+2. **An empirical non-Premium check on the operator's own account**, because the entire transport
+   rests on it and the legal/product documents disagree: confirm `Settings > Chat Automation`
+   exists without Premium; connect a test bot with Secretary Mode enabled in BotFather; verify a
+   `BusinessConnection` update arrives and `getMe` reports `can_connect_to_business`; verify one
+   ordinary personal 1:1 message in each direction reaches the documented Bot API path; record
+   client/platform/version/date.
+3. **A §B-shaped snapshot in `docs/architecture/EXTERNAL_ASSUMPTIONS.md`** — URL, fetch date,
+   SHA-256, verbatim quotes — covering the Bot API / connected-bot / Business documents. §B today
+   contains no Bot-API rows at all; the amendment depends entirely on facts the file does not yet
+   record, and the conflicting Privacy Policy §6.5 / Bot ToS §5.4 wording must be pinned alongside.
+
+**Facts carried forward into G4's acceptance criteria:** the bot needs Secretary Mode enabled in
+BotFather (`getMe` exposes `can_connect_to_business`); marking messages read is opt-in and
+rights-gated (`can_read_messages`) rather than automatic, which resolves the API Terms §1.4
+read-status concern for a receive-only bot; replying and marking read are both limited to chats
+active in the last 24 hours; undelivered updates are retained by Telegram for at most 24 hours, so
+D1 becomes the durable record immediately after acceptance. Two Telegram documentation pages are
+dead: `telegram.org/faq_business` is an empty shell and `core.telegram.org/api/bots/business`
+returns "Page not found".
+
+**PR #4 is on HOLD** by the same ruling — the nine manifest proposals include G4's, whose scope
+would change materially if this amendment is adopted.
+
+**Evidence:** PM-Bridge exchange, two rounds — round 1 returned `VERDICT: BLOCKER`, round 2
+(request id `e1a7c53b-9d28-4f61-b0c4-3a6f8e21d7c4`) returned `VERDICT: APPROVE` on the corrections
+above, not on adoption. Primary sources read directly after the operator's challenge:
+`https://telegram.org/tos/content-licensing` (scope carve-out for a legitimate Telegram Bot),
+`https://telegram.org/privacy` §6.5 (platform-level disclosure to the counterparty),
+`https://telegram.org/tos/bot-developers` §4.2/§4.3/§4.4/§5.4 (full text),
+`https://core.telegram.org/api/business`, `https://core.telegram.org/api/bots/connected-business-bots`
+(both silent on any counterparty-visible badge). Repository evidence:
+`docs/architecture/EXTERNAL_ASSUMPTIONS.md:17-98`;
+`docs/architecture/TDD.md:176,181-183,192,204,208-209`;
+`core/adr/ADR-011-queue-consumer-runtime.md:65-73`; Telegram Bot Platform Developer Terms §4.2/§4.3/
+§4.4(a)/§5.4, Privacy Policy §6.5, `core.telegram.org/api/business`, Telegram blog 2026-05-07.
+
+**How to apply:** do not begin any Bot-first implementation. Do not write `AIConsentGrant`, the four
+eligibility classes, or INV-03A/04A/05A/26A into any document yet — nothing is adopted, and an
+unadopted proposal left lying in the tree reads to the next session like an accepted one. **Do not
+restate "Telegram is AI_DENY because Content Licensing forbids it" — that reasoning is retired; the
+governing document for Bot API data is the Bot Platform Developer Terms, and the operative clauses
+are §5.4(iv), §4.3 and §4.4(a).** When the operator decides, the order is: their choice of option
+A/B/C → empirical check → §B snapshot (Bot API documents, plus the §5.4(iv) ambiguity recorded as an
+accepted risk) → key-custody design + SEC/PRIV review → ADR → independent review → operator approval
+→ amended INV-14A/INV-30A (+ whatever replaces INV-03/04/05/26 if A or B is chosen) → G4 manifest
+redraft. G1 closure is unaffected and proceeds on its own track.
+
+---
+
+## 2026-09-11 — Nine manifest proposals for G2..G10; and a BLOCKER found in G1's own test-deletion guard
+
+**Decision:** nine non-binding scope-manifest proposals, `governance/plans/G<N>_MANIFEST_PROPOSAL.yaml`
+for G2 through G10, drafted in parallel and landed as one `Gate: NONE` PR. They are PROPOSALS, not
+manifests. `governance/gate-manifests/README.md` prescribes exactly this route in its own words --
+"Claude may propose a next-gate manifest as a non-binding artifact (e.g. in `../plans/`), but it
+becomes binding only once the operator adopts/commits the actual file here" -- so this is the
+repository's documented process, not an invented one. INV-28 is the reason: a manifest the
+implementer authored has no authority.
+
+**Authorized by:** GPT-PM, `VERDICT: APPROVE`, which under global CLAUDE.md §20 satisfies §14's two
+branch approvals for `gate/manifest-proposals-g2-g10` (base `main@1361c7d`). That APPROVE explicitly
+does NOT accept any manifest's contents, does not authorize G2..G10 implementation, and does not
+close G1. GPT-PM also ruled the sequencing: G1 closes FIRST and separately, through its own
+`Gate: G1` path under the binding `g1.yaml`; this proposal branch carries no G1 closure material.
+
+**Corrected reasoning, recorded because it was mine and it was wrong:** I argued the nine should be
+reviewed together because their `allowed_paths` must partition the tree without gaps or overlaps.
+GPT-PM rejected the premise -- manifests need not form a disjoint partition; shared governance,
+test and report paths may legitimately repeat across gates. The real test is that no gap or overlap
+is UNEXPLAINED, and that no gate leaks scope. The proposals were drafted under the corrected rule.
+
+**Verification of the proposals, done independently of the agents that wrote them:** a validator
+importing the repository's own `parsePathList`/`compilePattern`/`checkScope`
+(scratchpad, not committed) confirms for all nine: `allowed_paths` non-empty, every pattern
+compiles, no vacuous `**`/`*` allow, both mandatory authority exclusions
+(`governance/gate-manifests/**`, `governance/operator-approvals/**`) present, and a probe of those
+two paths refused by every file.
+
+**A defect in my own verification, recorded because it is the same class this project keeps
+hitting.** That validator reported all nine "ok" while `G8_MANIFEST_PROPOSAL.yaml` was in fact
+unparseable YAML: an unquoted scalar containing `: "` (`(§53: "backup data key...")`) reads as a
+mapping separator. The validator missed it because the repository's manifest reader is a deliberate
+tiny YAML SUBSET parser that only walks the two path blocks -- so "validated against the real
+parser" was a claim broader than the check behind it. CI would have caught it, because
+`npm run format` runs prettier's full YAML parser over the repository; prettier is what found it.
+Fixed by quoting the scalar.
+
+**BLOCKER found in G1's own deliverable, and it is not cosmetic.**
+`scripts/verify/check-test-deletion.mjs` is blind to the repository's actual governance tests. Both
+halves of the guard are restricted to `.test.ts`:
+
+- `const TEST_FILE = /(^|\/)tests\/.*\.test\.ts$|\.test\.ts$/;` -- both branches of the alternation
+  end in `.test.ts`, so a deleted `.test.mjs` is never examined.
+- `git diff -U0 BASE...HEAD -- '*.test.ts'` -- so a newly added `.skip`/`.todo` in a `.test.mjs`
+  file is never seen either.
+
+The repository's test corpus is `packages/contracts/tests/event.test.ts`, `queue.test.ts` (covered)
+and `tests/policy/gate-scope.test.mjs`, `floor-scope.test.mjs`, `codeowners.test.mjs` (NOT covered).
+That is 64 of 101 tests unprotected, and precisely the three suites that enforce governance: a PR
+may delete `gate-scope.test.mjs` outright and the guard prints "no tests removed or skipped."
+
+**Why it survived until now, which matters more than the bug:** this guard is one of the three
+refusal controls G1's remediation plan requires to be "demonstrated on a real PR". None of the three
+ever were -- they are evidenced by unit tests only, and those unit tests were written against
+`.test.ts` fixtures. A single negative control run against the repository's real corpus would have
+exposed it immediately. Same lesson as the existing note about scanning a real corpus before
+trusting a check.
+
+**Catalogue of documents the repository now contradicts** (all verified at their cited lines, not
+taken from a summary): `core/RISK_REGISTER.md` R8 ("probe NOT YET RUN" -- it was run 2026-09-11),
+R11 ("GitHub Actions is not running at all" -- it runs), R12 ("branch protection is not configured,
+404" -- true only of the classic endpoint; ruleset `PDCC` is active, and the private-repo/paid-plan
+clause is moot since the repository is public); `governance/GATE_MANIFEST_INTEGRITY.md` line 31
+("the implementer has no direct-push and no merge permission" -- direct push is blocked by the
+ruleset, but the merge permission exists) and line 160 (88 tests / 30 mutations -- now 101 / 34,
+same figures stale in `governance/plans/G1_REMEDIATION_PLAN.md` lines 149-150);
+`.github/CODEOWNERS` line 3 ("the control that actually enforces" -- contradicted by its own lines
+7-9 and by `require_code_owner_review: false`); `core/PLAN_MASTER_GATES.md` lines 36-53 (G0 outputs
+PENDING/DRAFT against the closure report's DONE/ADOPTED); `governance/gate-manifests/README.md`
+line 15 ("No manifest exists yet" -- `g1.yaml` is adopted).
+
+**A catch-22 the operator must break:** `g1.yaml`'s own status field still says it is awaiting its
+approval hash, while the hash is set. Correcting that line changes the file's hash and therefore
+breaks the very check the hash exists to satisfy, so the implementer cannot fix it and the operator
+must re-approve a new hash if it is to be corrected at all. Recorded rather than worked around.
+
+**One agent claim rejected rather than propagated:** the G1 audit reported that the implementer
+merged PR #1 and PR #3, citing `mergedBy: xLZDx`. That is an inference wider than its evidence --
+a single GitHub identity means the audit trail CANNOT distinguish who clicked, which is R13 itself,
+not proof of who did. The document correction still stands, but on the accurate ground that the
+permission exists, not that it was exercised.
+
+---
+
 ## 2026-09-11 — The floor for "Gate: NONE" PRs is code under scripts/verify/, not a YAML manifest
 
 **Decision:** `governance/gate-manifests/_floor.yaml` (the fixed allow-list for an ungated PR,
