@@ -5,6 +5,37 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — A procedure written for the operator would have produced no evidence
+
+**Decision:** the hash-mismatch control must be run on a PR that **resolves to G1**, and it is not
+complete until a **restored-positive** re-run has also passed. Both attempts go into the evidence.
+
+**What was wrong.** The report pair for the scope-refusal block told the operator to re-run
+`Governance` on _"any open PR"_ after setting `GATE_MANIFEST_APPROVED_HASH_G1` to a wrong value, and
+to stop once the variable was restored. GPT-PM returned a MAJOR on both halves and was right on
+both.
+
+**Verified in the workflow rather than taken on the reviewer's word**
+(`.github/workflows/governance.yml`): the hash step is guarded by
+`if: steps.gate.outputs.gate != 'NONE'` and reads `GATE_MANIFEST_APPROVED_HASH_${GATE}`. So on a
+`Gate: NONE` PR the step never executes at all, and on another gate's PR it reads that gate's
+variable. The operator could have followed the instruction exactly and produced nothing. PR #4 —
+the only other open PR — is on branch `gate/manifest-proposals-g2-g10`, which does not match the
+gate regex, so it is exactly the case that would have failed silently.
+
+**The second half matters as much.** Ending at "restore the variable" proves the failure and leaves
+the restoration unproven. A wrongly restored hash keeps the gate closed permanently and looks
+identical to a correctly restored one until the next PR. The procedure now requires a final green
+re-run through both the hash and scope steps before the control counts as complete.
+
+**Evidence:** GPT-PM review 5183120797 on PR #9; `.github/workflows/governance.yml` lines quoted
+above, read directly.
+
+**How to apply:** a procedure handed to someone else is a deliverable like any other. "Any open PR"
+was a convenience for the writer that silently narrowed to almost nothing for the reader.
+
+---
+
 ## 2026-09-11 — The gate ledger disagreed with the closure report of the gate it tracks
 
 **Decision:** correct `core/PLAN_MASTER_GATES.md`'s G0 output block and G1 row **against the

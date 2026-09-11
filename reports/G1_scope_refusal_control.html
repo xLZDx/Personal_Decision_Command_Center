@@ -396,13 +396,15 @@
   <dl>
     <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ ccfea1b</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 3ba64f6</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Copy page" data-done="Copied"
           data-fail="Select manually">Copy page</button>
 </div>
 <!-- report-conform:end -->
+
+
 
   <div class="verdict">
     <span class="stamp">VERDICT: APPROVE ×2</span>
@@ -643,12 +645,22 @@ Changed paths (4):
         <h3>What is needed from you</h3>
         <ol>
           <li>
-            <strong>Hash-mismatch control.</strong> The cleanest route touches no file at all:
-            temporarily set the variable <code>GATE_MANIFEST_APPROVED_HASH_G1</code> to any wrong
-            value, re-run the <code>Governance</code> check on any open PR, confirm it fails at step
-            5 with <code>Manifest hash mismatch for G1</code>, and restore the previous value
-            <code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code>. The
-            manifest file is never modified, not even for a second.
+            <strong>Hash-mismatch control.</strong> The cleanest route touches no file at all, only
+            the variable. But it must be run on a PR that <strong>resolves to G1</strong>, or it
+            produces no evidence: <code>.github/workflows/governance.yml</code> guards the hash step
+            with <code>if: steps.gate.outputs.gate != 'NONE'</code> and reads
+            <code>GATE_MANIFEST_APPROVED_HASH_${GATE}</code>, so on a <code>Gate: NONE</code> PR the
+            step never executes, and on another gate's PR it reads that gate's variable instead. Any
+            PR from a <code>gate/g1-…</code> branch qualifies.
+            <br /><br />
+            The order: (1) set <code>GATE_MANIFEST_APPROVED_HASH_G1</code> to a deliberately wrong
+            value; (2) re-run <code>Governance</code> on the G1 PR and confirm the failure is at
+            step 5 with <code>Manifest hash mismatch for G1</code>; (3) restore
+            <code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code>;
+            (4) <strong>re-run once more and require green</strong>. Without step 4 the control is
+            not complete: the failure is proven, the restoration is not — and a wrongly restored
+            variable would keep the gate closed permanently. <em>Both</em> attempts, the negative
+            and the restored-positive, go into the evidence.
           </li>
           <li>
             <strong>Forbidden-paths control.</strong> This needs a branch that genuinely touches one
@@ -739,6 +751,8 @@ Changed paths (4):
     </div>
   </section>
 </div>
+
+
 
 
 <!-- report-conform:script:begin -->

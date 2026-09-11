@@ -396,13 +396,15 @@
   <dl>
     <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ ccfea1b</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 3ba64f6</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Копировать страницу" data-done="Скопировано"
           data-fail="Выделите вручную">Копировать страницу</button>
 </div>
 <!-- report-conform:end -->
+
+
 
   <div class="verdict">
     <span class="stamp">VERDICT: APPROVE ×2</span>
@@ -646,12 +648,22 @@ Changed paths (4):
         <ol>
           <li>
             <strong>Контроль несовпадения хеша.</strong> Самый чистый способ — не трогать файл
-            вовсе: временно поставьте переменную <code>GATE_MANIFEST_APPROVED_HASH_G1</code> в любое
-            неверное значение, перезапустите проверку <code>Governance</code> на любом открытом PR,
-            убедитесь, что она падает на шаге 5 с <code>Manifest hash mismatch for G1</code>, и
-            верните прежнее значение
-            <code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code>. Файл при
-            этом не меняется ни на секунду.
+            вовсе, только переменную. Но PR нужен <strong>именно тот, что разрешается в G1</strong>
+            — иначе доказательства не будет вовсе:
+            <code>.github/workflows/governance.yml</code> ставит шаг хеша под
+            <code>if: steps.gate.outputs.gate != 'NONE'</code> и читает
+            <code>GATE_MANIFEST_APPROVED_HASH_${GATE}</code>, так что на PR с
+            <code>Gate: NONE</code> шаг вообще не исполнится, а на PR другого гейта прочитается
+            чужая переменная. Подходит любой PR с ветки <code>gate/g1-…</code>.
+            <br /><br />
+            Порядок: (1) поставить <code>GATE_MANIFEST_APPROVED_HASH_G1</code> в заведомо неверное
+            значение; (2) перезапустить <code>Governance</code> на G1-PR и убедиться, что падение
+            произошло на шаге 5 с <code>Manifest hash mismatch for G1</code>; (3) вернуть
+            <code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code>;
+            (4) <strong>перезапустить ещё раз и дождаться зелёного</strong>. Без четвёртого шага
+            контроль не закрыт: доказано падение, но не доказано, что восстановление верное — а
+            неверно восстановленная переменная оставит гейт закрытым навсегда. В доказательства
+            идут <em>оба</em> прогона, отрицательный и восстановленный.
           </li>
           <li>
             <strong>Контроль запрещённых путей.</strong> Нужна ветка, реально трогающая один из
@@ -740,6 +752,8 @@ Changed paths (4):
     </div>
   </section>
 </div>
+
+
 
 
 <!-- report-conform:script:begin -->
