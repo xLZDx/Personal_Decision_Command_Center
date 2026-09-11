@@ -5,6 +5,25 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #15 round 2: VERDICT APPROVE (final); merge is operator-only, not Claude's
+
+GPT-PM's round-2 review of PR #15 (correlated, exact head `7fcd3b5`) returned `VERDICT: APPROVE`,
+final: all three round-1 findings correctly resolved, no regression, exact-head `Governance`
+(`34659687692`) and `verify` (`34659687719`) both green, PR mergeable.
+
+**This APPROVE does not authorize a Claude merge.** GPT-PM restated the constraint explicitly:
+because PR #15 changes `.github/CODEOWNERS`, it is an authority-surface diff under
+`~/.claude/CLAUDE.md` §24's own carve-out, which excludes that class from the implementer-merge
+mechanism regardless of how clean the APPROVE is. The merge is the operator's, not a routine
+approval to skip. Reported to the operator directly with the PR link.
+
+Once merged: the next step is the already-authorized `control/g1-none-rejection` branch (base =
+that merge's resulting `main`), two sequential attempts (no-gate + ordinary path, then no-gate +
+`scripts/verify/**`), both expected to REFUSE at gate resolution — the real-CI evidence
+`G1_PREADOPTION_EVIDENCE.md` §16 is reserved for.
+
+---
+
 ## 2026-09-12 — PR #15 round 1: GPT-PM's 2 MAJOR + 1 MINOR on the remediation itself, fixed
 
 GPT-PM's round-1 review of PR #15 (`gate/g1-closure-blockers`, correlated, both required checks
