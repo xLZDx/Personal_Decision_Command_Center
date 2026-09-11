@@ -1,0 +1,832 @@
+<title>Слепой страж тестов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Гейт G1 · Ремедиация</p>
+    <h1>Слепой страж тестов</h1>
+    <p class="standfirst">
+      Страж удаления тестов — собственный результат G1 — не видел три из пяти тестовых файлов.
+      Ровно те три, которые проверяют сам механизм гейтов. Он бы написал «тесты не удалены» и вышел
+      с кодом 0.
+    </p>
+    <div class="masthead-meta">
+      <span>11 сентября 2026</span>
+      <span>ветка gate/g1-remediation</span>
+      <span>119 тестов зелёные</span>
+      <span>8 новых мутаций</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 79009de</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Копировать страницу" data-done="Скопировано"
+          data-fail="Выделите вручную">Копировать страницу</button>
+</div>
+<!-- report-conform:end -->
+
+
+
+  <div class="verdict">
+    <span class="stamp">BLOCKER ИСПРАВЛЕН · ДОКАЗАНО В ОБЕ СТОРОНЫ</span>
+    <p>
+      Дефект был не в том, что кто-то один раз написал не то расширение. Одно и то же правило было
+      записано <strong>дважды, в двух синтаксисах, без единой связи между копиями</strong> — так что
+      починка любой из них молча оставила бы вторую более узкой. Теперь источник один, а проверка
+      идёт по настоящему корпусу репозитория, а не по фикстурам, которые выбрал тот же, кто писал
+      правило.
+    </p>
+    <p class="who">
+      scripts/verify/check-test-deletion.mjs · tests/policy/test-deletion.test.mjs ·
+      scripts/verify/mutation-check.mjs · governance/plans/G1_REMEDIATION_PLAN.md
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">01</span>
+      <div><h2>Что именно было сломано</h2></div>
+    </div>
+    <div class="flow">
+      <p>Две независимые записи одного правила, и обе охватывали меньше, чем реальный корпус:</p>
+      <div class="block">
+        <p class="mono">
+          строка 32 — фильтр по статусу файла:<br />
+          <code>/(^|\/)tests\/.*\.test\.ts$|\.test\.ts$/</code>
+        </p>
+        <p class="mono">
+          строка 52 — diff для поиска новых <code>.skip</code>:<br />
+          <code>git(['diff', '-U0', range, '--', '*.test.ts'])</code>
+        </p>
+      </div>
+      <p>
+        Первая альтернатива в регулярке вдобавок была <strong>мёртвой</strong>: вторая её полностью
+        поглощает. То есть сложность была, а смысла в ней не было.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Реальный корпус тестов против того, что страж видел.</caption>
+          <thead>
+            <tr><th>Файл</th><th class="num-col">Видел?</th><th>Что он проверяет</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>packages/contracts/tests/event.test.ts</code></td>
+              <td class="num-col">да</td>
+              <td>Контракт события, граница Telegram</td>
+            </tr>
+            <tr>
+              <td><code>packages/contracts/tests/queue.test.ts</code></td>
+              <td class="num-col">да</td>
+              <td>Непрозрачность очереди и push</td>
+            </tr>
+            <tr>
+              <td><code>tests/policy/gate-scope.test.mjs</code></td>
+              <td class="num-col"><strong>нет</strong></td>
+              <td>Проверка объёма гейта — сердце механизма</td>
+            </tr>
+            <tr>
+              <td><code>tests/policy/floor-scope.test.mjs</code></td>
+              <td class="num-col"><strong>нет</strong></td>
+              <td>Пол для негейтованных PR</td>
+            </tr>
+            <tr>
+              <td><code>tests/policy/codeowners.test.mjs</code></td>
+              <td class="num-col"><strong>нет</strong></td>
+              <td>Полномочия на мерж — единственный реальный контроль</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="alarm">
+        <h3>Это не случайные три файла</h3>
+        <p>
+          Это <strong>все governance-сюиты целиком</strong> — ровно те, что полицейски проверяют сам
+          механизм гейтов. Любой PR мог удалить или пометить <code>.skip</code> все три сразу, и
+          страж напечатал бы <code>Test-deletion guard: no tests removed or skipped.</code> и вышел
+          с кодом 0. Результат гейта G1 не охранял именно ту часть репозитория, ради которой G1
+          существует.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02</span>
+      <div><h2>Почему дефект дожил до чтения, а не до теста</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Файл выполнялся прямо при импорте и звал <code>process.exit</code>. Ни один тест не мог до
+        него дотянуться — вообще. Поэтому дефект нашёлся глазами, а не сюитой.
+      </p>
+      <p class="kicker">Структура приведена к той, что уже есть в репозитории</p>
+      <p>
+        Не изобретена вторая форма, а скопирована из
+        <code>scripts/verify/check-gate-scope.mjs</code>: экспортируемые чистые функции плюс
+        <code>run()</code>, который <em>возвращает</em> код выхода, и охранник
+        <code>import.meta.url === argv[1]</code> для запуска из CLI. Гарантия, ради которой файл
+        существует — «CI роняет сборку, когда покрытие молча падает» — это и есть
+        <code>return 1</code>, и теперь он живёт там, куда тест достаёт.
+      </p>
+      <p class="kicker">Один источник правды</p>
+      <p>
+        <code>TEST_EXTENSIONS</code> — единственное место, где список расширений записан.
+        <code>TEST_FILE</code> (регулярка) и <code>TEST_PATHSPECS</code> (синтаксис git) оба
+        выводятся из него. Добавить новое расширение — теперь однострочная правка.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">03</span>
+      <div><h2>Три настоящих дефекта поведения, найденных попутно</h2></div>
+    </div>
+    <div class="flow">
+      <div class="defects">
+        <div class="defect">
+          <span class="idx">1</span>
+          <div>
+            <h3>Имена файлов экранировались git-ом и не совпадали с шаблоном</h3>
+            <p>
+              <code>--name-status</code> вызывался без <code>-z</code>. Без него git берёт необычные
+              имена в кавычки и экранирует обратными слешами — и экранированный путь сверяется с
+              шаблоном, написанным про настоящий. <code>check-gate-scope.mjs</code> это рассуждение
+              у себя уже документировал; этот файл его не перенял.
+            </p>
+          </div>
+        </div>
+        <div class="defect">
+          <span class="idx">2</span>
+          <div>
+            <h3>Переименование рассинхронизировало разбор всего дальнейшего</h3>
+            <p>
+              Под <code>-z</code> переименование несёт <strong>два</strong> поля пути, а не одно.
+              Чтение полей парами сбивает все записи после первого переименования — удаление,
+              идущее следом, прочиталось бы как строка статуса.
+            </p>
+          </div>
+        </div>
+        <div class="defect">
+          <span class="idx">3</span>
+          <div>
+            <h3>Переименование <em>из</em> корпуса тестов проходило незамеченным</h3>
+            <p>
+              Проверялся только адрес назначения. <code>x.test.mjs → x.mjs</code> — это полная
+              потеря покрытия, при которой в диффе нет ни одного удаления. Раньше — молчаливая
+              заметка, теперь — отказ.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">04</span>
+      <div><h2>Доказательство, а не заявление</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Зелёная сюита — это заявление. Чтобы оно стало доказательством, дефект был намеренно
+        возвращён на место и сюита прогнана снова.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Обе стороны измерены, а не предположены.</caption>
+          <thead>
+            <tr><th>Прогон</th><th class="num-col">Результат</th><th>Что доказывает</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>npx vitest run</code> на исправлении</td>
+              <td class="num-col">119 / 119</td>
+              <td>6 файлов, всё зелено</td>
+            </tr>
+            <tr>
+              <td>Тот же прогон с возвращённым дефектом<br /><code>TEST_EXTENSIONS = ['ts']</code></td>
+              <td class="num-col">6 падений</td>
+              <td>Включая проверку корпуса и путь выхода <code>run()</code> — тесты кусаются
+                именно там, где надо</td>
+            </tr>
+            <tr>
+              <td><code>npm run verify:mutation</code></td>
+              <td class="num-col">42 / 42 убиты</td>
+              <td>8 новых мутаций: обе записи правила по отдельности, источник переименования,
+                флаг <code>-z</code>, счёт полей, маркер <code>.skip</code>, оба пути
+                <code>return 1</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">Проверка, которая поймала бы исходный дефект</p>
+      <p>
+        Тест перечисляет все отслеживаемые git-ом файлы, в имени которых есть <code>.test.</code> —
+        <strong>намеренно другое правило</strong>, не то, что проверяется, — и требует, чтобы
+        <code>TEST_FILE</code> совпал с каждым. Поштучный юнит-тест этого не поймал бы никогда:
+        каждый случай был бы написан с фикстурой <code>.test.ts</code> тем же человеком, который
+        писал правило, прошёл бы и не доказал ничего про корпус, с которым страж имеет дело в
+        реальности.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">05</span>
+      <div><h2>Вакуумная проверка в моём собственном тесте</h2></div>
+    </div>
+    <div class="flow">
+      <div class="defect">
+        <h3>Записываю, потому что это ровно тот класс дефекта, который я ищу у других</h3>
+        <p>
+          Случай, утверждающий «у git спрашиваются все расширения», сначала просто перебирал
+          <code>TEST_EXTENSIONS</code>. Под мутацией <code>['ts']</code> он <strong>остался
+          зелёным</strong> — потому что утверждал лишь то, что страж согласован сам с собой, и
+          ничего больше. Проверка уже своего описания.
+        </p>
+        <p class="why">
+          Найдено прогоном мутации, а не чтением. Исправлено так: сначала <em>названный пол</em> —
+          дословно <code>*.test.mjs</code> и <code>*.test.ts</code> — и только потом производный
+          цикл. Перемерено: тот же случай под той же мутацией теперь падает.
+        </p>
+      </div>
+      <div class="defect">
+        <h3>И второй случай того же класса — его нашёл уже мутационный стенд</h3>
+        <p>
+          Первый полный прогон дал <strong>одного выжившего</strong>:
+          <code>check-test-deletion.mjs: drop -z</code>. Настоящего, а не артефакт стенда — все
+          утверждения новой сюиты кормили <code>findProblems</code> готовыми строками, склеенными
+          через NUL, поэтому флаг в месте вызова не проверялся вообще.
+        </p>
+        <p class="why">
+          Починено не изобретением второй формы, а копированием той, что уже есть:
+          <code>gate-scope.test.mjs</code> проверяет это на <strong>настоящем временном
+          git-репозитории</strong> с <code>core.quotepath true</code> и неудобными именами файлов.
+          Теперь так же — временный репозиторий, где удаляются <code>документ.test.mjs</code> и
+          <code>has space.test.mjs</code>, прогоняется через настоящий <code>run()</code>. Измерено
+          в обе стороны: зелено с <code>-z</code>, оба новых случая падают без него.
+        </p>
+        <p>
+          Попутно выяснилось, что мой собственный комментарий к коду был уже правды: без
+          <code>-z</code> ломается <em>дважды</em>. Разборщик записей работает по NUL, поэтому весь
+          вывод приходит одним полем и не распознаётся вообще — это происходит <em>раньше</em>, чем
+          дело доходит до экранирования имён. Комментарий исправлен на оба механизма.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">06</span>
+      <div><h2>Что это меняет для закрытия G1</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        План ремедиации требует четыре отрицательных контроля — «контроль, который никогда не видели
+        отказывающим, не считается работающим». Третий из них звучит так: <em>PR, удаляющий или
+        помечающий <code>.skip</code> тест, обязан провалить страж удаления тестов.</em>
+      </p>
+      <div class="note">
+        <strong>До сегодняшнего дня этот контроль был недемонстрируем как написан.</strong> С
+        файлом <code>.mjs</code> он бы молча прошёл. Исправление делает его осмысленным.
+      </div>
+      <div class="block">
+        <p class="kicker">И страж тут же отказал — этому самому PR</p>
+        <p>
+          Первый прогон CI на PR #5 упал шестью сообщениями <code>newly skipped test</code>, и все
+          шесть — <strong>фикстуры из нового теста</strong>. Строки вроде
+          <code>"+  it.skip('refuses an out-of-scope path', () =&gt; {"</code> — это строковые
+          литералы, описывающие синтаксис пропуска, и построчный сканер не отличает их от
+          по-настоящему пропущенного теста. Часом раньше он бы их вообще не увидел: они лежат в
+          файле <code>.mjs</code>.
+        </p>
+        <p>
+          <strong>Чем это является и чем нет — узко.</strong> Это показывает, что половина про
+          <code>.skip</code> теперь достаёт до <code>.mjs</code> и <em>отказывает на реальном PR в
+          реальном CI</em>. Это <strong>не</strong> закрытый третий контроль: сработало ложное
+          срабатывание, а не настоящий пропуск, и половина про удаление на реальном PR не
+          проверялась ни разу. Записать это как «контроль продемонстрирован» было бы той же
+          подменой, против которой весь этот отчёт.
+        </p>
+        <p>
+          Починено <strong>в тесте, а не в стороже</strong>: фикстуры теперь собираются во время
+          выполнения, маркер не встречается в исходнике дословно. Научить страж игнорировать
+          строковые литералы или вывести его собственный тест из-под проверки — каждый из вариантов
+          проделывает дыру в стороже, вся ценность которого в том, что дыр нет. Неудобство
+          оставлено в тесте, ограничение задокументировано рядом с фикстурами.
+        </p>
+      </div>
+      <p class="kicker">Заодно приведён в соответствие с реальностью сам план</p>
+      <p>
+        <code>governance/plans/G1_REMEDIATION_PLAN.md</code> утверждал, что шаги 2, 4, 5, 8 ждут
+        оператора. Измерено через <code>gh api</code>, а не по памяти: репозиторий
+        <strong>публичный</strong> (<code>isPrivate: false</code>), ruleset <code>PDCC</code>
+        (id <code>22899342</code>) в состоянии <code>enforcement: active</code>. Значит
+        <strong>R11 и R12 закрыты</strong> — оператор выбрал вариант «сделать публичным», который
+        закрывает оба сразу и бесплатно. <strong>R13 остаётся открытым.</strong>
+      </p>
+      <div class="alarm">
+        <h3>Поправка к собственному черновику этого отчёта</h3>
+        <p>
+          Сначала я написал, что проверка объёма «продемонстрирована в обе стороны». Это неверно.
+          Шаг scope наблюдался <strong>только проходящим</strong>. Отказывали более ранние прогоны —
+          но на шаге <em>хеша</em>, потому что одобренного хеша ещё не существовало, а это другой
+          контроль. Из четырёх отрицательных контролей по-настоящему выполнен <strong>один</strong>:
+          доказательство защиты ветки выводом <code>gh api</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">07</span>
+      <div><h2>Что осталось до закрытия G1</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>Оставшиеся пункты и кто их закрывает.</caption>
+          <thead>
+            <tr><th>Пункт</th><th>Кто</th><th>Почему не закрыт</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Контроль отказа на шаге scope</td>
+              <td>я</td>
+              <td>Нужен PR, трогающий путь вне <code>allowed_paths</code></td>
+            </tr>
+            <tr>
+              <td>Контроль несовпадения хеша</td>
+              <td><strong>оператор</strong></td>
+              <td>Требует ветки, намеренно правящей <code>g1.yaml</code> — это операторская
+                территория</td>
+            </tr>
+            <tr>
+              <td>Контроль удаления теста на реальном PR</td>
+              <td>я</td>
+              <td>Стал осмысленным только сейчас</td>
+            </tr>
+            <tr>
+              <td>R13 — модель учётных данных</td>
+              <td><strong>оператор</strong></td>
+              <td>Один аккаунт на обе роли; разделение процедурное, не механическое</td>
+            </tr>
+            <tr>
+              <td>Ревью со свежим контекстом и отчёт о закрытии</td>
+              <td>я</td>
+              <td>После контролей</td>
+            </tr>
+            <tr>
+              <td>Устаревшие строки в <code>PLAN_MASTER_GATES.md</code></td>
+              <td>я, но позже</td>
+              <td>Тот же участок правит открытый PR #2 — правка здесь дала бы конфликт на мерже</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->

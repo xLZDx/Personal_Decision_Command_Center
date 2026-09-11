@@ -2,7 +2,8 @@
 
 **Plan ID:** `pdos-g1-remediation-2026-09-10`
 **Gate:** G1 — Repository + governance enforcement + CI + contracts
-**Status:** OPEN, awaiting operator decisions on steps 1-2 (see "Blocked on the operator")
+**Status:** OPEN. Steps 1-8 done (2026-09-11); remaining: R13, three of the four negative controls,
+the fresh-context review, and the closure report. See "Blocked on the operator".
 **Supersedes:** nothing. Commit `b784265` is **bootstrap implementation, not gate-approved work**.
 
 ## Why this plan exists
@@ -29,7 +30,12 @@ steps executed**. GitHub's own check-run annotation:
 So every claim of the form "CI enforces X" in this repository is currently false — not because a
 check fails, but because no check runs. Recorded as `R11` in `../core/RISK_REGISTER.md`.
 
-## Blocked on the operator (nothing else can be verified until these are settled)
+## Blocked on the operator
+
+**Updated 2026-09-11: two of these three are settled.** The section heading used to read "nothing
+else can be verified until these are settled", which is no longer true and is left here only so the
+change is visible rather than silent. **R11 and R12: RESOLVED** — the operator took the
+make-it-public option, which closes both at zero cost. **R13: still open.**
 
 1. **R11 — GitHub Actions billing.** Billing/spending limits are account settings and are outside
    the implementer's authority entirely (global operating contract §4).
@@ -55,17 +61,49 @@ check fails, but because no check runs. Recorded as `R11` in `../core/RISK_REGIS
 
 ```
 1. G0 administrative closure                                    DONE (../G0_CLOSURE_REPORT.md)
-2. Operator settles R11/R12/R13                                 BLOCKED ON OPERATOR
-3. G1 plan reviewed and GO given                                pending
-4. Operator authors/adopts governance/gate-manifests/g1.yaml    pending (operator-only, INV-28)
-5. Operator sets GATE_MANIFEST_APPROVED_HASH_G1 repo variable   pending (operator-only, out of tree)
+2. Operator settles R11/R12/R13                                 R11 DONE, R12 DONE, R13 OPEN
+3. G1 plan reviewed and GO given                                DONE
+4. Operator authors/adopts governance/gate-manifests/g1.yaml    DONE (operator-only, INV-28)
+5. Operator sets GATE_MANIFEST_APPROVED_HASH_G1 repo variable   DONE (operator-only, out of tree)
 6. Create branch gate/g1-remediation                            AUTHORIZED by GPT-PM APPROVE
 7. Fix G1-M2: one governance workflow, hash-check -> scope-check DONE (see below)
-8. Confirm CI actually runs and is green on that branch          blocked on step 2
-9. Negative-control PR tests (see below)                         blocked on steps 2, 4, 5
+8. Confirm CI actually runs and is green on that branch          DONE (run 34544309071, steps 4-6 green)
+9. Negative-control PR tests (see below)                         1 of 4 done
 10. Fresh-context G1 review                                      pending
 11. G1 closure report                                            pending
 ```
+
+**Status of step 2, measured on 2026-09-11 rather than assumed.** The operator took the second R12
+option: the repository is public (`gh repo view --json isPrivate` → `false`), which makes Actions
+free and unmetered and closes **R11** with it, and ruleset `PDCC` (id `22899342`) is
+`"enforcement": "active"` on `main`. **R13 remains open** and is the one item here no amount of
+implementation can settle: one GitHub identity behind both roles means the audit trail cannot
+distinguish implementer from operator, so any separation described in these documents is procedural,
+not mechanical.
+
+**Status of step 9 — stated narrowly, because the obvious wider claim is not supported.** Only the
+fourth bullet is actually done: branch protection is now evidenced by `gh api` output rather than by
+this document's word for it.
+
+The **scope-step control has only ever been observed PASSING** (run `34544309071`, step 6). It has
+never been observed refusing. Earlier runs did refuse — but at the **hash** step, because no
+approved hash existed yet, which is a different control. Saying "the scope check has been shown to
+refuse" would be exactly the substitution this section exists to prevent: a guard that has never
+been seen saying no is not known to say no. It needs a PR that touches a path outside
+`allowed_paths`.
+
+The **hash-mismatch control** has not been run either; it requires a branch that deliberately edits
+`g1.yaml`, which is operator-only territory.
+
+The **test-deletion control has partial evidence and stays open.** On PR #5 the guard refused a real
+PR in real CI (run `34632358953`), reaching `.mjs` files for the first time — but what it caught was
+a **false positive** (string fixtures describing skip syntax), not a genuinely skipped test, and the
+deletion half has still never fired on a real PR. Partial evidence is not the control.
+
+The **test-deletion control was not demonstrable
+as written until 2026-09-11**: the guard was blind to `.test.mjs`, so a PR deleting a `.mjs` test
+would have passed it silently. Fixed and regression-tested — see `../../core/DECISION_LOG.md`,
+entry "G1's own test-deletion guard was blind to `.test.mjs`".
 
 ### Step 7, as built
 

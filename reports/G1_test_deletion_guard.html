@@ -1,0 +1,832 @@
+<title>The Blind Test Guard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Gate G1 · Remediation</p>
+    <h1>The Blind Test Guard</h1>
+    <p class="standfirst">
+      The test-deletion guard — G1's own deliverable — could not see three of the five test files.
+      Exactly the three that check the gate mechanism itself. It would have written "no tests removed"
+      and exited with code 0.
+    </p>
+    <div class="masthead-meta">
+      <span>11 September 2026</span>
+      <span>branch gate/g1-remediation</span>
+      <span>119 tests green</span>
+      <span>8 new mutations</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 79009de</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+
+
+  <div class="verdict">
+    <span class="stamp">BLOCKER FIXED · PROVED IN BOTH DIRECTIONS</span>
+    <p>
+      The defect was not that someone once wrote the wrong extension. One and the same rule was
+      written down <strong>twice, in two syntaxes, with no link whatsoever between the copies</strong> — so
+      fixing either one would have left the other silently narrower. Now there is a single source, and the
+      check runs against the repository's real corpus, not against fixtures chosen by the same person who wrote the rule.
+    </p>
+    <p class="who">
+      scripts/verify/check-test-deletion.mjs · tests/policy/test-deletion.test.mjs ·
+      scripts/verify/mutation-check.mjs · governance/plans/G1_REMEDIATION_PLAN.md
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">01</span>
+      <div><h2>What exactly was broken</h2></div>
+    </div>
+    <div class="flow">
+      <p>Two independent statements of one rule, and both covered less than the actual corpus:</p>
+      <div class="block">
+        <p class="mono">
+          line 32 — the file-status filter:<br />
+          <code>/(^|\/)tests\/.*\.test\.ts$|\.test\.ts$/</code>
+        </p>
+        <p class="mono">
+          line 52 — the diff used to find newly added <code>.skip</code>:<br />
+          <code>git(['diff', '-U0', range, '--', '*.test.ts'])</code>
+        </p>
+      </div>
+      <p>
+        On top of that, the first alternative in the regex was <strong>dead</strong>: the second one fully
+        subsumes it. So there was complexity, and there was no meaning in it.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>The real test corpus against what the guard could see.</caption>
+          <thead>
+            <tr><th>File</th><th class="num-col">Seen?</th><th>What it checks</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>packages/contracts/tests/event.test.ts</code></td>
+              <td class="num-col">yes</td>
+              <td>Event contract, the Telegram boundary</td>
+            </tr>
+            <tr>
+              <td><code>packages/contracts/tests/queue.test.ts</code></td>
+              <td class="num-col">yes</td>
+              <td>Queue opacity and push</td>
+            </tr>
+            <tr>
+              <td><code>tests/policy/gate-scope.test.mjs</code></td>
+              <td class="num-col"><strong>no</strong></td>
+              <td>The gate-scope check — the heart of the mechanism</td>
+            </tr>
+            <tr>
+              <td><code>tests/policy/floor-scope.test.mjs</code></td>
+              <td class="num-col"><strong>no</strong></td>
+              <td>The floor for ungated PRs</td>
+            </tr>
+            <tr>
+              <td><code>tests/policy/codeowners.test.mjs</code></td>
+              <td class="num-col"><strong>no</strong></td>
+              <td>Merge authority — the only real control</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="alarm">
+        <h3>These are not three random files</h3>
+        <p>
+          These are <strong>all of the governance suites, in their entirety</strong> — precisely the ones that
+          police the gate mechanism itself. Any PR could have deleted or marked <code>.skip</code> all three at
+          once, and the guard would have printed <code>Test-deletion guard: no tests removed or skipped.</code>
+          and exited with code 0. The G1 gate's own deliverable was not guarding exactly the part of the
+          repository that G1 exists for.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02</span>
+      <div><h2>Why the defect survived until it was read, not until it was tested</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The file executed directly on import and called <code>process.exit</code>. No test could reach
+        it — at all. That is why the defect was found by eye, not by a suite.
+      </p>
+      <p class="kicker">The structure has been brought into line with one that already exists in the repository</p>
+      <p>
+        A second form was not invented; it was copied from
+        <code>scripts/verify/check-gate-scope.mjs</code>: exported pure functions plus
+        <code>run()</code>, which <em>returns</em> the exit code, and an
+        <code>import.meta.url === argv[1]</code> guard for running from the CLI. The guarantee the file
+        exists for — "CI fails the build when coverage silently drops" — is precisely
+        <code>return 1</code>, and it now lives where a test can reach it.
+      </p>
+      <p class="kicker">A single source of truth</p>
+      <p>
+        <code>TEST_EXTENSIONS</code> is the only place where the list of extensions is written down.
+        <code>TEST_FILE</code> (the regex) and <code>TEST_PATHSPECS</code> (git syntax) are both
+        derived from it. Adding a new extension is now a one-line edit.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">03</span>
+      <div><h2>Three real behavioural defects found along the way</h2></div>
+    </div>
+    <div class="flow">
+      <div class="defects">
+        <div class="defect">
+          <span class="idx">1</span>
+          <div>
+            <h3>File names were escaped by git and did not match the pattern</h3>
+            <p>
+              <code>--name-status</code> was called without <code>-z</code>. Without it git puts unusual
+              names in quotes and escapes them with backslashes — and the escaped path is then matched
+              against a pattern written for the real one. <code>check-gate-scope.mjs</code> had already
+              documented this reasoning in its own code; this file did not adopt it.
+            </p>
+          </div>
+        </div>
+        <div class="defect">
+          <span class="idx">2</span>
+          <div>
+            <h3>A rename desynchronised the parsing of everything that followed</h3>
+            <p>
+              Under <code>-z</code> a rename carries <strong>two</strong> path fields, not one.
+              Reading the fields in pairs throws off every record after the first rename — a deletion
+              following it would be read as a status line.
+            </p>
+          </div>
+        </div>
+        <div class="defect">
+          <span class="idx">3</span>
+          <div>
+            <h3>A rename <em>out of</em> the test corpus went unnoticed</h3>
+            <p>
+              Only the destination address was checked. <code>x.test.mjs → x.mjs</code> is a total
+              loss of coverage in which the diff contains no deletion at all. Previously a silent
+              note, now a refusal.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">04</span>
+      <div><h2>Proof, not a claim</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        A green suite is a claim. To turn it into proof, the defect was deliberately put back in place
+        and the suite was run again.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Both directions measured, not assumed.</caption>
+          <thead>
+            <tr><th>Run</th><th class="num-col">Result</th><th>What it proves</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>npx vitest run</code> on the fix</td>
+              <td class="num-col">119 / 119</td>
+              <td>6 files, all green</td>
+            </tr>
+            <tr>
+              <td>The same run with the defect put back<br /><code>TEST_EXTENSIONS = ['ts']</code></td>
+              <td class="num-col">6 failures</td>
+              <td>Including the corpus check and the <code>run()</code> exit path — the tests bite
+                exactly where they should</td>
+            </tr>
+            <tr>
+              <td><code>npm run verify:mutation</code></td>
+              <td class="num-col">42 / 42 killed</td>
+              <td>8 new mutations: each of the two statements of the rule separately, the rename source,
+                the <code>-z</code> flag, the field count, the <code>.skip</code> marker, both
+                <code>return 1</code> paths</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">The check that would have caught the original defect</p>
+      <p>
+        The test enumerates every git-tracked file whose name contains <code>.test.</code> —
+        <strong>deliberately a different rule</strong> from the one under test — and requires
+        <code>TEST_FILE</code> to match every one of them. A case-by-case unit test would never have
+        caught this: every case would have been written with a <code>.test.ts</code> fixture by the same
+        person who wrote the rule, would have passed, and would have proved nothing about the corpus the
+        guard deals with in reality.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">05</span>
+      <div><h2>A vacuous check in my own test</h2></div>
+    </div>
+    <div class="flow">
+      <div class="defect">
+        <h3>I am recording this because it is exactly the class of defect I look for in other people's work</h3>
+        <p>
+          The case asserting that "all extensions are asked of git" at first simply iterated over
+          <code>TEST_EXTENSIONS</code>. Under the <code>['ts']</code> mutation it <strong>stayed
+          green</strong> — because it asserted only that the guard is consistent with itself, and
+          nothing more. A check narrower than its own description.
+        </p>
+        <p class="why">
+          Found by a mutation run, not by reading. Fixed like this: first a <em>named floor</em> —
+          literally <code>*.test.mjs</code> and <code>*.test.ts</code> — and only then the derived
+          loop. Re-measured: the same case under the same mutation now fails.
+        </p>
+      </div>
+      <div class="defect">
+        <h3>And a second case of the same class — this one found by the mutation harness</h3>
+        <p>
+          The first full run reported <strong>one survivor</strong>:
+          <code>check-test-deletion.mjs: drop -z</code>. A real one, not a harness artifact — every
+          assertion in the new suite fed <code>findProblems</code> ready-made NUL-joined strings, so
+          the flag at the call site was never exercised at all.
+        </p>
+        <p class="why">
+          Fixed by copying the shape that already exists rather than inventing a second one:
+          <code>gate-scope.test.mjs</code> tests this against a <strong>real temporary git
+          repository</strong> with <code>core.quotepath true</code> and awkward filenames. This
+          suite now does the same — a scratch repository where <code>документ.test.mjs</code> and
+          <code>has space.test.mjs</code> are deleted, run through the real <code>run()</code>.
+          Measured both ways: green with <code>-z</code>, and both new cases fail without it.
+        </p>
+        <p>
+          That also showed my own code comment to be narrower than the truth: without
+          <code>-z</code> the check breaks <em>twice</em>. The record parser is NUL-based, so the
+          whole output arrives as a single field and nothing is recognised at all — which happens
+          <em>before</em> the filename-escaping problem is even reached. The comment was corrected
+          to state both mechanisms.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">06</span>
+      <div><h2>What this changes for closing G1</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The remediation plan requires four negative controls — "a control never seen refusing does not
+        count as working". The third of them reads: <em>a PR that deletes a test or marks it
+        <code>.skip</code> must fail the test-deletion guard.</em>
+      </p>
+      <div class="note">
+        <strong>Until today this control was undemonstrable as written.</strong> With an
+        <code>.mjs</code> file it would have silently passed. The fix makes it meaningful.
+      </div>
+      <div class="block">
+        <p class="kicker">And the guard immediately refused — this very PR</p>
+        <p>
+          The first CI run on PR #5 failed with six <code>newly skipped test</code> reports, and all
+          six were <strong>fixtures from the new test</strong>. Lines such as
+          <code>"+  it.skip('refuses an out-of-scope path', () =&gt; {"</code> are string literals
+          describing skip syntax, and a line-based scanner cannot tell them from a genuinely skipped
+          test. An hour earlier it would not have seen them at all: they live in an
+          <code>.mjs</code> file.
+        </p>
+        <p>
+          <strong>What that is and is not, stated narrowly.</strong> It shows the
+          <code>.skip</code> half now reaches <code>.mjs</code> and <em>refuses on a real PR in real
+          CI</em>. It is <strong>not</strong> the third control closed: what fired was a false
+          positive, not a genuine skip, and the deletion half has never been exercised on a real PR
+          at all. Recording it as "control demonstrated" would be the very substitution this whole
+          report is about.
+        </p>
+        <p>
+          Fixed <strong>in the test, not in the guard</strong>: the fixtures are now assembled at
+          runtime, so the marker never appears verbatim in the source. Teaching the guard to ignore
+          string literals, or exempting its own test file from scanning, would each put a hole in a
+          guard whose entire value is having none. The inconvenience stays in the test, and the
+          limitation is documented beside the fixtures.
+        </p>
+      </div>
+      <p class="kicker">The plan itself has also been brought into line with reality</p>
+      <p>
+        <code>governance/plans/G1_REMEDIATION_PLAN.md</code> claimed that steps 2, 4, 5, 8 were waiting
+        on the operator. Measured through <code>gh api</code>, not from memory: the repository is
+        <strong>public</strong> (<code>isPrivate: false</code>), the <code>PDCC</code> ruleset
+        (id <code>22899342</code>) is in state <code>enforcement: active</code>. That means
+        <strong>R11 and R12 are closed</strong> — the operator chose the "make it public" option, which
+        closes both at once and for free. <strong>R13 remains open.</strong>
+      </p>
+      <div class="alarm">
+        <h3>A correction to my own draft of this report</h3>
+        <p>
+          I first wrote that the scope check had been "demonstrated in both directions". That is wrong.
+          The scope step was observed <strong>only passing</strong>. Earlier runs did refuse — but at the
+          <em>hash</em> step, because no approved hash existed yet, and that is a different control.
+          Of the four negative controls, <strong>one</strong> has genuinely been performed:
+          proving branch protection through <code>gh api</code> output.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">07</span>
+      <div><h2>What remains before G1 can close</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>The remaining items and who closes them.</caption>
+          <thead>
+            <tr><th>Item</th><th>Who</th><th>Why it is not closed</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Refusal control at the scope step</td>
+              <td>me</td>
+              <td>Requires a PR touching a path outside <code>allowed_paths</code></td>
+            </tr>
+            <tr>
+              <td>Hash-mismatch control</td>
+              <td><strong>operator</strong></td>
+              <td>Requires a branch deliberately editing <code>g1.yaml</code> — that is operator
+                territory</td>
+            </tr>
+            <tr>
+              <td>Test-deletion control on a real PR</td>
+              <td>me</td>
+              <td>Only became meaningful just now</td>
+            </tr>
+            <tr>
+              <td>R13 — the credentials model</td>
+              <td><strong>operator</strong></td>
+              <td>One account for both roles; the separation is procedural, not mechanical</td>
+            </tr>
+            <tr>
+              <td>Fresh-context review and the closure report</td>
+              <td>me</td>
+              <td>After the controls</td>
+            </tr>
+            <tr>
+              <td>Stale lines in <code>PLAN_MASTER_GATES.md</code></td>
+              <td>me, later</td>
+              <td>The open PR #2 edits the same region — an edit here would cause a merge conflict</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
