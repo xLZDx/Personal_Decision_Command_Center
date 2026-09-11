@@ -5,6 +5,46 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — I gave the operator a wrong reason for not merging, and they decided on it
+
+**What happened.** Asked "why are you still waiting for me to merge?", I answered that
+`docs/architecture/TDD.md:198` (INV-20, "Implementer cannot approve or merge own gate") forbids it,
+that INV-20 sits inside the `TDD.md:176` non-negotiable block, and therefore that **even a direct
+operator instruction could not lift it** — only ADR + independent review + operator approval could.
+I quoted the two files accurately. The conclusion drawn from them was still wrong.
+
+**Why it was wrong.** INV-20 had **already been narrowed, earlier the same day**, by the operator's
+own delegation plus a GPT-PM ruling — recorded in this very file under "GPT-PM-authorized PR merge:
+INV-20 narrowed for this project, confirmed globally", and in `~/.claude/CLAUDE.md` §24. Under that
+narrowing the implementer MAY merge, given a genuine GPT-PM `VERDICT: APPROVE` on the exact final
+head, this repository's `verify` and `governance` both green on that same head, a mergeable PR, and
+a diff that does not touch the authority surface (`governance/gate-manifests/**`,
+`governance/operator-approvals/**`, `.github/CODEOWNERS`, branch-protection settings).
+
+**So the real blocker was mine, not the operator's.** Neither PR #2 nor PR #5 had a GPT-PM review on
+its final head, because I had not run one. That is a step I can take without the operator at all.
+Presented as "the rule forbids me", it read as an external constraint; it was an omission.
+
+**The cost, which is the reason this is logged rather than quietly corrected.** The operator acted
+on the wrong reason: they authorized changing the rule ("даю авторизацию поменять утверждение что
+ты не мерджишь") and delegated a governance decision they said they did not understand ("я не
+понимаю что это значит, даю авторизацию тебе решать эти вопросы без меня"). A rule change was put
+on the table to solve a problem that did not need one. The narrowest correct action was to run the
+review I had skipped.
+
+**How this happened, stated so the pattern is recognisable.** Two accurate file citations, and an
+inference wider than them: I checked what the invariant SAYS and not whether it had since been
+amended — in the same file I append to every session. Same class as the finding this branch exists
+to fix: evidence weaker than the claim resting on it. `TDD.md:198` is still the current text of
+INV-20; what I missed is that this log records a narrowing that governs how it is applied.
+
+**How to apply:** before citing an invariant as the reason something cannot be done, grep this log
+for that invariant's identifier. An invariant's text in the TDD is necessary but not sufficient —
+narrowings live here and in `~/.claude/CLAUDE.md`, and a citation that ignores them is a
+`HYPOTHESIS` dressed as a `FACT`.
+
+---
+
 ## 2026-09-11 — G1's own test-deletion guard was blind to `.test.mjs`, on both halves at once
 
 **Decision:** `scripts/verify/check-test-deletion.mjs` is rewritten so the rule "what counts as a
@@ -115,6 +155,9 @@ about the corpus the guard actually faces.
 **How to apply:** adding a test file in a new extension is now a one-line change in
 `TEST_EXTENSIONS`, and the corpus assertion fails loudly if someone forgets. Do not re-encode the
 extension rule anywhere else — the second copy is the defect, not the wrong value in it.
+
+---
+
 ## 2026-09-11 — G2 preflight audited: 1 of 3 done (unmerged), 2 never attempted; RESULTS.md over-claimed
 
 **Why this was checked:** the operator asked what the state of G2 actually is. `PLAN_MASTER_GATES.md`
