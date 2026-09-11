@@ -1,0 +1,698 @@
+# NON-BINDING IMPLEMENTER PROPOSAL FOR GATE G4 (Telegram direct TDLib connector).
+# This file does not authorize any mutation, and it is not in the repository.
+#
+# It was written to a scratchpad directory on purpose. INV-28 makes gate manifests and their
+# approved hashes operator-owned governance state; an implementer-authored file placed in
+# governance/gate-manifests/ would not acquire authority by being there, and could not be merged
+# anyway -- every manifest in this repository, and the ungated floor in
+# scripts/verify/check-floor-scope.mjs, forbids that directory to every pull request that exists.
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL EXCLUSIVITY. The
+# authenticated implementation session on this machine holds a classic PAT with `repo`, `workflow`
+# and `admin:org`, and `.permissions.admin` is true on this repository (measured 2026-09-10,
+# governance/plans/G1_PREADOPTION_EVIDENCE.md section 3.1). It is able to set
+# GATE_MANIFEST_APPROVED_HASH_G4 itself. The separation is procedural until that changes:
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# WHAT G4 IS
+#
+# core/PLAN_MASTER_GATES.md, G4 row, verbatim:
+#
+#   "Telegram direct TDLib connector (session, connected_at boundary, local spool, deterministic
+#    rules/provenance, offline/reconnect, Tunnel Content Gateway, ECDH/HKDF/AES-GCM drill-down)"
+#
+# ---------------------------------------------------------------------------
+# THE ONE THING THIS MANIFEST EXISTS TO ENFORCE
+#
+# Telegram content, and every value or assignment derived from it, must never reach AI. Not
+# directly, and not indirectly through a shared or combined object. INV-03, INV-04, INV-05,
+# INV-26. core/SOURCE_POLICY.md quotes Telegram's own terms verbatim and the prohibition is BROADER
+# than "no training": "scraping, indexing, harvesting, aggregation or use of data obtained from its
+# platform to train, fine-tune, VALIDATE or otherwise engage in the development, enhancement,
+# BENCHMARKING or deployment of artificial intelligence, machine learning models and similar
+# technologies." A vector or embedding INDEX over Telegram content is prohibited with zero model
+# training involved; using Telegram content as an evaluation set is prohibited. That finding is
+# recorded in governance/G0_CLOSURE_REPORT.md as one of the three findings G0 exists to have
+# caught.
+#
+# HOW THIS MANIFEST MAKES THAT STRUCTURAL RATHER THAN ADVISORY. Not by asking the implementer to
+# stay out of the AI paths -- an instruction in a comment is exactly what this repository's
+# governance mechanism exists to replace. By construction, and each of these is checkable by
+# reading the two lists below:
+#
+#   (a) allowed_paths is a CLOSED ALLOWLIST, and it is enumerated, not globbed. There is no bare
+#       `**`, no `packages/**`, no `services/**`, no `connectors/**`. Anything not listed is
+#       refused by scripts/verify/check-gate-scope.mjs before anyone reads the diff. This is the
+#       part that actually constrains the gate.
+#
+#   (b) The allowlist contains NOTHING under packages/ -- not one entry. ADR-005 places the
+#       provenance DAG and the fail-closed composition rule in packages/provenance and
+#       packages/policy; TDD 24.1 places the single AI entry point in AIContextBuilder. Whatever
+#       package those end up in, G4 cannot touch it, because G4 cannot touch packages/ at all.
+#
+#   (c) The allowlist contains NOTHING under apps/ and exactly ONE directory under services/
+#       (content-request-broker, which by ADR-007 step 8 handles ciphertext and must not decrypt).
+#
+#   (d) The allowlist contains exactly ONE directory under connectors/ -- the Telegram one.
+#       connectors/gmail/** and connectors/common/** are FORBIDDEN, not merely absent. Gmail is the
+#       only source in MVP1 whose evidence may reach AI, and connectors/common/ sits upstream of
+#       the GmailEvidenceBundle that AI receives. A Telegram gate able to edit shared connector
+#       code could change what lands in an AI request without touching one AI file. INV-05 forbids
+#       the result; this forbids the route.
+#
+#   (e) The AI surfaces are ALSO named in forbidden_paths even though the closed allowlist already
+#       refuses them. That is for the refusal message: a violation is reported as
+#       "forbidden by the G4 manifest (pattern: packages/policy/**)" and cites the invariant here,
+#       rather than a generic "outside G4's approved scope" that reads like a paperwork problem.
+#
+#   (f) G4 may PROVE the barrier holds and may not MOVE it. tests/policy/*.test.ts is allowed, so
+#       G4 can add the test TDD 68 requires of it ("AI policy test proves Telegram ancestry
+#       blocked"). scripts/verify/** and tests/policy/*.mjs are forbidden, so G4 cannot author or
+#       weaken the mechanism that polices G4. TDD 57, verbatim: "The actor being constrained cannot
+#       modify the authoritative object that defines the constraint."
+#
+# AND WHAT IT STILL CANNOT DO, said here and not buried at the bottom: a path check cannot see
+# inside a file. Nothing in this mechanism stops a G4 pull request from writing an HTTP call to a
+# model endpoint inside connectors/telegram-tdlib/. What would catch that is a static
+# import/dependency boundary check -- and per (f) that check must NOT be written by G4. See Q2: it
+# belongs to whichever gate owns the enforcement machinery, or to an operator-landed governance
+# change, and ideally it exists before G4 opens rather than after.
+#
+# Status of the repository when this was written (measured): connectors/telegram-tdlib/,
+# connectors/common/, connectors/gmail/, host/ and services/ are all empty directories with zero
+# tracked files. Every allowed path below is a file that must be created, or a small set of
+# existing files a named G4 action must edit.
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+  - WRITTEN_BEFORE_G4_HAS_A_PLAN
+
+authored_by: Claude (implementer)
+authored_on: 2026-09-11
+gate: G4
+
+# ---------------------------------------------------------------------------
+# PLAN PROVENANCE -- deliberately unset. G4 has no plan yet. TDD 57(5) lists plan_id and plan_hash
+# as part of the manifest shape, but a proposal written before the plan exists cannot honestly
+# carry either, and nothing in CI reads plan_hash (limitation 7 in
+# governance/GATE_MANIFEST_INTEGRITY.md) -- so a fabricated value would never be contradicted by
+# anything and would sit in the record looking like evidence. Fill both in, from the real plan,
+# before adoption, pinned to a commit and a blob rather than to HEAD.
+# ---------------------------------------------------------------------------
+plan_id: UNASSIGNED -- G4 has no plan yet; fill in before adoption
+plan_hash: UNASSIGNED -- pin to a commit and a blob, not to HEAD (see g1.yaml's own note)
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: implement the Telegram direct-TDLib connector -- authenticated
+  personal-account session with pinned TDLib version and recorded checksum, the connected_at
+  boundary with no pre-connection backfill, the local SQLite WAL spool, deterministic
+  pattern extraction with Telegram provenance on every derived value, offline/reconnect recovery,
+  and the Telegram full-content drill-down path (Cloudflare Tunnel Content Gateway, the ADR-007
+  authentication chain, and the mandatory ECDH/HKDF/AES-GCM envelope). No AI, no embeddings, no
+  index over Telegram content, at any granularity, by any route.
+
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# WHAT THIS LIST IS SCOPED TO: the permissible MERGE SCOPE of the G4 pull request. The check runs
+# `git diff BASE_SHA...HEAD_SHA` over the cumulative range from the main base to the PR head.
+#
+# Read this list with (a)-(d) above in hand. Every entry is here because a named G4 action or DoD
+# line needs it, and every entry has been checked against one further question that does not apply
+# to any other gate in this project: could Telegram-derived material reach an AI request through
+# this path? Where the answer was "possibly, indirectly", the path was moved to forbidden_paths
+# rather than allowed with a warning -- connectors/common/** is the clearest case.
+#
+# Grammar is segment-bounded: `*` never crosses `/`, `**` is a whole segment. There is no bare
+# `**` anywhere in this file.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # The connector: TDLib session handling and its pinned version/checksum record, the connected_at
+  # boundary, the local SQLite WAL spool (PENDING / ACKED / FAILED_RETRYABLE / FAILED_PERMANENT,
+  # TDD 15), the deterministic parser (TDD 11.1 -- known-chat/known-user mappings, normalized
+  # identifier extraction, regex, fixed dictionaries, explicit dates and amounts, reply/thread
+  # relationships, user-configured rules; no embeddings, no neural classifier, no semantic model),
+  # provenance tagging on every derived value, reconnect recovery, health metrics, and the
+  # connector's own README.
+  #
+  # This is the one directory in the repository that will hold raw Telegram content at runtime.
+  # INV-12 and INV-14 apply to it in full: raw bodies never enter logs, metrics, analytics
+  # dimensions, queue payloads, audit records, URLs, push payloads, exception traces or CI
+  # fixtures, and are not stored in the central Decision DB by default.
+  - connectors/telegram-tdlib/**
+
+  # ADR-007 steps 6-7, on the connector host: validate the service identity, signature, expiry,
+  # nonce and source_ref policy BEFORE any TDLib access; fetch the content; encrypt it to the PWA's
+  # ephemeral key; return ciphertext. Also the operator-provisioned rotating P-256 key material's
+  # handling and key_id rotation.
+  - host/content-gateway/**
+
+  # ADR-007 steps 2-4 and 8, on the cloud side: verify the application session and the caller's
+  # authorization to the requested source_ref, mint the one-time signed ContentRequest, authenticate
+  # to the Tunnel-protected gateway with the Access service token plus an application HMAC, and
+  # pass the ciphertext through WITHOUT decrypting it.
+  #
+  # This is the one service/ directory G4 may touch, and it is named individually rather than
+  # reached by a `services/*` glob so that the count stays visible. TDD 33.3 requires that
+  # plaintext is never logged or cached by Worker/Tunnel application code -- this directory is
+  # where that requirement is either met or broken.
+  - services/content-request-broker/**
+
+  # cloudflared configuration and the connector-host run/service definition. Outbound-only tunnel,
+  # no inbound port, no public origin IP (TDD 10.3, ADR-007). Host-side only; nothing here is
+  # reachable from the AI plane.
+  - infra/connector-host/**
+
+  # npm workspaces already globs `connectors/*` and `host/*` and `services/*` (measured in
+  # package.json), so registering the three new workspaces needs no config change -- but their own
+  # package.json files and the TDLib binding dependency do change the root lockfile, and CI runs
+  # `npm ci`.
+  #
+  # STATED PLAINLY, BECAUSE IT IS THE WEAKEST POINT IN THE STRUCTURAL ARGUMENT ABOVE: this is the
+  # one allowed path from which a G4 pull request could introduce an AI capability that no path
+  # pattern would refuse -- adding a model-provider SDK is a package.json line. package.json is not
+  # covered by .github/CODEOWNERS, and `npm audit` is advisory-only until G8 (ci.yml lines 56-59).
+  # So the control here is a human reading the diff, and nothing else. G4's plan must enumerate
+  # every dependency it adds, with its HARD_ZERO implication (ADR-010) and its relationship to the
+  # AI boundary. See Q3 for the one-line fix that would close this for every future gate.
+  - package.json
+  - package-lock.json
+
+  # TDD 40: "no session material in repo/backups without encryption". TDLib writes a session
+  # directory and the spool is a SQLite database; `*.sqlite`, `*.sqlite-wal` and `*.sqlite-shm` are
+  # already ignored (measured in .gitignore) but the TDLib session directory is not. Excluding it
+  # is a security control, and it is G4 that creates the thing needing excluding.
+  # G3 does not get this path: Gmail tokens live encrypted in D1 with the key-encryption secret as
+  # a Worker Secret (TDD 39), and nothing new lands on disk.
+  - .gitignore
+
+  # Its own header: "Index only, expanded into real implementation notes starting at G3 (Gmail) /
+  # G4 (Telegram)." Under /docs/architecture/, which CODEOWNERS assigns to @xLZDx, so operator
+  # review still applies on the merge path.
+  - docs/architecture/CONNECTOR_ARCHITECTURE.md
+
+  # Gate-time re-verification, required by the file's own rule ("Re-verify at each gate that
+  # depends on the item") and by core/SOURCE_POLICY.md, which pins the Telegram terms by fetch date
+  # plus SHA-256 of extracted text because neither document carries a version number or a
+  # Last-Modified header, and says to re-fetch "quarterly and before any change to AI scope".
+  # G4 is the gate that depends on those terms more than any other.
+  #
+  # THIS IS A RECORD OF MEASURED FACT, NOT AN AUTHORITY SURFACE, and the distinction is what makes
+  # it safe to allow here: G4 may record what the terms SAY on the day it fetched them, with the
+  # URL and the hash. It may not change what the project's policy IS -- core/SOURCE_POLICY.md is
+  # forbidden below. If a re-fetch finds the terms have changed, that is a policy review
+  # (SOURCE_POLICY.md's own instruction), not an edit this gate may make.
+  - docs/architecture/EXTERNAL_ASSUMPTIONS.md
+
+  # TDD 68 requires a "disconnect/session revoke runbook"; TDD 41 names CONNECTOR_KEY_COMPROMISE.md
+  # for the connector-identity key rotation and revocation procedure; ADR-007 and TDD 33.3 require
+  # gateway key rotation with key_id support. All three stubs exist and all three are Telegram-side
+  # by construction -- Gmail is cloud-plane only, has no connector identity, no session material and
+  # no content gateway (TDD 39).
+  - docs/runbooks/TELEGRAM_CONNECTOR_DOWN.md
+  - docs/runbooks/CONNECTOR_KEY_COMPROMISE.md
+  - docs/runbooks/CONTENT_GATEWAY_KEY_ROTATION.md
+
+  # Durable decisions: the TDLib version pin and its checksum, the host choice, the spool's
+  # fsync/WAL checkpoint policy, and anything about the Telegram terms re-fetch that changes a
+  # design assumption.
+  - core/DECISION_LOG.md
+
+  # R1 (Telegram deterministic aggregation remains contractually YELLOW/UNCLEAR -- "ACCEPTED,
+  # re-review at G0 (item B) and quarterly"), R2 (the always-on host the $0 target assumes) and R4
+  # (the semantic recall ceiling this design accepts by refusing ML on Telegram) are all G4's to
+  # re-state against measured reality. The register's own instruction applies: do not mark a row
+  # CLOSED until the verification has run and produced evidence.
+  - core/RISK_REGISTER.md
+
+  # The gate tracker's G4 row. See C3 at the bottom -- this table already disagrees with
+  # governance/G0_CLOSURE_REPORT.md and G4 should not add a third inconsistency to it.
+  - core/PLAN_MASTER_GATES.md
+
+  # The gate's own plan and evidence artifacts. A `G4_`-prefixed glob cannot reach another gate's
+  # plan by construction. `.md` only: a `G4_MANIFEST_PROPOSAL.yaml` arriving through the gate's own
+  # PR would put a document arguing about this gate's scope inside the diff this manifest checks --
+  # harmless, since a proposal has no authority, but it is the shape of the mistake INV-28 exists
+  # to prevent.
+  - governance/plans/G4_*.md
+
+  # The closure report (Universal DoD item 30). Does not exist yet.
+  - governance/G4_CLOSURE_REPORT.md
+
+  # The fresh-context review (Universal DoD item 21). `**` as the last segment covers the subtree
+  # and never the bare directory name.
+  - governance/reviews/**
+
+  # The mandated Russian + English report pair. Segment-bounded, so it reaches reports/ and no
+  # subdirectory.
+  - reports/*.html
+
+  # Tests, split by directory rather than one tests/** entry -- see the forbidden list for why
+  # tests/policy is treated differently from the rest.
+  #
+  #   tests/contract/     the normalized envelope emitted by this connector; TDD 13's rule that the
+  #                       raw Telegram body is NOT part of the central event contract
+  #   tests/integration/  spool -> ingest -> ACK, dedupe, the drill-down chain end to end
+  #   tests/resilience/   TDD 62 by name: "Telegram connector offline 6h then reconnect",
+  #                       "Telegram connector restart with pending spool", "TDLib first-login cache
+  #                       contains older messages -> none emitted centrally before connected_at",
+  #                       "same event submitted 10 times", "out-of-order updates", "source message
+  #                       deleted before drill-down", "Cloudflare Tunnel unavailable", "Telegram
+  #                       content replay/expired nonce -> rejected"
+  #   tests/security/     the ECDH/HKDF/AES-GCM envelope (fresh nonce, associated data binding
+  #                       request_id/source_ref/schema_version, replay rejected, expiry enforced),
+  #                       the full ADR-007 auth chain, session-material handling, and the
+  #                       plaintext-never-logged check on the Worker/Tunnel code paths
+  #   tests/fixtures/     INV-12/TDD 42: no raw Telegram message bodies in CI fixtures, which is
+  #                       named in that list explicitly
+  - tests/contract/**
+  - tests/integration/**
+  - tests/resilience/**
+  - tests/security/**
+  - tests/fixtures/**
+
+  # The AI-boundary tests this gate owes. TDD 68 (Telegram Connector DoD) requires "AI policy test
+  # proves Telegram ancestry blocked", and TDD 62's resilience list requires "Telegram-tainted
+  # value/assignment attempted in AI context -> blocked". TDD 70 spells out the full set, each as
+  # an independent assertion rather than one umbrella test: Telegram-derived string, number,
+  # datetime, boolean, display name, enum assignment, count/aggregate and routing hint each BLOCKED
+  # separately, plus nested/mixed and unknown ancestry.
+  #
+  # `*.test.ts` and not `**`, so it cannot match the `.mjs` governance-guard tests in the same
+  # directory, which are forbidden below. THIS IS THE (f) ASYMMETRY MADE CONCRETE: G4 may write a
+  # test asserting that the barrier refuses Telegram-derived material, and may not edit the code
+  # that does the refusing, nor the tests that prove the gate mechanism itself still bites.
+  #
+  # NOTE A DOCUMENT DISAGREEMENT, C4 below: ADR-005 assigns the TDD 70 tests to "G2 primitives, G6
+  # AI integration", while TDD 68 puts one of them in the Telegram connector's own DoD, which is
+  # G4. This entry resolves it in the only direction that is safe -- G4 may ADD such a test. If
+  # G2/G6 already own the canonical set, G4's is a second, connector-specific assertion, which is
+  # not a duplication worth avoiding.
+  - tests/policy/*.test.ts
+
+  # The repository front page: how to run the connector host, what it needs, and what it must never
+  # be pointed at. AGENTS.md and CLAUDE.md are forbidden below; see Q4.
+  - README.md
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# Everything not in allowed_paths is ALREADY refused -- the allowlist is closed, and it is what
+# actually constrains this gate. These entries exist so that the most consequential refusals arrive
+# with their reason attached. check-gate-scope.mjs reports a forbidden hit as
+# "forbidden by the G4 manifest (pattern: X)" and an unlisted path as "outside G4's approved
+# scope"; the first reads like a rule, the second reads like paperwork.
+#
+# Grouped by what each group protects. The AI group is the reason this file was written.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # ---- AI AND INFERENCE SURFACES -- INV-03 / INV-04 / INV-05 / INV-26 ----
+
+  # The provenance DAG and the fail-closed composition rule. ADR-005: "packages/provenance and
+  # packages/policy must implement the DAG and the fail-closed composition rule as testable
+  # primitives, not documentation." That rule -- ai_safe(value) = all provenance ancestors are
+  # AI_ALLOW, unknown/mixed ancestry = AI_DENY -- is the single piece of code standing between
+  # Telegram-derived material and an AI request. The gate that produces Telegram-derived material
+  # is the last actor that should be able to edit it.
+  #
+  # If G4 finds the provenance primitives insufficient for Telegram -- a missing source constant, a
+  # taint that cannot be expressed -- that is a defect in G2's deliverable and goes back as a
+  # finding against G2, not forward as an edit from G4. Per global CLAUDE.md section 17's
+  # ground-truth ordering and "fix the class, not the instance".
+  - packages/policy/**
+  - packages/provenance/**
+
+  # Every other shared package, named as a group by listing the two that exist or are planned and
+  # then relying on the closed allowlist for the rest. The domain, telemetry, testkit and contracts
+  # packages are shared surfaces whose contents reach the Gmail path; packages/contracts in
+  # particular carries GmailEvidenceBundle, the ONLY accepted MVP1 AI input type (ADR-005,
+  # TDD 24.1). A Telegram gate that could add a field to that type could put Telegram-derived data
+  # inside an AI request without touching any file whose name contains "ai".
+  - packages/contracts/**
+  - packages/domain/**
+
+  # Speculative but cheap. These directories do not exist today; TDD 55's repository tree has no AI
+  # package at all and ADR-005 names AIContextBuilder without naming a directory for it -- which is
+  # G3's open question Q1, not G4's. If the operator later places the AI surface under a name not
+  # listed here, THIS FILE MUST BE UPDATED -- and until it is, the closed allowlist above is what
+  # refuses it. Said plainly so nobody reads a blocklist as the guarantee: the allowlist is the
+  # guarantee; the blocklist is the message.
+  - packages/ai/**
+  - services/ai/**
+
+  # THE OTHER SOURCE, AND THE SHARED CODE UPSTREAM OF IT.
+  #
+  # connectors/gmail/ is the only directory in MVP1 from which an AI call may legitimately be made
+  # (G3's proposal recommends placing the extraction code there precisely so that "source-local"
+  # becomes a filesystem fact). A Telegram gate has no business in it under any reading.
+  #
+  # connectors/common/ is the subtler one and is the reason this group is not just "the Gmail
+  # directory". Shared connector scaffolding -- the normalized-envelope emitter, the ingest client,
+  # the retry helper -- sits UPSTREAM of the Gmail evidence that reaches AI. A change there alters
+  # what a GmailEvidenceBundle can contain, from a pull request that touches no Gmail file and no
+  # AI file. That is the indirect route INV-05 exists to close, and closing it costs G4 nothing it
+  # actually needs: TDD 15 makes the local spool the Telegram connector's own, and everything else
+  # G4 requires lives under connectors/telegram-tdlib/.
+  #
+  # If G4 genuinely needs a change in connectors/common/, that is a finding against G3's
+  # deliverable and needs its own plan and GO -- not a wider manifest. Widening a manifest to fit a
+  # diff is the failure mode this whole mechanism exists to prevent.
+  - connectors/gmail/**
+  - connectors/common/**
+
+  # The AI processing plane. G5 owns the resolver and G6 owns intent/decisions; the resolver is the
+  # component that COMBINES Gmail and Telegram, and TDD 24.2 is explicit that the combined result
+  # is never sent back to AI in MVP1. A Telegram gate that could edit the resolver could change
+  # what "combined" means. services/content-request-broker/ is allowed above and is the single
+  # exception, by name.
+  - services/resolver/**
+  - services/processor/**
+
+  # The PWA. G7 owns it. This also removes the client-side route: the PWA is where a
+  # decrypted Telegram body exists in plaintext (ADR-007 step 9), so a Telegram gate able to write
+  # PWA code is a Telegram gate able to send that plaintext somewhere. Forbidding it also forces
+  # the question in Q1 to be asked out loud rather than answered quietly by whichever gate writes
+  # the first screen.
+  - apps/**
+
+  # ---- GOVERNANCE AND AUTHORITY SURFACES ----
+
+  # MANDATORY, INV-28. A gate must never be able to widen its own authority. Matches the ungated
+  # floor's own entry (scripts/verify/check-floor-scope.mjs FORBIDDEN_PATHS) rather than g1.yaml's
+  # narrower `**/*.yaml` / `**/*.yml` pair, which was narrowed only so G1 could edit that
+  # directory's README while building the mechanism. G4 has no business there at all.
+  - governance/gate-manifests/**
+
+  # MANDATORY. The operator's own record of what they approved. An implementer that can write
+  # approvals can manufacture the evidence that it was approved.
+  - governance/operator-approvals/**
+
+  # The frozen architecture baseline, INV-01..INV-31 included -- the invariants this gate is most
+  # constrained by are in it.
+  - docs/architecture/TDD.md
+
+  # AND THE FILE THAT OUTRANKS IT. TDD_ERRATA.md declares itself NORMATIVE: "Where this file and
+  # TDD.md disagree, this file wins." It states that it may not amend an invariant -- but that
+  # sentence is enforced by nothing except the file's own text, and the file would be editable by
+  # whoever could edit the file. CODEOWNERS makes exactly this argument in its own comments, about
+  # this exact path. g1.yaml ALLOWED it, correctly: G1 created the errata mechanism and wrote
+  # E-001. G4 is not that gate, and an errata entry requires a quoted GPT-PM ruling by the file's
+  # own rules -- a governance act, not a connector change.
+  #
+  # See C2 at the bottom: the ungated floor forbids TDD.md but NOT this file.
+  - docs/architecture/TDD_ERRATA.md
+
+  # THE ENFORCEMENT MECHANISM. governance.yml's own header: for `pull_request` events GitHub runs
+  # the workflow as it exists in the PR's merge commit, so a PR that edits these files edits the
+  # checks that police it. CODEOWNERS is what would decide whether such an edit is reviewed, so it
+  # cannot be in the same PR either. Broader than the floor's two entries because a gate has no
+  # legitimate business anywhere under .github/.
+  #
+  # Measured, so the cost is visible: G4 needs no workflow change. vitest's include already covers
+  # `connectors/**/tests/**/*.test.ts`, `host/**/tests/**/*.test.ts`, `services/**/tests/**/*.test.ts`
+  # and `tests/**/*.test.ts`; tsconfig's include already covers `connectors/**/*.ts`,
+  # `host/**/*.ts` and `services/**/*.ts`; ci.yml runs `npm run test` over all of it.
+  - .github/**
+
+  # THE CHECKS THEMSELVES, and the reason this pairing matters more for G4 than for any other gate:
+  # the static import-boundary guard that WOULD close limitation 1 below belongs in this directory,
+  # and G4 must not be the author of it. A gate that writes the check that polices it has written
+  # its own permission slip. See Q2 -- that guard should be landed by the operator, or by a
+  # governance-scoped change, before G4 opens.
+  #
+  # check-floor-scope.mjs additionally holds the ungated floor's rules AS CODE rather than as a
+  # manifest, so this directory is governance state in the same sense governance/gate-manifests/ is.
+  - scripts/verify/**
+
+  # The governance guards' own tests -- 51+ assertions across gate-scope, floor-scope and
+  # codeowners. Paired with the `tests/policy/*.test.ts` allowance above: G4 may add policy tests
+  # in TypeScript, and may not touch the .mjs ones.
+  - tests/policy/*.mjs
+
+  # POLICY-SENSITIVE FILES, TDD 57(13) by name, each requiring "ADR + independent review + operator
+  # approval" and each CODEOWNERS-assigned to @xLZDx.
+  #
+  # core/SOURCE_POLICY.md is THE file for this gate: it is the document that says Telegram content
+  # may not reach AI, and it carries the verbatim Telegram terms this whole design is built around.
+  # A Telegram gate able to edit it could relax the rule it is bound by and then comply with the
+  # relaxed version. Note also that file's own closing instruction, which cuts both ways and is
+  # worth quoting because it is easy to over-apply this manifest in the other direction: "if any
+  # future reviewer finding claims a NEW prohibition not already in this file, verify the primary
+  # source before treating it as binding; do not invent additional restrictions."
+  #
+  # DATA_RETENTION_POLICY.md is here for a Telegram-specific reason too: INV-19 makes retention
+  # source-aware, and TDD 51's Telegram retention section is the tightest in the system. A gate
+  # that could lengthen its own retention window could keep Telegram content around longer than the
+  # policy the operator approved.
+  - core/SOURCE_POLICY.md
+  - core/DATA_RETENTION_POLICY.md
+
+  # THE ADOPTED ARCHITECTURE DECISIONS, including the four this gate is built on: ADR-003 (direct
+  # TDLib and its version/checksum pin), ADR-005 (the AI boundary), ADR-007 (the Tunnel Content
+  # Gateway, the full auth chain and the mandatory envelope -- whose own text says a downgrade to
+  # Variant B "would be a documented, explicitly-accepted risk requiring its own ADR revision --
+  # 'no silent downgrade'"), and ADR-010 (HARD_ZERO).
+  #
+  # Stricter than g1.yaml, which merely excluded core/adr/**. The stricter reading is deliberate:
+  # ADR-007's envelope is the hardest thing in G4 to build, and "revise the ADR" is a permanently
+  # available shortcut for an implementer under pressure. Universal DoD item 19 still requires an
+  # ADR when architecture or policy changes, and this does not block that -- an ADR change reaches
+  # main through an ungated PR (the floor permits core/adr/**, and CODEOWNERS requires @xLZDx's
+  # review on it), landed separately and cited by the gate PR. That is the route g1.yaml itself
+  # took to reach main outside PR #1.
+  - core/adr/**
+
+  # THE OPERATING CONTRACTS. CLAUDE.md section 2 contains, as a literal bullet, "send
+  # Telegram-derived data to AI in any form (see INV-03/04/05/26)" on the list of things the
+  # implementer must not do, and section 6 repeats it as the first of the invariants "most likely
+  # to be violated by an unreviewed shortcut". AGENTS.md is the same contract for any other agent.
+  # A G4 pull request able to edit those files could delete the sentence that constrains it, and
+  # the scope check would report only that a path changed, never in which direction.
+  #
+  # Both are CODEOWNERS-assigned to @xLZDx, so this is a second lock rather than the only one. The
+  # cost is named in Q4.
+  - CLAUDE.md
+  - AGENTS.md
+
+# ---------------------------------------------------------------------------
+# The three fields below are part of the manifest shape in
+# governance/gate-manifests/README.md and TDD 57(5). Stated honestly: the checker reads
+# allowed_paths and forbidden_paths and NOTHING ELSE. These are documentation for a human reviewer,
+# not enforcement.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+  - npm run verify:secrets
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+  - priv-01 (Telegram terms compliance -- the AI/scraping/indexing prohibition in full)
+  - sec-01 (session material, the ADR-007 auth chain, the ECDH/HKDF/AES-GCM envelope)
+  - ai-01 (that no Telegram-derived value or assignment can reach an AI request by any route)
+  - rel-01 (spool durability, reconnect, offline behaviour)
+  - red-01 (adversarial: find the route from Telegram content to AI that the path check cannot see)
+
+policy_sensitive_files:
+  - connectors/telegram-tdlib/** (the only place raw Telegram content exists in this repository)
+  - host/content-gateway/** (decrypted Telegram bodies and the gateway's private key material)
+  - services/content-request-broker/** (must pass ciphertext through without decrypting it)
+  - docs/architecture/EXTERNAL_ASSUMPTIONS.md (the Telegram terms snapshot this gate depends on)
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why
+#
+#   packages/**              Covered in full by the reasoning above: the AI boundary primitives
+#                            live there, and G4 touches none of them. Note that this is the ONLY
+#                            gate proposal in this pair with a blanket exclusion of packages/ --
+#                            G3 is allowed a narrow slice of packages/contracts because
+#                            GmailEvidenceBundle is its deliverable.
+#
+#   services/api/**,         Not required by any named G4 action. The broker is the only service
+#   services/ingest/**,      this gate builds; G4 is a CLIENT of the ingest endpoint (TDD 14), not
+#   services/*/              its author. If G4 finds the ingest contract insufficient for Telegram,
+#                            that is a finding against G2's deliverable.
+#
+#   host/backup-agent/**,    G8 (backup/DR) and ADR-011 respectively. Both live under paths G4
+#   host/optional-http-      could plausibly reach, so both are named here rather than left to be
+#   pull-consumer/**         inferred from the allowlist.
+#
+#   infra/cloudflare/**,     Shared cloud deployment and D1 migrations -- G2's. G4's host-side
+#   infra/migrations/**      configuration is under infra/connector-host/ and is allowed.
+#
+#   tsconfig.json,           MEASURED: tsconfig's include already carries `connectors/**/*.ts`,
+#   vitest.config.ts         `host/**/*.ts` and `services/**/*.ts`; vitest's include already
+#                            carries the matching test globs. Neither needs an edit.
+#
+#   scripts/probes/**        G0/G2/G3 evidence directories. G4 has no probe of its own; the
+#                            Telegram terms re-fetch is recorded in EXTERNAL_ASSUMPTIONS.md, which
+#                            is allowed.
+#
+#   governance/              Documentation of the manifest mechanism. G1 owns it, and a gate
+#   GATE_MANIFEST_           editing the description of its own constraints is the shape this
+#   INTEGRITY.md             manifest avoids everywhere else.
+#
+#   .prettierignore,         Untouched by G4.
+#   .prettierrc.json,
+#   eslint.config.js,
+#   CONTRIBUTING.md,
+#   SECURITY.md
+#
+#   .claude/**               Agent configuration, not a gate deliverable.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN ONCE ITS HASH IS APPROVED
+#
+#   1. IT CANNOT SEE INSIDE A FILE. This is the important one and it limits the structural claim at
+#      the top of this document, so it is stated first and without hedging. `connectors/
+#      telegram-tdlib/**` is allowed, so nothing in this mechanism would refuse a pull request that
+#      wrote `fetch('https://api.<some-model-host>/...')` with a Telegram message body in it. What
+#      this manifest guarantees is narrower and should be described narrowly: a G4 pull request
+#      cannot MODIFY any existing AI or provenance code, cannot modify the shared code upstream of
+#      the Gmail evidence path, and cannot modify the policy, the invariants, the contracts or the
+#      checks. Preventing a newly-written AI call inside the Telegram connector needs a static
+#      import/dependency boundary check and a reviewer -- see Q2.
+#   2. It cannot tell a tightening from a loosening. The scope check sees a changed path, not the
+#      direction of the change.
+#   3. It does not review dependencies. See the package.json entry above; this is limitation 1's
+#      easiest instance.
+#   4. The `Gate: G4` label that selects this manifest comes from the branch name or the PR body,
+#      both written by the implementer (governance.yml, "Resolve the gate this PR belongs to").
+#      An implementer who chose `Gate: G3` would be checked against G3's manifest -- which allows
+#      connectors/gmail/** and the AI paths. Limitation 6 in governance/GATE_MANIFEST_INTEGRITY.md,
+#      and it is materially worse for this pair of gates than it was for G1 alone, because for the
+#      first time two manifests with genuinely different authority exist side by side. Mitigation
+#      available today: the branch name is checked FIRST by governance.yml, so a branch named
+#      `gate/g4-...` resolves to G4 regardless of what the PR body says.
+#   5. Nothing checks plan_hash. governance.yml verifies THIS FILE's own sha256 against the
+#      operator-held repository variable; it never reads plan_hash.
+#   6. The check runs on pull_request only. A direct push to main is not examined by it at all.
+#   7. THE APPROVAL HASH IS NOT OUT OF THE IMPLEMENTER'S REACH -- see this file's header.
+#   8. AND THE ONE IT ADDS BY EXISTING: an implementer drafted it, including the list of AI paths
+#      it is forbidden to touch. The only thing between that and a self-authorized scope is the
+#      operator actually reading these bytes before setting the hash.
+#
+# ---------------------------------------------------------------------------
+# QUESTIONS ONLY THE OPERATOR (WITH GPT-PM) CAN SETTLE. Each one changes this file.
+#
+#   Q1. HOW DOES G4 SATISFY "full-message drill-down works on Android PWA" AND "ditto on iPhone PWA"
+#       (TDD 68) WITH apps/** FORBIDDEN AND G7 OWNING THE PWA? Either those two DoD lines are
+#       formally deferred to G7 by a quoted GPT-PM ruling, or this manifest needs a narrow
+#       apps/pwa/ allowance and G4 builds a first drill-down screen. The same question applies to
+#       G3 (TDD 69, "full original message/thread drill-down works"), so it should be answered once
+#       for both. Recommended: defer both to G7 and record the deferral in each gate's closure
+#       report -- an end-to-end encrypted drill-down is a poor first PWA screen to build under a
+#       connector gate's review roster.
+#
+#   Q2. SHOULD A STATIC IMPORT-BOUNDARY GUARD EXIST BEFORE G4 OPENS? It is the only thing that
+#       would close limitation 1: a check that no module under connectors/telegram-tdlib/ or
+#       host/content-gateway/ may import an AI provider, and that nothing under the AI paths may
+#       import from them. It belongs in scripts/verify/, which this manifest forbids to G4 on
+#       purpose -- the gate being constrained must not author its own constraint. So it is either
+#       an operator-landed governance change, or an explicitly governance-scoped PR, before G4
+#       starts. Recommended: yes, and before, because after is the version where the check is
+#       written to fit the code that already exists.
+#
+#   Q3. SHOULD /package.json AND /package-lock.json BE ADDED TO .github/CODEOWNERS? They are the
+#       one allowed path in this gate with no operator-review requirement and the largest
+#       external-trust surface -- and for G4 specifically, the one path through which an AI
+#       capability could arrive without tripping any pattern in this file. A one-line change to an
+#       operator-owned file, and it would close this for every future gate.
+#
+#   Q4. WHO UPDATES AGENTS.md/CLAUDE.md WHEN THE CONNECTOR HOST'S RUN INSTRUCTIONS EXIST?
+#       core/DECISION_LOG.md (2026-09-10) records the debt ("that section currently says 'no code
+#       exists yet'"); this manifest forbids both files. Recommended: run instructions go in
+#       README.md and connectors/telegram-tdlib/README.md, and the operator syncs the two contracts
+#       separately. If the operator would rather the gate do it, both paths move to allowed_paths
+#       -- knowing that CODEOWNERS review is then the only control on them.
+#
+#   Q5. DOES THE TELEGRAM TERMS RE-FETCH GATE THE START OF G4 OR ITS CLOSURE? core/SOURCE_POLICY.md
+#       says re-fetch "quarterly and before any change to AI scope"; the last fetch was 2026-09-10,
+#       so it is current. TDD 6 says "G0 MUST re-fetch and review the current Telegram terms before
+#       implementation GO" -- which G0 did. Whether G4 owes a second fetch at its own GO, or only
+#       records that the G0 snapshot is still within its quarter, is a small question with a real
+#       consequence for the gate's evidence, and it is cheaper to answer it now than to argue about
+#       it at closure.
+#
+# ---------------------------------------------------------------------------
+# CONTRADICTIONS FOUND WHILE WRITING THIS, reported rather than tidied away
+#
+#   C1. g1.yaml's own status says it is awaiting the thing that has already happened.
+#       governance/gate-manifests/g1.yaml line 64 reads
+#       `OPERATOR_DIRECTED_IMPLEMENTER_AUTHORED_CANDIDATE_AWAITING_OPERATOR_REVIEW_AND_HASH`, while
+#       core/PLAN_MASTER_GATES.md's G1 row states "manifest g1.yaml adopted by the operator,
+#       GATE_MANIFEST_APPROVED_HASH_G1 set". Both cannot be current. It is structural rather than
+#       careless: correcting that line changes the bytes, changes the sha256, and invalidates
+#       GATE_MANIFEST_APPROVED_HASH_G1 until the operator re-reads and re-sets it. An adopted
+#       manifest cannot describe its own adoption. Consequence applied here: `approved_scope` is
+#       written to stay true after adoption, and `status` is the block that must be rewritten at
+#       adoption -- to something that does not go stale.
+#
+#   C2. The ungated floor forbids TDD.md but not TDD_ERRATA.md.
+#       scripts/verify/check-floor-scope.mjs FORBIDDEN_PATHS lists `docs/architecture/TDD.md` as
+#       "the frozen architecture baseline", while TDD_ERRATA.md declares itself NORMATIVE and
+#       outranks it on every concrete detail. A "Gate: NONE" PR may today edit the document that
+#       overrides the one the floor protects. CODEOWNERS covers /docs/architecture/, so the merge
+#       path still requires @xLZDx -- but R13 records that CODEOWNERS cannot mechanically separate
+#       implementer from operator while one GitHub identity does both. Both manifests in this pair
+#       forbid the errata; the floor is a separate file and a separate decision, and it is the
+#       operator's.
+#
+#   C3. core/PLAN_MASTER_GATES.md's G0 output table still reads PENDING/DRAFT for items that
+#       governance/G0_CLOSURE_REPORT.md records as DONE/ADOPTED, with G0 CLOSED. g1.yaml allowed
+#       that file for exactly this correction and tagged it [REMAINING]; it is still unfixed.
+#
+#   C4. Two documents disagree about which gate owes the AI-policy tests.
+#       ADR-005's "Verification owed at gate time" says "(G2 primitives, G6 AI integration)". TDD 68
+#       puts "AI policy test proves Telegram ancestry blocked" in the TELEGRAM CONNECTOR's DoD,
+#       which is G4, and TDD 62's resilience list repeats it. Resolved here in the only safe
+#       direction -- G4 may add the test, and may not touch what it tests -- but the disagreement
+#       is the operator's to settle, and it matters for what G4's closure evidence must contain.
+#
+#   C5. TDD 55's repository tree shows `reports/gate-*/` subdirectories. Nothing in this repository
+#       has ever used them; the six existing reports are flat files in reports/. Both proposals
+#       therefore use `reports/*.html`, which is segment-bounded and would NOT match a file in a
+#       subdirectory. If the operator wants the TDD's layout, the pattern must become
+#       `reports/**/*.html` or similar -- a small thing, but it is the kind of detail that fails a
+#       gate at the last step. This is a candidate TDD_ERRATA entry, and neither of these gates may
+#       write one.
+#
+# ---------------------------------------------------------------------------
+# HOW TO ADOPT THIS, AND WHY NO HASH IS PRINTED
+#
+# Do NOT copy this file byte-for-byte into governance/gate-manifests/g4.yaml. It still carries
+# `status: NON_BINDING_PROPOSAL / HAS_NO_AUTHORITY`, so the binding manifest would assert about
+# itself that it has no authority. Adoption means editing at least the header and the status block,
+# and the moment anything is edited the sha256 changes -- which is why no "approved hash" appears
+# here. A hash printed in a proposal is either wrong (because the file must be edited) or pins a
+# document that declares itself non-binding.
+#
+#   1. operator   Review and edit. Narrowing is always safe; widening is the thing to be
+#                 suspicious of -- and on this manifest, widening allowed_paths into packages/,
+#                 apps/ or connectors/ is the specific move that would dissolve the structural
+#                 argument at the top of this file. If a widening looks necessary, the thing that
+#                 is wrong is more likely the gate's design than this list.
+#   2. operator   Write the result to governance/gate-manifests/g4.yaml, as its own commit,
+#                 NOT part of the gate PR: that path is forbidden above, so a gate PR carrying it
+#                 fails the Governance check, correctly.
+#   3. operator   sha256sum governance/gate-manifests/g4.yaml
+#                 (PowerShell: Get-FileHash -Algorithm SHA256 <path>)
+#                 Computed from the LF bytes the runner checks out; a hash taken from a Windows
+#                 working copy with CRLF line endings will NOT match.
+#   4. operator   Set GATE_MANIFEST_APPROVED_HASH_G4 to that value.
+#                 Settings -> Secrets and variables -> Actions -> Variables.
+#   5. anyone     Open the gate PR, on a branch named `gate/g4-...` so that the gate resolves from
+#                 the branch name rather than from the PR body (limitation 4 above).
+#
+# Until step 4 is done the Governance check fails closed at the hash step, the scope step is never
+# reached, and G4 has no enforced scope at all -- which is the correct behaviour.
+# ---------------------------------------------------------------------------

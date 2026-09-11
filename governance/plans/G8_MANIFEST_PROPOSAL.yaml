@@ -1,0 +1,653 @@
+# NON-BINDING IMPLEMENTER PROPOSAL — G8.
+# This file does not authorize any mutation.
+# Only an operator-authored or operator-adopted copy at
+# governance/gate-manifests/g8.yaml, plus the operator-set repository variable
+# GATE_MANIFEST_APPROVED_HASH_G8, has authority (INV-28).
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL
+# EXCLUSIVITY. The authenticated implementation session is technically capable
+# of setting that repository variable and of changing the repository's admin
+# settings; the separation is procedural until the credential model in
+# ../gate-manifests/g1.yaml limitation 5 is resolved.
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS FILE IS, AND WHERE IT MUST NOT BE PUT
+#
+# A draft written for the operator to read, reject, edit or adopt, in the shape
+# ../gate-manifests/README.md describes and the voice ../gate-manifests/g1.yaml
+# established. It deliberately does NOT live in governance/gate-manifests/: a
+# manifest an implementer can edit in their own branch has no authority, and
+# that directory is forbidden to EVERY pull request on this repository — by
+# every adopted per-gate manifest, and by scripts/verify/check-floor-scope.mjs
+# for an ungated ("Gate: NONE") PR. A file placed there by an implementer could
+# not be merged even if someone tried.
+#
+# Nothing here is approved. The scope below is an argument, not a ruling.
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+  - WRITTEN_BEFORE_ANY_G8_PLAN_EXISTS
+
+authored_by: Claude (implementer)
+authored_on: 2026-09-11
+gate: G8
+
+# Metadata only. The Governance workflow resolves the gate from a branch named
+# `gate/g8-...` or a `Gate: G8` line in the PR body
+# (.github/workflows/governance.yml). Creating that branch is its own
+# authorization question and is not granted by adopting this manifest.
+branch: gate/g8-observability-backup
+
+# ---------------------------------------------------------------------------
+# PLAN PROVENANCE — DELIBERATELY EMPTY. G8 has no plan; governance/plans/ holds
+# only G0 and G1 material as of 2026-09-11. Nothing in CI verifies plan_hash
+# (limitation 4 below), so a placeholder would never be caught and a human
+# auditing this file would read a fabricated pin as a real one. The plan is
+# written first, the operator reviews this scope against it, and only then is a
+# manifest adopted and its hash set.
+plan_id: UNASSIGNED — no G8 plan exists as of 2026-09-11
+plan_hash: NOT_APPLICABLE — see the block above; do not invent a value
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: G8 — observability (TDD §46-48, §76), reporting
+  (§50, §66), retention execution (§51-52), host-side backup (§53) and THE FIRST
+  GENUINE RESTORE (§54, §77). The gate does not close on the existence of backup
+  code. Per TDD §77, verbatim: "A backup that has not been restored is not
+  considered valid." A G8 that ships a backup agent, a manifest, a checksum and
+  an R2 upload, and then reports itself DONE without an isolated restore having
+  actually been performed and validated, has not met its own Definition of Done
+  — it has shipped an untested assumption with a green suite in front of it.
+
+# ---------------------------------------------------------------------------
+# THE TWO THINGS THAT MAKE THIS GATE UNUSUAL, READ BEFORE THE PATH LIST
+#
+# 1. THE RESTORE IS THE DELIVERABLE. TDD §77's DoD lists eleven backup items and
+#    then four restore items — "isolated restore succeeds", "schema/constraints
+#    validated after restore", "representative project/topic/decision works
+#    after restore", "first restore test completed before MVP1 closure" — and
+#    §54 spells out the procedure: restore an isolated database, validate
+#    migrations/schema, validate row counts, validate critical constraints, open
+#    a representative Project->Topic->Decision path, produce a restore report.
+#
+#    Nothing about a path list can prove a restore happened. What a manifest CAN
+#    do is give that proof a home and refuse to let the gate close without one,
+#    so `governance/G8_RESTORE_TEST_REPORT.md` is named in allowed_paths as a
+#    first-class artifact rather than being folded into the closure report — the
+#    same reasoning that put ../plans/G1_PREADOPTION_EVIDENCE.md in G1's scope
+#    as a separate file. A closure report can summarise; an evidence file has to
+#    say what was actually run, against which export, with which row counts, and
+#    what failed the first time. And note which direction the risk runs here: a
+#    restore report is the easiest artifact in this repository to write without
+#    doing the work. `restore_test_age` in OPS (§46) is the metric that keeps it
+#    honest afterwards; the reviewer's job is to keep it honest the first time.
+#
+#    scripts/backup/ and scripts/restore/ exist today as EMPTY directories with
+#    zero tracked files. There is no partial work to build on and no prior
+#    restore to point at. Everything §77 requires starts at zero in this gate.
+#
+# 2. HARD_ZERO IS NOT SATISFIED BY THIS DESIGN TODAY, AND THE GAP IS IN R2.
+#    ADR-010/TDD §64 forbid a paid fallback, a paid queue fallback, an
+#    auto-upgrade billing path and an unapproved paid SaaS dependency; INV-17
+#    says free-quota exhaustion degrades service and "never creates surprise
+#    billing". The backup design (§53) and the Backup/DR DoD (§77) both require
+#    an R2 upload, and §10.1 lists Cloudflare R2 in the control plane.
+#
+#    BUT R2 HAS NO VERIFIED FREE-TIER ENTRY ANYWHERE IN THIS REPOSITORY. TDD §65
+#    ("Current external platform facts used by v0.3") has rows for Workers,
+#    Queues, D1, Analytics Engine, Tunnel, Workers AI, Apple and Gmail — and none
+#    for R2. docs/architecture/EXTERNAL_ASSUMPTIONS.md §C, the live-verified
+#    table, has no R2 row either. So the one storage product this gate must use
+#    is the one product whose free-tier terms, allowances and — critically —
+#    whether enabling it requires a payment instrument on the account, have never
+#    been checked. That is an implementer's finding about the documents, not a
+#    claim about Cloudflare's current pricing: the honest statement is that the
+#    project does not know, and a G8 preflight has to find out the way
+#    ../../scripts/probes/free-tier-snapshot/ and the G2 preflights were meant to
+#    — by live verification on the operator's own account, before any code
+#    assumes an R2 bucket exists.
+#
+#    Two further HARD_ZERO ceilings bind this gate's design and are easy to miss
+#    because they were verified for a different gate: a Cron Trigger gets the
+#    same 10 ms Free CPU budget as an HTTP request (EXTERNAL_ASSUMPTIONS §C: the
+#    CPU table has rows only for HTTP request and Cron Trigger), and D1 Free
+#    allows only 50 queries per Worker invocation. A retention sweep and a
+#    quota-snapshot job are exactly the shapes that loop over rows, so both have
+#    to be batched and resumable, not "run until done". Analytics Engine Free
+#    additionally caps 250 data points per Worker invocation and 100,000/day —
+#    an observability gate is the one most likely to emit its way past a cap and
+#    call the resulting silence "no incidents".
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# Scoped to the permissible MERGE SCOPE of the G8 pull request — what may
+# legitimately arrive on main through this gate's PR. The check runs
+# `git diff BASE_SHA...HEAD_SHA` over the cumulative range from the main base to
+# the PR head.
+#
+# Derived from TDD §83 (G8's one-line scope), §46-48 (observability, tracing,
+# OPS), §50/§66 (reporting and cadence), §51-52 (retention, deletion), §53-54
+# (backup and DR), §76-77 (the two DoDs) and §55's repository structure. The
+# runtime tree is empty — apps/, services/, infra/, host/ and connectors/ hold
+# zero tracked files — so these entries describe where code WILL live, taken
+# from §55 rather than invented, except where §55 has no answer at all and the
+# gap is flagged as an operator question.
+#
+# Grammar is segment-bounded, not shell globbing: `*` never crosses `/`, `**` is
+# a whole segment. No bare `**` appears here — such an entry makes the check
+# unable to refuse anything.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # The backup agent, which TDD §53 requires to run on the connector host and
+  # NOT in a Worker: "bulk export/compression/encryption MUST NOT run inside a
+  # Worker", because Workers Free active CPU is tightly constrained and the
+  # Queue CPU documentation is ambiguous (R8, still OPEN). §77 repeats it as a
+  # DoD line: "backup-agent runs on connector host, not Worker CPU path".
+  - host/backup-agent/**
+
+  # TDD §55 lists BOTH host/backup-agent/ and scripts/backup/ + scripts/restore/,
+  # and the repository has created all three as empty directories. That is a
+  # genuine ambiguity in the source documents, not a decision this manifest can
+  # make: the agent is a long-running host component, the scripts are the
+  # operator-invoked procedures the RESTORE runbook will reference. Both are in
+  # scope, and the operator question at the bottom asks which is authoritative
+  # so the next gate is not guessing.
+  - scripts/backup/**
+  - scripts/restore/**
+
+  # Operator-run operational scripts (§55) and the quota-snapshot tooling that
+  # feeds OPS's COST/QUOTA panel (§48) and the "What are current free-tier
+  # budgets?" question in §76.
+  - scripts/ops/**
+  - scripts/quota/**
+
+  # The telemetry package (§55): metric emission, trace_id propagation helpers
+  # (§47), the Analytics Engine writer. Shared by every service, which is why it
+  # lives in packages/ and why it belongs to the gate that defines what a metric
+  # IS rather than to whichever gate happened to need one first.
+  - packages/telemetry/**
+
+  # Report generation (§50.1-50.4: Daily Personal Brief, Weekly Management
+  # Report, Engineering Operations Report, Compliance Report) and the cadence of
+  # §66. Proposed as the home of the retention runner and the OPS read model as
+  # well — see the operator question about that; §55 provides no directory for
+  # either.
+  - services/reporting/**
+
+  # The owner-only /ops surface of §48. Named as subdirectories of the existing
+  # PWA rather than as apps/pwa/** deliberately: G7 delivers the product client,
+  # and an observability gate must not be able to rewrite it. This does invent
+  # a layout convention the TDD does not state — if OPS turns out to need a
+  # separate app, that is a scope change with its own plan, not a wider
+  # manifest.
+  - apps/pwa/src/ops/**
+  - apps/pwa/tests/ops/**
+
+  # Cron Triggers for the retention job, the nightly quota snapshot and the
+  # daily reconciliation report; the Analytics Engine binding; the R2 binding
+  # IF and only if the R2 question above is settled first. Honest caveat, the
+  # same one G7's proposal carries: this directory also holds G2's D1 and Queue
+  # bindings and G7's Pages/Access configuration, and the scope check cannot
+  # tell an added cron trigger from an edited queue binding.
+  - infra/cloudflare/**
+
+  # Host-side deployment for the backup agent: the service/timer unit, the
+  # least-privilege Cloudflare API token's location (documented, never the token
+  # itself — §53: "stored only on the host", "Global API keys are forbidden"),
+  # and the low-activity export window §53 requires because a D1 export can
+  # temporarily affect database availability.
+  - infra/connector-host/**
+
+  # Retention state and run reports (§52: "Retention jobs are idempotent and
+  # produce a structured run report"), backup/restore age records behind
+  # `backup_age` and `restore_test_age` (§46), and any operational tables OPS
+  # reads. Same caveat as always: the check sees a changed path, not an append,
+  # so editing a migration an earlier gate already applied would pass this check
+  # while being a scope violation. CI migration validation (§61) is the control
+  # for that.
+  - infra/migrations/**
+
+  # OBSERVABILITY.md says of itself, in its own text: "Index only, expanded into
+  # real dashboards/metrics at G8." This gate is the one named in the file.
+  # Named as a single file — the rest of docs/architecture/ stays out of scope,
+  # and TDD.md and TDD_ERRATA.md are explicitly forbidden below.
+  #
+  # Allowing a path here does NOT bypass .github/CODEOWNERS: /docs/architecture/
+  # is owned by @xLZDx, so a PR touching this file still needs the operator's
+  # review wherever branch protection requires code-owner review. Manifest scope
+  # and review authority are different controls.
+  - docs/architecture/OBSERVABILITY.md
+
+  # A backup agent holding a least-privilege Cloudflare API token and a
+  # locally-held encryption key, on the same host as the TDLib session, is a new
+  # threat surface — and the operator recovery/escrow procedure (§53) is a new
+  # key-management surface. §74 requires the threat model current at a gate that
+  # changes it.
+  - docs/architecture/THREAT_MODEL.md
+
+  # RESTORE.md is a placeholder whose own status line reads "to be written with
+  # real steps at G8 (Observability/Backup gate)" — this gate's single most
+  # visible documentation obligation, and the artifact that makes the DoD's
+  # backup item real rather than aspirational.
+  #
+  # The other two are new files, named here so the gate can create them and so
+  # their names are fixed by the operator at approval rather than chosen later.
+  # Named files rather than docs/runbooks/*.md on purpose: the other seven
+  # runbooks are placeholders belonging to G1, G2, G3 and G4, and an
+  # observability gate has no business rewriting the DLQ or Gmail gap-recovery
+  # procedure.
+  - docs/runbooks/RESTORE.md
+  - docs/runbooks/BACKUP.md
+  - docs/runbooks/RETENTION.md
+
+  # Durable decisions taken in the gate — the retention runner's home, the
+  # backup destination if R2 turns out to be unusable under HARD_ZERO, the
+  # metric cardinality budget against the Analytics Engine caps.
+  - core/DECISION_LOG.md
+
+  # R5 (free-tier platform drift) is this gate's standing risk, and G8 is where
+  # quota telemetry either makes it observable or does not. Any new row this
+  # gate discovers — an R2 billing requirement being the obvious candidate —
+  # belongs here rather than in a report nobody re-reads.
+  - core/RISK_REGISTER.md
+
+  # The gate ledger's own status row, updated at closure.
+  - core/PLAN_MASTER_GATES.md
+
+  # The gate plan, per .claude/skills/pdos-gates/SKILL.md §3. Named rather than
+  # governance/plans/*.md so that G0's and G1's records, and any later gate's
+  # manifest proposal, stay out of scope.
+  - governance/plans/G8_PLAN.md
+
+  # THE RESTORE EVIDENCE, as its own artifact rather than a section of the
+  # closure report. What was exported, when, from which database; the checksum
+  # and manifest that were verified; what the isolated restore target was; the
+  # schema/constraint validation output; the row counts before and after; the
+  # representative Project->Topic->Decision path that was actually opened; and
+  # what went wrong on the first attempt, because a restore that worked
+  # perfectly the first time is the least believable line in the file.
+  - governance/G8_RESTORE_TEST_REPORT.md
+
+  # The fresh-context reviews (universal DoD item 21). Residual, stated rather
+  # than hidden: this subtree also holds earlier gates' adopted reviews, so the
+  # pattern permits editing an earlier record. The check sees a changed path,
+  # not a direction.
+  - governance/reviews/**
+
+  # The closure report. Does not exist yet.
+  - governance/G8_CLOSURE_REPORT.md
+
+  # The mandated Russian + English report pair, flat in reports/ as every report
+  # in this repository is. (TDD §55 sketches `reports/gate-*/` subdirectories;
+  # the repository has never used them, and this entry follows the repository.)
+  - reports/*.html
+
+  # Quota/budget tests (§62's CPU/quota block, and the 200-event/day and
+  # 1000-event/day budget shapes) and the resilience cases a backup/retention
+  # gate owns: an export that runs during activity, a retention run interrupted
+  # part-way and re-run (it must be idempotent, §52), a restore into an empty
+  # database, an Analytics Engine cap reached mid-day.
+  - tests/quota/**
+  - tests/resilience/**
+
+  # Integration coverage for the backup -> encrypt -> upload -> manifest ->
+  # restore -> validate chain. This is the one place where an end-to-end test is
+  # worth more than any number of unit tests, and also the place where a test
+  # can most easily pass against a fixture that no real export ever produced.
+  - tests/integration/**
+
+  # Backup encryption/key-procedure tests (§74: "backup encryption/recovery key
+  # procedure tested") and the no-raw-content assertions on logs, metrics and
+  # report output (INV-12).
+  - tests/security/**
+
+  # Fixtures for the above. READ INV-12 BEFORE ADDING ONE: raw message bodies
+  # never enter CI fixtures, and a D1 export fixture is exactly the artifact
+  # most likely to carry real content by accident.
+  # scripts/verify/check-secrets.mjs will not catch it — that scanner looks for
+  # token and key patterns, not for message text.
+  - tests/fixtures/**
+
+  # Domain policy tests, TypeScript only. The governance policy tests that guard
+  # this mechanism — gate-scope, floor-scope, CODEOWNERS — are `.mjs` and stay
+  # untouchable by this gate. A retention-class or "no raw content in a report"
+  # policy test would be `.ts` and is permitted.
+  - tests/policy/*.ts
+
+  # Workspace wiring: host/* is already an npm workspace (package.json), so the
+  # backup agent's dependencies necessarily move the root lockfile, and the new
+  # source and test globs need tsconfig and the vitest include list. Note that
+  # vitest.config.ts is where `passWithNoTests: false` lives, and
+  # scripts/verify/assert-tests-ran.mjs exists precisely because that setting
+  # could be quietly removed.
+  - package.json
+  - package-lock.json
+  - tsconfig.json
+  - vitest.config.ts
+  - eslint.config.js
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# Everything not in allowed_paths is already out of scope and reported as such.
+# These are a different class: touching one would be the implementer editing an
+# object that defines, proves, or records the constraints on the implementer.
+# They get their own refusal with its own message.
+#
+# `governance/gate-manifests/**` is the blanket form, not g1.yaml's narrower
+# `**/*.yaml` + `**/*.yml` pair: g1 needed the split because its own deliverable
+# included that directory's README; G8 has no business there at all.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # INV-28. A gate PR carrying its own authorizing manifest would validate a
+  # diff against a file that same diff had just written — NM3 from the v0.2
+  # adversarial review, and the reason the hash check runs BEFORE the scope
+  # check in .github/workflows/governance.yml.
+  - governance/gate-manifests/**
+
+  # The operator's own record of what they approved.
+  - governance/operator-approvals/**
+
+  # The frozen architecture baseline, INV-01..INV-31 included.
+  - docs/architecture/TDD.md
+
+  # TDD_ERRATA.md is NORMATIVE and outranks TDD.md on concrete details —
+  # .github/CODEOWNERS says so and records that GPT-PM caught the errata being
+  # created as a new authority surface outside the trust boundary the same change
+  # was tightening. G1 ALLOWED it, because writing E-001 was G1's actual work;
+  # G8 implements adopted architecture, and a gate that can declare a
+  # restriction superseded can approve its own deviation. If G8 finds the TDD
+  # concretely wrong — and §55's missing home for the retention runner is a live
+  # candidate — the correct move is to hand the operator a correction, not to
+  # write one and then rely on it.
+  - docs/architecture/TDD_ERRATA.md
+
+  # CI cannot police its own definition: for `pull_request` events GitHub runs
+  # the workflow as it exists in the PR's merge commit, so a PR editing these
+  # files edits the checks that police it. Both are already forbidden to every
+  # UNGATED PR by scripts/verify/check-floor-scope.mjs, and a feature gate
+  # should not hold authority an ungated PR is denied. ci.yml is included rather
+  # than carved out: it runs the secret scan, the test-deletion guard and the
+  # assert-tests-ran count check, so editing it is editing enforcement.
+  #
+  # KNOWN COST, AND IT LANDS SQUARELY ON THIS GATE. .github/workflows/ci.yml
+  # currently runs `npm audit --audit-level=high || echo "::warning::..."` with
+  # a comment saying the tightening is "deferred to G8 (see
+  # core/RISK_REGISTER.md)". Under this manifest G8 cannot make that change. See
+  # the operator questions: the deferral is also not recorded in the risk
+  # register the comment points at.
+  - .github/workflows/**
+  - .github/CODEOWNERS
+
+  # The enforcement mechanism. g1.yaml allowed scripts/verify/*.mjs because
+  # writing those checks WAS G1's deliverable; carrying that forward into a
+  # feature gate would let this pull request rewrite the checker that polices it
+  # — and the floor scope that polices ungated PRs, since check-floor-scope.mjs's
+  # own header notes its rules are "changeable through whichever gate's own
+  # manifest permits editing scripts/verify/*.mjs". /scripts/verify/ is
+  # CODEOWNERS-owned for the same reason.
+  #
+  # Named file by file rather than scripts/verify/** so mutation-check.mjs can
+  # stay outside the refusal class — see the operator question. A verify script
+  # added later is not in this list but is also not in allowed_paths, so it is
+  # still refused; only the message is weaker.
+  - scripts/verify/check-gate-scope.mjs
+  - scripts/verify/check-floor-scope.mjs
+  - scripts/verify/check-secrets.mjs
+  - scripts/verify/check-test-deletion.mjs
+  - scripts/verify/assert-tests-ran.mjs
+
+  # THE HARDEST CALL IN THIS FILE, AND THE ONE MOST WORTH ARGUING WITH.
+  #
+  # G8 is the gate that IMPLEMENTS retention — and that is exactly why it must
+  # not be the gate that can REDEFINE it. core/DATA_RETENTION_POLICY.md is
+  # policy-sensitive (TDD §57(13), .github/CODEOWNERS), its own header says
+  # changes require "ADR + independent review + operator approval", and it
+  # carries the numbers the implementation must hit: Telegram central raw text
+  # NOT STORED, source refs active + 30 days after resolution, Gmail derived
+  # state active + 180 days, audit 365 days with no raw content. An
+  # implementation that finds one of those inconvenient and edits the policy in
+  # the same pull request has not implemented the policy; it has replaced it
+  # with what the code happened to do, and the diff will look like a one-line
+  # documentation update.
+  #
+  # If implementation proves a period genuinely unworkable — the realistic case
+  # is a D1 Free row budget that a 365-day audit table cannot fit — that is a
+  # finding for the operator and an ADR, mid-gate, not a manifest widening.
+  #
+  # core/SOURCE_POLICY.md: G8 changes nothing about source policy.
+  # core/adr/**: ADR-010 (HARD_ZERO) is what this gate is measured against, and
+  # a gate that could amend it could approve its own paid dependency.
+  - core/SOURCE_POLICY.md
+  - core/DATA_RETENTION_POLICY.md
+  - core/adr/**
+
+# ---------------------------------------------------------------------------
+# Governance metadata carried by convention. Honestly:
+# scripts/verify/check-gate-scope.mjs reads `allowed_paths` and
+# `forbidden_paths` and NOTHING ELSE. Everything below is for a human reviewer.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+  - rel-01
+  - data-01
+  - priv-01
+  - sec-01
+  - gov-01
+  - red-01 (last, only after every other selected role has returned APPROVE)
+
+policy_sensitive_files:
+  - host/backup-agent/**
+  - scripts/backup/**
+  - scripts/restore/**
+  - infra/connector-host/**
+  - infra/cloudflare/**
+  - docs/runbooks/RESTORE.md
+  - docs/architecture/THREAT_MODEL.md
+
+# ---------------------------------------------------------------------------
+# operator_acceptance_dependencies
+#
+# The implementer cannot close this gate alone, and unlike G7's device list
+# these are not merely inconvenient — several of them are credential and
+# billing actions that are the operator's under the global authorization
+# contract no matter who holds more context.
+# ---------------------------------------------------------------------------
+
+operator_acceptance_dependencies:
+  - Live verification of Cloudflare R2 free-tier terms on the operator's own account, INCLUDING whether enabling R2 requires a payment instrument (no R2 row exists in TDD §65 or EXTERNAL_ASSUMPTIONS §C). A HARD_ZERO/INV-17 decision, not an implementation detail.
+  - Creation of the least-privilege Cloudflare API token for the backup agent (§53 forbids a Global API key), stored only on the connector host and never in the repository.
+  - The connector host itself — an always-on machine the backup agent runs on (R2 in the risk register; §10.2).
+  - 'The backup encryption key/passphrase and the operator recovery/escrow procedure (§53 requires that the backup data key/passphrase remains outside R2).'
+  - Running, or witnessing, the first genuine restore into an isolated database (§54, §77) and confirming the evidence in governance/G8_RESTORE_TEST_REPORT.md matches what actually happened.
+  - Any decision to accept a recurring cost if the R2 verification comes back unfavourable — an ADR-010 amendment, and operator-only.
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why
+#
+#   services/ingest/**,            Observability is a per-gate universal DoD
+#   services/processor/**,         item ("Observability exists for new runtime
+#   services/resolver/**,          behavior", item 17), so each earlier gate
+#   services/decision/**,          instruments its own code. If a metric §46
+#   services/notification/**,      requires is missing from a service an earlier
+#   services/content-request-       gate delivered, that is a defect in THAT
+#   broker/**                      gate — a finding, a plan and a fix — not
+#                                  something for an observability gate to patch
+#                                  across ten directories inside one pull
+#                                  request. This will bite; see the questions.
+#
+#   services/api/**                Excluded so the OPS read model is forced to
+#                                  live in one place rather than spreading into
+#                                  the product API G6/G7 own. If /ops genuinely
+#                                  needs endpoints there, name the seam at
+#                                  adoption time.
+#
+#   apps/pwa/** (except src/ops     G7's deliverable. An observability gate must
+#   and tests/ops)                  not be able to rewrite the product client.
+#
+#   packages/contracts/**,          Data contracts and the provenance/AI
+#   packages/policy/**,             boundary. A reporting gate that could edit
+#   packages/provenance/**,         the provenance gate is how a
+#   packages/domain/**              Telegram-tainted value ends up in an
+#                                   aggregate that an AI call later reads
+#                                   (INV-04/05/26). Reports are built FROM
+#                                   provenance-bearing state; they do not get to
+#                                   redefine what taint means.
+#
+#   connectors/**,                  G3/G4 territory. Note that §77's "Telegram
+#   host/content-gateway/**         raw history excluded" from backups is a
+#                                   property of what the backup agent SELECTS,
+#                                   which is in scope — not of the connector,
+#                                   which is not.
+#
+#   host/optional-http-pull-        ADR-011's fallback consumer, tied to R9 and
+#   consumer/**                     to G2's preflights.
+#
+#   README.md, CLAUDE.md,           Housekeeping goes through an ungated
+#   AGENTS.md, CONTRIBUTING.md,     "Gate: NONE" PR, which the floor scope
+#   .prettierignore                 already allows. It never needs to widen a
+#                                   gate manifest.
+#
+#   scripts/probes/**               G0 evidence, and the free-tier snapshot
+#                                   tooling. If G8's R2 verification is run as a
+#                                   probe rather than by hand, add
+#                                   scripts/probes/free-tier-snapshot/** by name
+#                                   at adoption — deliberately not assumed here.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN ONCE ITS HASH IS APPROVED
+#
+#   1. IT CANNOT PROVE A RESTORE HAPPENED. It can require the evidence file to
+#      exist and confine where the code lives; it cannot distinguish a restore
+#      report describing a real isolated database from one describing an
+#      intention. That distinction is the reviewer's, and it is the single most
+#      important judgement in this gate.
+#   2. It cannot tell an addition from a rewrite. infra/cloudflare/**,
+#      infra/migrations/** and infra/connector-host/** are where that matters:
+#      the check sees a changed path, never whether a cron trigger was added or
+#      a queue binding G2 delivered was altered.
+#   3. It cannot see a COST. Nothing in a path list refuses a billable resource.
+#      A wrangler binding to a paid product, an R2 bucket on an account with a
+#      card attached, a metrics volume past the Analytics Engine cap — all of
+#      them are ordinary edits to allowed paths. HARD_ZERO is enforced by
+#      startup/deployment checks (§64) and by review, not here.
+#   4. Nothing checks plan_hash, and in this file there is nothing to check.
+#      governance.yml verifies only THIS FILE's own sha256 against the
+#      operator-held repository variable.
+#   5. The `Gate: G8` label that selects this manifest comes from the branch
+#      name or the PR body, both written by the implementer (limitation 6 in
+#      ../GATE_MANIFEST_INTEGRITY.md).
+#   6. The check runs on `pull_request` only. A direct push to main is not
+#      examined by it at all.
+#   7. THE APPROVAL HASH IS NOT OUT OF THE IMPLEMENTER'S REACH — measured
+#      2026-09-10, classic PAT with `repo`, `workflow`, `admin:org` and
+#      `.permissions.admin` true on this repository. The separation is
+#      procedural. Detail in ../plans/G1_PREADOPTION_EVIDENCE.md §3.1.
+#   8. AND THE ONE THIS FILE ADDS BY EXISTING: an implementer drafted it, before
+#      any G8 plan existed. The only thing between that and a self-authorized
+#      scope is the operator reading these bytes.
+#
+# ---------------------------------------------------------------------------
+# QUESTIONS ONLY THE OPERATOR CAN SETTLE
+#
+#   Q1. R2 AND HARD_ZERO. Settle this BEFORE the gate starts, not during it:
+#       does enabling R2 on your Cloudflare account require a payment
+#       instrument, and what does its free allowance actually cover for nightly
+#       D1 exports under the §53 retention of 7 daily / 4 weekly / 3 monthly? If
+#       the answer conflicts with ADR-010, the backup destination is an
+#       architecture decision (an ADR, which this manifest forbids the gate from
+#       writing), not an implementation choice. A plausible alternative —
+#       encrypted backups kept on the connector host plus an off-host copy the
+#       operator controls — changes §53 and §77 and therefore needs your ruling
+#       first.
+#
+#   Q2. WHERE DOES THE RETENTION RUNNER LIVE? TDD §55 lists services/{api,
+#       ingest,processor,resolver,decision,notification,reporting,
+#       content-request-broker} and no retention service, while §52 requires
+#       idempotent retention jobs producing structured run reports. This
+#       proposal puts them in services/reporting/** by elimination. Confirm, or
+#       name services/retention/** and add it to allowed_paths at adoption.
+#       Same question for the OPS read model behind §48.
+#
+#   Q3. THE npm audit DEFERRAL. .github/workflows/ci.yml says tightening the
+#       dependency audit is "deferred to G8 (see core/RISK_REGISTER.md)" — but
+#       core/RISK_REGISTER.md has no such row (its G1-era entries are R11/R12/
+#       R13, none of which is the audit). So a deferral was recorded in a
+#       comment pointing at a register that never received it, and the work it
+#       defers lives at a path this manifest forbids. Either add
+#       `.github/workflows/ci.yml` to allowed_paths for this gate specifically,
+#       or make the change yourself outside the gate, or record the deferral
+#       properly and push it to G9/G10. The implementer recommends the last: a
+#       dependency-audit policy is a supply-chain decision, not an
+#       observability deliverable.
+#
+#   Q4. MISSING INSTRUMENTATION IN EARLIER GATES. §76 requires the operator to
+#       be able to answer eleven questions from OPS/trace data, and several of
+#       them ("Did event X get accepted?", "Why is event X unprocessed?", "Did
+#       restricted provenance touch AI?") depend on metrics that must be emitted
+#       by services this manifest deliberately excludes. If G8 finds them
+#       missing, do you want (a) a finding against the earlier gate and a
+#       separate fix, or (b) this manifest widened at adoption to include those
+#       service subtrees? (a) keeps the gate boundaries meaningful and will be
+#       slower; (b) is faster and lets one pull request touch most of the
+#       system. The implementer recommends (a), and recommends deciding it now
+#       rather than under deadline.
+#
+#   Q5. MUTATION COVERAGE. scripts/verify/mutation-check.mjs holds a hardcoded
+#       MUTATIONS list, so proving a NEW guard is genuinely tested requires
+#       editing it. It is deliberately outside forbidden_paths but also outside
+#       allowed_paths, so today it is refused as out-of-scope. Add it if you want
+#       this gate to prove its own guards; it is an evidence harness, not a CI
+#       gate (ci.yml does not run it), so the risk is weakened evidence rather
+#       than weakened enforcement.
+#
+#   Q6. WHICH IS AUTHORITATIVE, host/backup-agent/ OR scripts/backup/ +
+#       scripts/restore/? TDD §55 creates all three and assigns work to none of
+#       them specifically. Both are in scope here so the gate is not blocked,
+#       but the answer should be recorded in the decision log rather than
+#       inferred later from whichever directory ended up with files in it.
+#
+# ---------------------------------------------------------------------------
+# HOW ADOPTION WORKS, AND WHY NO HASH IS PRINTED HERE
+#
+# Do NOT copy this file byte-for-byte into governance/gate-manifests/g8.yaml:
+# the copy would carry `status: NON_BINDING_PROPOSAL / HAS_NO_AUTHORITY`, so the
+# binding manifest would assert about itself that it has no authority. Adoption
+# means editing at least the header and the status block — and the moment
+# anything is edited the sha256 changes, so any hash printed here would be the
+# hash of the wrong bytes.
+#
+#   1. operator   Review and edit this proposal against the G8 plan, once that
+#                 plan exists. Settle Q1 first: it can change the design.
+#                 Narrowing is always safe; widening is the thing to be
+#                 suspicious of.
+#   2. operator   Write the result to governance/gate-manifests/g8.yaml, in its
+#                 own commit on main, NOT inside the gate PR — that path is
+#                 forbidden above, so a gate PR carrying it fails the Governance
+#                 check, correctly.
+#   3. operator   Compute its sha256 from the committed LF bytes. A hash taken
+#                 from a Windows working copy with CRLF endings will NOT match
+#                 what the runner computes.
+#   4. operator   Set repository variable GATE_MANIFEST_APPROVED_HASH_G8 to that
+#                 value.
+#   5. anyone     Open the gate PR. The Governance check now reaches the scope
+#                 step instead of failing closed at the hash step.
+#
+# Step 4 is what makes any of this real. Until it is done the Governance check
+# fails closed at the hash step, the scope step is never reached, and G8 has no
+# enforced scope — which is the correct behaviour.
+# ---------------------------------------------------------------------------

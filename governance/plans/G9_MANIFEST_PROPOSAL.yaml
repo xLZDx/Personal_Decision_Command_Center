@@ -1,0 +1,600 @@
+# NON-BINDING IMPLEMENTER PROPOSAL.
+# This file does not authorize any mutation.
+# Only an operator-adopted copy at governance/gate-manifests/g9.yaml, plus the
+# operator-set repository variable GATE_MANIFEST_APPROVED_HASH_G9, has authority.
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL
+# EXCLUSIVITY. The authenticated implementation session on this machine is
+# technically capable of setting that repository variable and of changing the
+# repository's admin settings; the separation is therefore procedural until the
+# credential model recorded as R13 / g1.yaml limitation 5 is resolved.
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS FILE IS, AND WHAT IT IS NOT
+#
+# It is a draft written for the operator to read, reject, edit or adopt. It was
+# NOT written into governance/gate-manifests/, and must not be: INV-28 makes a
+# gate manifest operator-owned governance state, and a manifest an implementer
+# can freely place there has no authority at all. That directory is also in
+# every gate manifest's forbidden_paths and in check-floor-scope.mjs's
+# FORBIDDEN_PATHS, so no pull request of any kind -- gated or "Gate: NONE" --
+# could legally carry a file into it anyway.
+#
+# The name is G9_MANIFEST_PROPOSAL.yaml, not g9.yaml, so that a draft can never
+# be mistaken for the authoritative manifest even at a glance in a listing.
+#
+# Nothing here has been approved. The scope below is an argument, not a ruling.
+#
+# ---------------------------------------------------------------------------
+# WHY THIS MANIFEST IS SHAPED DIFFERENTLY FROM g1.yaml
+#
+# G1 was a CONSTRUCTIVE gate: it built the governance mechanism, so its manifest
+# allowed the paths it had to write, and forbade four paths whose editing would
+# have been the implementer granting itself authority.
+#
+# G9 is an EVALUATIVE gate. Its deliverables are a labeled corpus, a shadow
+# evaluation run, calibration measurements, adversarial end-to-end findings and
+# an evidence record -- not product surface. That inverts the manifest's centre
+# of gravity: for a constructive gate the interesting question is "what may this
+# gate write?", and for an evaluative gate it is "what must this gate be unable
+# to touch, so that its own result is believable?".
+#
+# Consequently forbidden_paths below is long, where G1's was four entries. Every
+# entry in it is in the same class G1's four were -- touching it would let the
+# gate manufacture its own verdict -- the class is simply much wider when the
+# deliverable IS a verdict.
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+
+authored_by: Claude (implementer)
+authored_on: 2026-09-11
+gate: G9
+
+# The Governance workflow resolves the gate from `gate/g<N>-...` in the branch
+# name, or from a `Gate: G<N>` line in the PR body, and then looks for
+# governance/gate-manifests/g9.yaml and the variable
+# GATE_MANIFEST_APPROVED_HASH_G9. A branch named anything else selects a
+# different manifest, or none. Creating the branch is its own act under global
+# CLAUDE.md 14/20 and is not authorized by this file.
+branch: gate/g9-shadow-evaluation (proposed name, not yet created)
+
+# G9 has no plan and no plan hash, and this file does not invent either.
+# Writing a plausible-looking value here would be the exact defect the G0
+# closure report records under "a hash-bound approval must be requested against
+# a frozen artifact".
+plan_id: NOT_YET_ASSIGNED
+plan_hash: NOT_YET_COMPUTED
+
+# Nothing verifies plan_hash. .github/workflows/governance.yml verifies THIS
+# FILE's own sha256 against the operator-held repository variable; it never
+# reads plan_hash. That is limitation 7 in governance/GATE_MANIFEST_INTEGRITY.md
+# and it is why, at adoption, the plan should be pinned to an immutable commit
+# and blob rather than to `HEAD:<path>` -- see g1.yaml's plan provenance block
+# for the defect that convention exists to prevent.
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: G9 -- shadow evaluation, threshold calibration
+  measurement, and adversarial end-to-end review of the MVP1 system built in
+  G2-G8. G9 produces a labeled evaluation corpus, an evaluation harness, measured
+  results against the TDD 80 thresholds and the TDD 81 targets, a calibration
+  RECOMMENDATION, adversarial findings, and an evidence record. G9 produces no
+  product surface and applies no calibration itself; see "THE CENTRAL JUDGEMENT"
+  below. This scope is authoritative only while GATE_MANIFEST_APPROVED_HASH_G9
+  matches the SHA-256 of the exact adopted bytes; absent that match the
+  Governance check fails closed and G9 has no enforced scope at all.
+
+# ---------------------------------------------------------------------------
+# THE CENTRAL JUDGEMENT: AN EVALUATION GATE MAY NOT EDIT WHAT IT EVALUATES
+#
+# DECISION: G9's allowed_paths exclude the entire implementation tree --
+# apps/, services/, connectors/, host/, infra/ and packages/ -- and also every
+# test suite owned by an earlier gate. G9 may create instruments and evidence.
+# It may not touch the subject of the measurement, and it may not touch any
+# artifact whose passing state is part of the result G9 is reporting.
+#
+# WHY. A shadow evaluation exists to produce a number that can be wrong. The
+# failure mode is not an implementer acting in bad faith; it is the ordinary,
+# almost reflexive move of a session that runs an evaluation, sees
+# auto-merge precision at 92% against a >=95% threshold, notices a plausible
+# off-by-one in the candidate scorer, fixes it, re-runs, gets 96%, and reports
+# 96%. Every step of that is defensible in isolation and the end state is a
+# gate that measured a system nobody has reviewed, against a threshold it
+# adjusted itself, and called the result evidence. The scope check cannot tell
+# a genuine fix from a result-shaped one -- it sees a changed path, never the
+# direction or the motive of the change. So the control has to be the path
+# list, applied before the temptation exists.
+#
+# THE SAME ARGUMENT APPLIES ONE LEVEL UP, TO TESTS, and that is why
+# tests/policy/**, tests/unit/**, tests/contract/**, tests/integration/**,
+# tests/resilience/**, tests/quota/**, tests/security/** and tests/fixtures/**
+# are forbidden below rather than merely absent. TDD 80 lists
+# "Telegram/mixed AI policy violations: 0" as one of G9's own measured exit
+# numbers, and the automated tests that produce that number live in
+# tests/policy/ and were written by G2/G5/G6. A gate that can relax an
+# assertion in a suite whose green state is its own grade has the identical
+# defect as one that can patch the code, with less visibility.
+#
+# WHAT G9 DOES INSTEAD WHEN IT FINDS A DEFECT. It reports it. A BLOCKER or
+# MAJOR found during G9 is remediated by the gate that owns the component -- a
+# G3 remediation PR against the Gmail connector, a G5 remediation PR against
+# the resolver -- each with its own plan, its own GO and its own manifest, per
+# PLAN_MASTER_GATES.md ("Completion of one gate does not authorize the next",
+# and by the same logic no gate authorizes edits inside another's surface).
+# This costs more pull requests. That cost is the point: it makes every repair
+# performed during evaluation visible as a repair, attributed to the gate whose
+# claim it corrects, rather than dissolved into the evaluation commit.
+#
+# CALIBRATION IS THE HARD CASE, AND IT IS NOT FULLY SOLVED HERE.
+# TDD 22 sets the resolver thresholds (>=0.90 AUTO_ATTACH, 0.70-0.89
+# CANDIDATE_MERGE, <0.70 SEPARATE) and says in terms that "the thresholds are
+# calibrated in Shadow evaluation" and that the scoring is "configuration, not
+# immutable logic". TDD 80 adds the rule that if precision fails, automation is
+# lowered rather than recall forced. So calibration genuinely belongs to G9 --
+# and applying it means changing a value that today would live inside
+# services/resolver or packages/policy, which this manifest forbids.
+#
+# This proposal takes the conservative half: G9 MEASURES and RECOMMENDS
+# calibrated values, recording them in its evidence file with the run that
+# justifies each one; APPLYING them is a separate, properly gated change owned
+# by the resolver's gate. The operator may prefer the other half, and the
+# amendment that would make it safe is specific rather than a general widening:
+# G5 externalizes the scoring weights and thresholds into one named data file
+# that contains no logic, and this manifest gains exactly that one path. Both
+# options are listed under OPEN QUESTIONS below, because choosing between them
+# is a governance decision, not an implementation detail, and a manifest is the
+# wrong place to decide it silently.
+#
+# ---------------------------------------------------------------------------
+# THE HAZARD THIS PARTICULAR HARNESS CREATES: INV-03 / INV-04 / INV-05 / INV-26
+#
+# A shadow-evaluation harness is the most likely thing in this entire project
+# to breach the Telegram AI boundary, and it would do so with nobody intending
+# it. The corpus required by TDD 80 is deliberately MIXED -- >=30
+# Telegram+Gmail cross-source topic cases, >=20 ambiguous/no-merge cases -- and
+# the natural way to write an evaluation loop is to iterate that corpus and
+# send each record to the model. That single loop violates INV-03 (raw Telegram
+# content never enters AI), INV-04 (anything derived from Telegram inherits the
+# taint regardless of datatype) and INV-05 (MVP1 AI accepts Gmail-source-local
+# evidence only), and it does so while every production code path remains
+# correct, because the harness is not a production code path.
+#
+# The scope list below cannot enforce any of this -- a path check has no
+# opinion about what a file does. These are therefore stated as binding
+# conditions of the gate, to be verified in review and recorded in the evidence
+# file, and the manifest's contribution is only that it keeps the harness OUT of
+# the packages where the real gate lives, so the harness must go through that
+# gate rather than around it:
+#
+#   1. The harness never holds a model client of its own. Every AI call it
+#      makes goes through the same production serializer and provenance gate the
+#      runtime uses, imported read-only from packages/. TDD 70's DoD already
+#      requires that "AI serializer cannot bypass provenance gate"; a harness
+#      with its own client is exactly that bypass, built by the gate whose job
+#      is to prove it cannot happen.
+#   2. Every corpus record carries explicit source provenance and AI
+#      eligibility. Unknown or mixed ancestry is AI_DENY, per INV-22's
+#      fail-closed rule -- an unlabeled fixture is a denied fixture, never a
+#      permitted one.
+#   3. The run includes a negative control that must be blocked: a deliberately
+#      Telegram-tainted value presented to the AI path, and a Topic object
+#      presented to the MVP1 AI API. A run in which those assertions did not
+#      EXECUTE is a failed run, not a passing one. This repository has already
+#      been bitten by the general form of that -- see vitest.config.ts's
+#      `passWithNoTests: false` and the comment above it.
+#   4. INV-12 forbids raw message bodies in CI fixtures. The committed corpus is
+#      therefore synthetic or redacted: identifiers, structure, timings, labels
+#      and the rubric, never message bodies. This collides with TDD 82's
+#      requirement that "at least one real/safely-labeled topic combines BOTH
+#      source types", and the TDD never says where a real-content corpus would
+#      live or how it is redacted. Raised under OPEN QUESTIONS rather than
+#      resolved by an implementer picking a reading.
+#   5. Telegram semantic recall is informational and non-blocking (TDD 80), and
+#      TDD 22.1 says in terms that it "is not allowed to force prohibited AI
+#      use". A calibration round that improves Telegram recall by widening what
+#      reaches the model is a finding against the harness, not a result.
+#   6. HARD_ZERO (INV-17, ADR-010) applies to the evaluation itself. The Workers
+#      AI free allocation measured at G0 is 10,000 Neurons/day; a >=200-event
+#      corpus re-run across calibration rounds can exhaust it. The harness
+#      budgets its own consumption and degrades rather than spending, and a run
+#      truncated by quota is reported as truncated, never as complete.
+#
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# WHAT THIS LIST IS SCOPED TO: the permissible MERGE SCOPE of the G9 pull
+# request. The check runs `git diff BASE_SHA...HEAD_SHA` over the cumulative
+# range from the main base to the PR head, so it evaluates everything the branch
+# carries, not only the last commit.
+#
+# Grammar is the segment-bounded one scripts/verify/check-gate-scope.mjs
+# enforces, NOT shell globbing: `*` matches within one path segment and never
+# crosses `/`, `**` is a whole segment. There is no bare `**` anywhere in this
+# file; a manifest containing one cannot refuse anything, and the checker warns
+# about it on every run for that reason.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # Everything G9 authors as an instrument lives here and nowhere else: the
+  # harness, the evaluation suites, the label rubric and the synthetic corpus
+  # (proposed as tests/eval/fixtures/).
+  #
+  # tests/eval/ is a TENTH subtree under tests/, which TDD 55 enumerates with
+  # nine (unit, contract, integration, e2e, policy, security, resilience, quota,
+  # fixtures). That is a deliberate, disclosed extension and the operator adopts
+  # it by adopting this manifest; the deviation belongs in core/DECISION_LOG.md,
+  # which is allowed below. The reason for a new subtree rather than reusing
+  # tests/e2e/ and tests/fixtures/ is the judgement above: those are owned by
+  # earlier gates, so sharing a directory would put G9's write permission on top
+  # of somebody else's proof surface, and the path check cannot tell an added
+  # file from an edited one within an allowed directory.
+  #
+  # Two practical consequences worth stating rather than discovering later.
+  # First, vitest.config.ts already includes `tests/**/*.test.ts`, so suites
+  # placed here are collected with no config change -- which is why
+  # vitest.config.ts and package.json are forbidden below rather than allowed
+  # "just in case". Second, G9's suites must be `.test.ts` and not `.test.mjs`:
+  # scripts/verify/check-test-deletion.mjs matches only `.test.ts`, so an `.mjs`
+  # suite can be deleted or `.skip`-ed with the guard silent.
+  - tests/eval/**
+
+  # The G9 plan and its evidence records -- the measured run, the corpus
+  # statistics, the per-threshold results, the calibration recommendation, the
+  # negative-control outcomes, the quota consumed. A `G9_`-prefixed pattern
+  # rather than a wider governance/plans/*.md, so that G0_PLAN.md and the G1
+  # documents stay out of scope: `*` does not cross `/` and does not reach
+  # another gate's file.
+  - governance/plans/G9_*.md
+
+  # The fresh-context adversarial reviews. Universal DoD item 21 requires at
+  # least one substantive review independent of the implementer context, and
+  # "adversarial end-to-end review" is half of this gate's name; TDD 59's RED-01
+  # role lands its output here. `**` as the last segment covers the subtree and,
+  # because the separator is part of the pattern, never the bare directory name.
+  - governance/reviews/**
+
+  # The closure report, in the shape G0_CLOSURE_REPORT.md established: what was
+  # approved, what the measurements actually were, what was found, what is
+  # carried forward and whose action each item is.
+  - governance/G9_CLOSURE_REPORT.md
+
+  # Durable decisions: the tests/eval/ layout extension, the calibration
+  # disposition, any accepted MINOR debt, and each finding routed to another
+  # gate rather than fixed here.
+  - core/DECISION_LOG.md
+
+  # G9 is where several "verification owed" rows in the register are finally
+  # settled by evidence rather than by design argument -- NM2 (Telegram leakage
+  # into AI proven by automated policy test, not asserted), NM4 (poison-event
+  # termination), R1 and R4 (the deterministic-aggregation and recall ceilings
+  # as measured). The register's own instruction applies and is not softened by
+  # being inside a gate: do not mark a row CLOSED until the verification has run
+  # and produced evidence.
+  - core/RISK_REGISTER.md
+
+  # The gate ledger. G9's row moves from NOT STARTED to its real state, and G9
+  # is where the G0 output table's still-unresolved PENDING/DRAFT-versus-
+  # DONE/ADOPTED contradiction with governance/G0_CLOSURE_REPORT.md would be
+  # visible for the third gate running if it is still open by then.
+  - core/PLAN_MASTER_GATES.md
+
+  # The mandated Russian + English report pair. Segment-bounded, so it reaches
+  # files directly in reports/ and no subdirectory. Note a documentation drift
+  # rather than reproduce it silently: TDD 55 draws this directory as
+  # `reports/gate-*/`, while the adopted g1.yaml and every report actually in
+  # the repository are flat `reports/<name>.html`. This follows the adopted
+  # practice; the TDD's drawing is the stale artifact and belongs in the errata,
+  # which G9 may not write -- so it is recorded in the decision log instead.
+  - reports/*.html
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# Everything not in allowed_paths is already out of scope and the checker
+# reports it as such. These are a different class: each one, if touched by this
+# gate, would let the gate produce its own verdict. They get their own refusal
+# with its own message so that the intent survives contact with a future reader
+# who no longer remembers this prose.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # INV-28, mandatory in every gate manifest. A gate PR carrying its own
+  # authorizing manifest would validate a diff against a file that same diff had
+  # just written -- NM3 from the v0.2 adversarial review, and the reason the hash
+  # check runs before the scope check at all. The blanket subtree pattern is used
+  # here rather than g1.yaml's split *.yaml/*.yml pair because G9 has no reason
+  # to touch that directory's README either.
+  - governance/gate-manifests/**
+
+  # Mandatory in every gate manifest. The operator's own record of what they
+  # approved: an implementer that can write approvals can manufacture the
+  # evidence that it was approved.
+  - governance/operator-approvals/**
+
+  # REASONED EXPLICITLY, AS REQUIRED, AND FOR G9 THE ANSWER IS FIRMER THAN FOR
+  # A CONSTRUCTIVE GATE. docs/architecture/TDD.md is the frozen architecture
+  # baseline, INV-01..31 included -- and it is also, in 80 and 81, the literal
+  # list of numbers G9 exists to measure against: >=95% auto-merge precision,
+  # >=85% linkable-case recall, >=90%/>=85% Gmail decision precision/recall, p95
+  # under 60s. A gate that can edit its own pass mark has measured nothing. G1
+  # forbade this file too, but for the weaker reason that it was frozen; here it
+  # would be the direct mechanism of a false result.
+  - docs/architecture/TDD.md
+
+  # AND THE ROUTE AROUND IT, which G1 deliberately left open and G9 must not.
+  # TDD_ERRATA.md exists so concrete details can be corrected without amending
+  # the TDD, and E-001 states the errata never amends an invariant -- but an
+  # erratum CAN restate a threshold's interpretation, and "E-0NN: 80's
+  # precision target is understood to exclude candidate merges" is a rewritten
+  # pass mark wearing a correction's clothes. If G9 genuinely needs an erratum,
+  # it is authored and landed as its own change BEFORE the evaluation runs, so
+  # that the measurement and the yardstick are not written by the same commit.
+  - docs/architecture/TDD_ERRATA.md
+
+  # REASONED EXPLICITLY, AS REQUIRED. .github/workflows/** is the CI that
+  # evaluates the evaluator -- the Governance job that resolves this gate,
+  # verifies this manifest's hash and runs the scope check, plus the ci.yml that
+  # runs the suites whose results G9 reports. G1 allowed `.github/workflows/*.yml`
+  # because G1 BUILT those workflows and because CI on this repository had never
+  # once executed (R11) so a first correction was expected. Neither reason
+  # survives into G9: by then the workflows exist, have run, and are part of the
+  # instrument. check-floor-scope.mjs already forbids this subtree to ungated
+  # PRs for the same reason, so forbidding it here is consistency, not novelty.
+  - .github/workflows/**
+
+  # REASONED EXPLICITLY, AS REQUIRED. CODEOWNERS is the merge-authority control,
+  # and INV-20 -- the implementer cannot approve or merge its own gate -- is one
+  # of the invariants G9's own closure depends on. The scope check sees a changed
+  # path and not the direction of the change, so it cannot tell a tightening from
+  # a loosening of this file; that is g1.yaml's limitation 1 and it is unchanged.
+  # R13 is also still open: with one GitHub account, CODEOWNERS cannot mechanically
+  # prove implementer-versus-operator separation, so its value here is procedural
+  # and a gate quietly editing it would remove even that.
+  - .github/CODEOWNERS
+
+  # THE IMPLEMENTATION TREE -- the heart of this manifest. These are the systems
+  # G9 measures. Listing them as forbidden rather than simply omitting them is
+  # deliberate: absence produces "outside G9's approved scope", which reads like
+  # an oversight in the manifest and invites the reflex to widen it, while a
+  # forbidden entry produces a refusal that names a rule. Widening a manifest to
+  # fit a diff is the failure mode this whole mechanism exists to prevent.
+  # packages/ is forbidden whole, testkit included: a shared test toolkit that
+  # the evaluating gate can rewrite is an instrument the evaluator controls, and
+  # earlier gates' proofs depend on it.
+  - apps/**
+  - services/**
+  - connectors/**
+  - host/**
+  - infra/**
+  - packages/**
+
+  # EVERY PROOF SURFACE OWNED BY AN EARLIER GATE. tests/policy/ is the sharpest
+  # case: TDD 70's automated AI-boundary tests live there, and "Telegram/mixed
+  # AI policy violations: 0" is one of G9's own reported exit numbers. The rest
+  # follow the same rule -- G9 runs these suites and reports what they do; it
+  # does not author or amend them. An adversarial probe that G9 writes goes in
+  # tests/eval/, where a failure is a finding rather than a grade.
+  - tests/policy/**
+  - tests/unit/**
+  - tests/contract/**
+  - tests/integration/**
+  - tests/e2e/**
+  - tests/security/**
+  - tests/resilience/**
+  - tests/quota/**
+  - tests/fixtures/**
+
+  # THE ENFORCEMENT MECHANISM AND THE VERIFICATION PIPELINE. scripts/verify/
+  # holds the scope check, the floor check, the test-deletion guard, the secret
+  # scan, the test-count assertion and the mutation harness; the root
+  # configuration files define what `npm run verify` even means. A gate that can
+  # edit the definition of "the tests pass" in the same PR in which it claims
+  # they passed has not demonstrated anything. This is also why tests/eval/ was
+  # chosen to need no configuration change at all -- see its entry above.
+  - scripts/verify/**
+  - package.json
+  - vitest.config.ts
+  - tsconfig.json
+  - eslint.config.js
+
+  # POLICY-SENSITIVE GOVERNANCE STATE (TDD 57(13)). The source policy, the
+  # retention policy, the ADRs and the universal DoD are the rules G9 measures
+  # compliance against; the scope lock is the boundary of the thing being
+  # evaluated. ADR-010 in particular is the HARD_ZERO definition that the
+  # evaluation run's own budget is checked against.
+  - core/MVP1_SCOPE_LOCK.md
+  - core/DEFINITION_OF_DONE.md
+  - core/SOURCE_POLICY.md
+  - core/DATA_RETENTION_POLICY.md
+  - core/adr/**
+
+# ---------------------------------------------------------------------------
+# The fields below are part of the manifest shape in
+# governance/gate-manifests/README.md and TDD 57(5). Stated honestly, as g1.yaml
+# states it: check-gate-scope.mjs reads allowed_paths and forbidden_paths and
+# NOTHING ELSE. These three are documentation for a human reviewer, not
+# enforcement.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+  # The shadow evaluation itself, run from tests/eval/ with no package.json
+  # entry (see the allowed_paths note). A run that did not execute its
+  # negative controls is a failed run; a run truncated by the HARD_ZERO AI
+  # budget is reported as truncated and never as complete.
+  - npx vitest run tests/eval
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+  # TDD 59 roles that this gate's substance actually needs, rather than the full
+  # roster: the adversarial QA role owns the ambiguous/no-merge cases (TDD 80's
+  # >=20), the AI/decision role owns the provenance boundary in the harness, and
+  # the final adversarial role owns the end-to-end half of the gate's name.
+  - QA-01 (adversarial QA)
+  - AI-01 (AI/decision)
+  - RED-01 (final adversarial)
+
+policy_sensitive_files:
+  - docs/architecture/TDD.md
+  - docs/architecture/TDD_ERRATA.md
+  - tests/policy/**
+  - scripts/verify/check-gate-scope.mjs
+  - .github/workflows/governance.yml
+  - .github/CODEOWNERS
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why (these are simply out of scope, not in the
+# self-authorization class above)
+#
+#   docs/architecture/*.md   DATA_MODEL, PROVENANCE_MODEL, THREAT_MODEL,
+#   (other than TDD)         CONNECTOR_ARCHITECTURE, OBSERVABILITY,
+#                            EXTERNAL_ASSUMPTIONS. If the evaluation shows one
+#                            of these describes something the system does not
+#                            do, that is a finding reported against the gate
+#                            that owns the component, not a document G9 quietly
+#                            corrects while grading it.
+#
+#   docs/product/**          MVP1.md restates the 78 deliverables. Same rule.
+#
+#   docs/runbooks/**         Operations documents, owned by G8.
+#
+#   scripts/probes/**,       G0 and G2 evidence and harnesses. G9 may RUN them
+#   scripts/quota/**         and cite their output; editing them would be
+#                            editing an instrument whose readings it reports.
+#
+#   scripts/backup/**,       G8's surface.
+#   scripts/restore/**,
+#   scripts/ops/**
+#
+#   package-lock.json        Excluded on purpose, and it is the reason
+#                            tests/eval/ holds plain test files rather than a
+#                            new workspace package: adding a package under
+#                            packages/ or a script entry would drag the lockfile
+#                            (and package.json) into the diff, and both are
+#                            forbidden above. If a future revision of this
+#                            manifest needs a dependency for the harness, that
+#                            is a scope change needing a new plan and a new GO,
+#                            not a quiet widening.
+#
+#   .gitignore               If an operator-local, uncommitted corpus needs an
+#                            ignore entry, that is a legitimate "Gate: NONE" PR:
+#                            check-floor-scope.mjs forbids only five paths and
+#                            .gitignore is not one of them.
+#
+#   AGENTS.md, CLAUDE.md,    Governance instructions, untouched by an evaluation.
+#   README.md, SECURITY.md,
+#   CONTRIBUTING.md
+#
+#   .claude/**               Agent configuration, not a gate deliverable.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN ONCE ITS HASH IS APPROVED
+#
+#   1. It cannot stop G9 from writing a harness that grades itself. G9 authors
+#      the instrument it then reports readings from, and no path list can change
+#      that -- someone has to write the harness. The compensating controls are
+#      the mandatory negative controls above, `passWithNoTests: false`, the
+#      mutation check, and a reviewer who checks that each assertion would
+#      actually fail if the thing it guards were removed. This project has the
+#      general lesson on record already: a broken instrument imitates the result
+#      you wanted.
+#   2. It cannot see the CONTENT of a fixture. Nothing in the scope check knows
+#      whether tests/eval/fixtures/ contains synthetic records or a dump of real
+#      Telegram message bodies, and INV-12 forbids the latter. That is a review
+#      obligation and, better, a candidate for a mechanical fixture check in a
+#      later gate.
+#   3. It cannot see the DIRECTION of a change, only that a path changed. This
+#      is why the tests owned by earlier gates are forbidden outright rather
+#      than allowed-with-a-warning.
+#   4. The `Gate: G9` label that selects this manifest comes from the branch
+#      name or the PR body, both written by the implementer. A PR labelled with
+#      a different gate is checked against a different manifest -- limitation 6
+#      in governance/GATE_MANIFEST_INTEGRITY.md. An evaluative gate makes that
+#      gap more attractive, not less: a repair forbidden here is permitted by
+#      some other gate's manifest, and the only thing distinguishing the two is
+#      a line the implementer typed.
+#   5. scripts/verify/check-test-deletion.mjs matches `.test.ts` only. The
+#      repository's own governance suites are `.test.mjs` (tests/policy/) and
+#      are therefore invisible to the guard -- they can be deleted or `.skip`-ed
+#      without it tripping. Forbidding tests/policy/** to this gate closes that
+#      hole for G9 specifically; it does not close it generally, and the general
+#      fix belongs to whichever gate owns scripts/verify/ next.
+#   6. The check runs on `pull_request` only. A direct push to main is not
+#      examined by it at all; that gap is closed by the `PDCC` ruleset, not by
+#      this file.
+#   7. The approval hash is not out of the implementer's reach -- R13 and
+#      g1.yaml limitation 5, unchanged. The credential available to the
+#      implementation session has admin on this repository and can set
+#      GATE_MANIFEST_APPROVED_HASH_G9 itself. Everything above is a procedural
+#      control resting on that not being done.
+#
+# ---------------------------------------------------------------------------
+# OPEN QUESTIONS ONLY THE OPERATOR CAN SETTLE
+#
+#   Q1. CALIBRATION. Does G9 recommend calibrated thresholds (this proposal's
+#       conservative default -- measurement and recommendation only, applied by
+#       the resolver's own gate), or apply them? If applied, the safe shape is
+#       narrow and must be decided BEFORE G5 builds the resolver: G5 externalizes
+#       the TDD 22 weights and thresholds into a single named data file holding
+#       no logic, and this manifest gains exactly that one path -- not
+#       packages/policy/**, and never services/**.
+#
+#   Q2. THE REAL-CONTENT CORPUS. TDD 80 requires >=200 labeled events with >=30
+#       genuine cross-source cases, and TDD 82 requires at least one
+#       "real/safely-labeled" topic combining both sources -- while INV-12
+#       forbids raw message bodies in CI fixtures and the TDD never says where
+#       such a corpus lives or what "safely-labeled" redaction means. Options:
+#       fully synthetic (defensible, but proves the harness rather than the
+#       system); redacted-real committed (needs a written redaction standard);
+#       real held operator-local and uncommitted, with only hashes, labels and
+#       results committed (preserves INV-12, but the evidence then cites data no
+#       reviewer can see). This is a data-policy decision, not an implementation
+#       choice.
+#
+#   Q3. THE BRANCH. `gate/g9-shadow-evaluation` does not exist and creating it
+#       is its own act under global CLAUDE.md 14/20. The name matters
+#       mechanically: the Governance workflow derives `G9` from it, and a
+#       mistyped branch selects a different manifest or none.
+#
+# ---------------------------------------------------------------------------
+# HOW ADOPTION WOULD PROCEED, WITH EACH STEP'S OWNER
+#
+#   1. operator  Read this proposal and settle Q1-Q3. It is an argument, not a
+#                ruling. Narrowing it is always safe; widening it is the thing
+#                to be suspicious of -- and for an evaluative gate, a widening
+#                into apps/, services/, connectors/, host/, infra/, packages/ or
+#                any tests/ subtree other than tests/eval/ is the specific
+#                widening that would make G9's result unciteable.
+#   2. operator  Write the adopted result to governance/gate-manifests/g9.yaml,
+#                with this header and status block replaced by adoption markers
+#                -- otherwise the binding manifest would assert, about itself,
+#                that it has no authority. This must be its own commit, NOT part
+#                of the G9 PR: that path is forbidden above, so a gate PR
+#                carrying it fails the Governance check, correctly.
+#   3. operator  Compute the sha256 of the exact committed bytes. The runner
+#                hashes the LF bytes it checks out, so a value taken from a
+#                Windows working copy with CRLF endings will NOT match.
+#                Any edit at all changes the hash.
+#   4. operator  Set repository variable GATE_MANIFEST_APPROVED_HASH_G9 to that
+#                value. Settings -> Secrets and variables -> Actions -> Variables.
+#                The design intent is that this lives outside the implementer's
+#                reach; that intent is not currently met (limitation 7 above).
+#                This step is the operator's by authority, not by capability.
+#   5. anyone    Open the G9 PR. The Governance check now reaches the scope step
+#                instead of stopping at the hash step.
+#
+# Step 4 is what makes any of this real. Until it is done the Governance check
+# fails closed at the hash step, the scope step is never reached, and G9 has no
+# enforced scope -- which is the correct behaviour.
+#
+# No hash is printed in this file. Any hash printed here would be the hash of
+# the PROPOSAL, and the value exists precisely to prove the operator saw the
+# exact adopted bytes.
+# ---------------------------------------------------------------------------

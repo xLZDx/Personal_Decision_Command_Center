@@ -1,0 +1,709 @@
+# NON-BINDING IMPLEMENTER PROPOSAL FOR GATE G2.
+# This file does not authorize any mutation, and it is not in the repository.
+#
+# Only an operator-authored or operator-adopted copy at
+# governance/gate-manifests/g2.yaml, plus the operator-set repository variable
+# GATE_MANIFEST_APPROVED_HASH_G2 matching that file's exact committed bytes, has
+# any authority (INV-28). Until both exist, .github/workflows/governance.yml
+# fails closed at the hash step for any PR resolving to G2, the scope step is
+# never reached, and G2 has no enforced scope at all -- which is the correct
+# behaviour, not a defect to work around.
+#
+# WHY THIS FILE IS IN A SCRATCHPAD AND NOT IN THE REPOSITORY
+#
+# Two independent reasons, both sufficient on their own:
+#
+#   1. INV-28. A manifest an implementer can freely write has no authority. The
+#      G1 precedent (governance/gate-manifests/g1.yaml, header) shows the ONE
+#      way that changed: the operator explicitly delegated the AUTHORING of a
+#      manifest in writing, and GPT-PM ruled that even then the APPROVING half
+#      -- setting the hash -- stayed with the operator. No such delegation
+#      exists for G2. So this is a proposal, in the shape G1's own proposal took
+#      (governance/plans/G1_MANIFEST_PROPOSAL.yaml), and nothing more.
+#   2. governance/gate-manifests/** is mechanically forbidden to every gate PR
+#      and, via scripts/verify/check-floor-scope.mjs, to every ungated PR as
+#      well. A file placed there by an implementer could not legally reach main
+#      through any PR that exists today. Writing one would not create authority;
+#      it would only create a file that cannot merge.
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT TECHNICAL
+# EXCLUSIVITY. As measured at G1 (governance/plans/G1_PREADOPTION_EVIDENCE.md
+# section 3.1), the credential available to the implementer session is a classic
+# PAT with repo/workflow/admin:org and admin on this repository: it CAN set the
+# approval variable and edit the workflow. The separation is procedural.
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# THE TWO THINGS THAT BLOCK G2 TODAY, STATED BEFORE THE SCOPE
+#
+#   1. G1 is not closed. governance/G0_CLOSURE_REPORT.md: "G2 does not begin
+#      until G1 closes properly." G1 is remediated (manifest adopted, hash set,
+#      PR #1 and PR #3 merged, ruleset PDCC active) but has no final verdict and
+#      no governance/G1_CLOSURE_REPORT.md.
+#   2. G2-PREFLIGHT-01/02/03 -- see the g2_preflight block below, which is the
+#      honest status and not a summary of intentions.
+#
+# Adopting this manifest does not unblock either one. A manifest defines what a
+# gate's PR may touch; it never authorizes the gate to start. That still needs
+# G1's closure and a plan-level GO (core/PLAN_MASTER_GATES.md, project
+# CLAUDE.md section 4).
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+  - G2_NOT_YET_AUTHORIZED_AND_NOT_YET_UNBLOCKED
+
+authored_by: Claude (implementer), unsolicited draft for operator review
+authored_on: 2026-09-11
+authored_at_commit: 9355864
+approval_reserved_to: operator (@xLZDx), via GATE_MANIFEST_APPROVED_HASH_G2
+
+gate: G2
+
+# The workflow resolves the gate from a `gate/g<N>-...` branch name or a
+# `Gate: G<N>` line in the PR body (.github/workflows/governance.yml, step
+# "Resolve the gate this PR belongs to"). No G2 branch exists yet, and creating
+# one is its own authorization under global CLAUDE.md section 14/20 -- not
+# something adopting this manifest grants. The name below is a suggestion so the
+# regex match is predictable, not a branch that has been approved.
+branch: gate/g2-d1-ingest-queue (NOT CREATED; needs its own authorization)
+
+# ---------------------------------------------------------------------------
+# PLAN PROVENANCE -- AND THE HONEST GAP IN IT
+#
+# There is no G2 plan. governance/plans/ contains G0_PLAN.md, the G1 remediation
+# plan, the G1 proposal and the G1 pre-adoption evidence, and nothing for G2. So
+# plan_id and plan_hash below cannot be filled in with a true value today.
+#
+# This matters more than it looks. G1's manifest pinned its plan to an immutable
+# commit+blob precisely because an earlier draft would have hashed the wrong
+# object. Here there is no object at all to pin. A manifest adopted before the
+# plan exists pins nothing, and its approved_scope was derived from the master
+# gate plan and the TDD rather than from a reviewed G2 plan.
+#
+# Recommended ordering, which is the operator's call and not this file's:
+# write governance/plans/G2_PLAN.md first, have GPT-PM review it, then adopt a
+# manifest whose plan_hash names that plan's blob. Adopting in the other order
+# is possible -- nothing in CI reads plan_hash (limitation 7 in
+# governance/GATE_MANIFEST_INTEGRITY.md) -- but it produces a manifest whose
+# provenance fields are decoration.
+# ---------------------------------------------------------------------------
+plan_id: NOT_YET_ASSIGNED (no governance/plans/G2_PLAN.md exists)
+plan_hash: NOT_COMPUTABLE (no plan file to hash)
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: G2 -- D1 schema and migrations, provenance and
+  policy primitives, the durable ingest/outbox path, the Queue consumer,
+  reconciler and DLQ, the Free-Queue soft-budget guard, the CPU/D1-query quota
+  harness, the three blocking preflight items, and the live Analytics Engine
+  limits snapshot. Runtime work stays inside the conservative ~10 ms active-CPU
+  budget (INV-27) and the D1 50-queries-per-invocation ceiling (R10). Excludes
+  every connector, the resolver, the decision layer, the PWA, and everything
+  else assigned to G3..G10.
+
+# ---------------------------------------------------------------------------
+# G2 PREFLIGHT STATUS -- BINDING CARRY-FORWARD FROM G0 CLOSURE
+#
+# Recorded here rather than only in governance/G0_CLOSURE_REPORT.md because a
+# manifest is the document the operator reads at adoption time, and adopting a
+# scope without seeing the preflight state would hide the one item that can
+# still change G2's architecture. Each status below was checked against the
+# repository on 2026-09-11, not carried forward from prose.
+# ---------------------------------------------------------------------------
+
+g2_preflight:
+  preflight_01_queue_consumer_cpu_probe: >-
+    MEASURED, BUT THE EVIDENCE IS NOT ON main. Run 2026-09-11 on the operator's
+    own Free account: the queue-consumer ladder completes 1e5 SHA-256 rounds and
+    is killed at 1e6, and the plain HTTP ladder breaks at the same point --
+    identical budgets, so INV-27's conservative ~10 ms assumption is CONFIRMED
+    by measurement rather than by ruling. The record is
+    scripts/probes/cloudflare-free-cpu/RESULTS.md on branch
+    evidence/g0-cpu-probe-results, carried by PR #2, which is still OPEN. Two
+    caveats the file states about itself: the dashboard p50/p99 CPU-ms reading
+    was never captured, and the Free plan label comes from account creation
+    rather than a dashboard re-check.
+  preflight_02_http_pull_and_ack: >-
+    UNKNOWN / BLOCKING. Never attempted. The probe's wrangler.toml declares
+    [[queues.consumers]] -- a PUSH consumer -- and its single msg.ack() is the
+    push-batch API. An HTTP pull consumer is a different mechanism (REST
+    pull/ack) and appears nowhere in this repository. Whether Cloudflare offers
+    HTTP pull consumers on the Free plan at all is unpublished (R9).
+  preflight_03_d1_query_budget_in_harness: >-
+    BLOCKING. Not done. The <=50-queries-per-Worker-invocation ceiling is
+    recorded in five prose places (EXTERNAL_ASSUMPTIONS.md, ADR-011,
+    TDD_ERRATA.md, R10, the G0 closure report), but the item says IN THE QUOTA
+    HARNESS, and R10's own mitigation says that harness must count queries per
+    invocation, not just CPU. scripts/quota/ exists as an empty placeholder --
+    git ls-files finds 0 files in it. Note the circularity this creates: the
+    harness that satisfies the preflight is itself part of G2's declared scope,
+    which is why scripts/quota/** is in allowed_paths below.
+  queue_runtime_choice: >-
+    NOT VERIFIED, and cannot become VERIFIED until all three items above
+    complete. This is a binding carry-forward from G0 closure (ADR-011 status
+    block; governance/G0_CLOSURE_REPORT.md, "Carried forward as blocking G2
+    preflight"), not a preference this file is expressing.
+  pull_consumer_is_not_yet_a_fallback: >-
+    No statement anywhere in this document says the HTTP pull consumer IS the
+    fallback. ADR-011 calls it a pre-approved fallback; that wording states an
+    availability nobody has measured, and RESULTS.md was already corrected once
+    on 2026-09-11 for making the same over-claim. Treat it as unavailable until
+    PREFLIGHT-02 measures otherwise.
+  preflight_02_outcome_branch_a_available: >-
+    If a real HTTP pull + ack succeeds on the Free account, ADR-011's fallback
+    remains valid exactly as written, no correction is owed, and G2 runtime
+    implementation proceeds on the Worker consumer with a genuine escape hatch
+    behind it. core/RISK_REGISTER.md R9 closes with that evidence attached.
+  preflight_02_outcome_branch_b_unavailable: >-
+    If pull consumers are unavailable on Free, ADR-011 MUST be corrected BEFORE
+    any G2 runtime implementation begins -- it must stop describing a pull
+    consumer as a fallback, and the architecture must be recorded as having no
+    escape hatch above ~10 ms of consumer CPU. That is the G0 closure report's
+    own wording. The practical consequence for G2: the consumer design has no
+    margin to spend, so the single-batched-candidate-query rule and the bounded
+    scoring rule stop being good practice and become the only design that works.
+    core/adr/ADR-011-queue-consumer-runtime.md is in allowed_paths below for
+    exactly this branch.
+
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# WHAT THIS LIST IS SCOPED TO: the permissible MERGE SCOPE of G2's pull
+# request(s). The check runs `git diff BASE_SHA...HEAD_SHA` over the cumulative
+# range from the main base to the PR head, so this is "what may legitimately
+# arrive on main through this gate", not "what is left to do".
+#
+# Derived from: core/PLAN_MASTER_GATES.md's G2 row and TDD section 83; the
+# component DoDs that apply to G2 (TDD section 71 Queue/Reliability, section 70
+# Provenance/AI policy tests, section 35 D1 design/quota budget, section 62
+# mandatory resilience tests); the three preflight items; the TDD section 55
+# repository tree; and the measured state of the repository at 9355864, where
+# apps/, services/, connectors/, host/ and infra/ contain zero tracked files.
+#
+# DELIBERATE OVERLAP WITH OTHER GATES. Manifests are not a disjoint partition of
+# the tree and should not be contorted into one. Shared governance, test and
+# report surfaces legitimately repeat between gates, and each such entry below
+# says so in its own comment. What must not happen is an UNEXPLAINED overlap or
+# a path that lets G2 do another gate's work.
+#
+# Grammar is the segment-bounded one scripts/verify/check-gate-scope.mjs
+# enforces, NOT shell globbing: `*` matches within one segment and never crosses
+# `/`; `**` is a whole segment. There is no bare `**` in this file -- a manifest
+# containing one cannot refuse anything, and the checker warns on every run for
+# that reason.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # D1 SCHEMA. The first .sql in the repository lands here. TDD section 35
+  # requires indexes in migration 001, no growing-table full scan in the hot
+  # path, and a reviewed query plan for topic candidate selection -- so the
+  # migration files and whatever runs them are one unit of review.
+  - infra/migrations/**
+
+  # Worker/Queue/D1 bindings, queue definitions, and the soft-budget guard's
+  # configuration. Kept under infra/cloudflare/ per TDD section 55 rather than a
+  # root wrangler.toml, so that deployment configuration is never mistaken for
+  # repository tooling.
+  - infra/cloudflare/**
+
+  # PROVENANCE PRIMITIVES. PROVENANCE_MODEL.md names these two packages as the
+  # implementation of the provenance/AI-policy rule "starting at G2", and NM2's
+  # closure condition in core/RISK_REGISTER.md requires an automated policy test
+  # at G2/G6 rather than an assertion in docs. Both directories exist and are
+  # empty today.
+  - packages/provenance/**
+  - packages/policy/**
+
+  # The normalized event and queue message contracts. packages/contracts/ is the
+  # only tracked source in the repository (7 files, landed at G1 as bootstrap);
+  # G2 is the gate that gives ADR-004 a real contract to be about, and the
+  # durable-ingest idempotency key (TDD section 14) is a contract change, not an
+  # implementation detail. Overlap with G1 is historical, not concurrent: G1's
+  # own manifest deliberately excludes this path.
+  - packages/contracts/**
+
+  # Test support for the first real test surface this project has had beyond the
+  # policy tests: fixtures and fakes for the resilience and quota harnesses. In
+  # scope because the alternative is that harness helpers colonize a production
+  # package. INV-12 applies to fixtures too -- no raw message bodies.
+  - packages/testkit/**
+
+  # The quota counters the soft-budget guard reads (TDD section 16.3's
+  # MAX_DISPATCHED_QUEUE_MESSAGES_PER_DAY, section 35's "quota counters visible
+  # in OPS", section 36's Analytics-Engine-not-D1 rule for high-volume metrics).
+  # Counting is G2; dashboards and reporting are G8, and this entry does not
+  # reach them -- OBSERVABILITY.md is deliberately excluded below.
+  - packages/telemetry/**
+
+  # DURABLE INGEST. POST /ingest, authenticate/validate/dedupe, the single D1
+  # transaction that writes ingest_event=ACCEPTED plus outbox=PENDING, then the
+  # source ACK (TDD section 14). Directory exists, zero tracked files.
+  - services/ingest/**
+
+  # THE QUEUE CONSUMER, RECONCILER AND DLQ. Bound by INV-27 (~10 ms active CPU,
+  # now measured, not assumed), INV-29 (terminal FAILED/DLQ never automatically
+  # reconciled), NM4 (poison event terminates in <=MAX_PROCESSING_ATTEMPTS) and
+  # R10 (one batched candidate query, never a per-candidate loop). Note what
+  # this entry does NOT include: services/resolver/ is G5's, so G2 may build the
+  # bounded candidate FETCH the consumer needs without building the resolver.
+  - services/processor/**
+
+  # THE QUOTA/CPU HARNESS -- G2-PREFLIGHT-03. Empty today. R10 requires it to
+  # count D1 queries per invocation, not only CPU; TDD sections 35 and 62
+  # require 200/day and 1000/day simulations recording D1 writes/reads, Queue
+  # ops, Analytics datapoints and HTTP requests per event.
+  - scripts/quota/**
+
+  # G2-PREFLIGHT-01 and -02. The existing probe measured the push-consumer CPU
+  # ladder; PREFLIGHT-02 needs a genuinely different mechanism (REST pull + ack)
+  # added to it or beside it. This is evidence-gathering, which is why it lives
+  # under scripts/probes/ and not under host/optional-http-pull-consumer/ --
+  # measuring whether a fallback exists is not implementing one, and host/ stays
+  # excluded below. Overlaps G0's evidence surface by necessity: the probe is
+  # already written and PREFLIGHT-02 extends it rather than starting over.
+  - scripts/probes/cloudflare-free-cpu/**
+
+  # The live limits snapshot tooling for G2's "live Analytics Engine limits
+  # snapshot" deliverable. Directory exists, empty. The snapshot RECORD goes in
+  # EXTERNAL_ASSUMPTIONS.md below; this is whatever fetches it.
+  - scripts/probes/free-tier-snapshot/**
+
+  # TESTS. One entry per test class G2 actually owes, rather than a single
+  # tests/** that would also hand G2 the e2e and security suites belonging to
+  # G4/G7. Mapping: quota = TDD section 35 budget tests and the CPU/query
+  # harness assertions; resilience = TDD section 62's queue-outage, 24h-expiry,
+  # poison-event, soft-budget and D1-transient-error cases; contract = the
+  # normalized event and queue payload contracts; integration = ingest ->
+  # outbox -> queue -> processor; unit = everything below that; fixtures =
+  # their inputs, which INV-12 forbids from carrying raw content.
+  - tests/quota/**
+  - tests/resilience/**
+  - tests/contract/**
+  - tests/integration/**
+  - tests/unit/**
+  - tests/fixtures/**
+
+  # Policy tests. NM2's closure condition names G2 explicitly: the Telegram-
+  # ancestry and Topic/Stream/Person type-boundary blocks of TDD section 70 must
+  # be proven by automated tests at G2/G6. This overlaps G1's surface, and the
+  # overlap is bounded by three forbidden entries below: G1's OWN policy tests
+  # -- the ones that prove the gate-scope, floor-scope and CODEOWNERS checks
+  # actually bite -- stay untouchable from inside G2.
+  - tests/policy/**
+
+  # Toolchain. G2 adds real workspaces under services/ and packages/ (the
+  # workspace globs in package.json already cover them), plus the first runtime
+  # dependencies this project has had -- a Workers toolchain and a local D1 for
+  # the harness. vitest.config.ts already includes services/**/tests and
+  # tests/**, so new suites run in CI without touching any workflow; that is the
+  # reason .github/workflows/** can stay forbidden below.
+  - package.json
+  - package-lock.json
+  - tsconfig.json
+  - vitest.config.ts
+
+  # The first real TypeScript service sources arrive at G2, and Workers globals
+  # and .sql-adjacent files are not covered by a config written for a docs-and-
+  # scripts repository.
+  - eslint.config.js
+
+  # .wrangler/ and *.sqlite are already ignored; `.dev.vars` -- wrangler's local
+  # secret file, which G2 is the first gate to need -- matches nothing in the
+  # current .gitignore. This entry exists so that gap can be closed inside the
+  # gate that opens it. See also the two secret-file entries in forbidden_paths.
+  - .gitignore
+
+  # Durable decisions and evidence future gates need: the schema shape chosen,
+  # what the preflight measured, and any deviation taken. Hook-enforced on every
+  # commit in this workspace. Shared with every gate by design.
+  - core/DECISION_LOG.md
+
+  # R8, R9 and R10 are all G2-preflight risks and all three get their status
+  # corrected by this gate's own measurements -- R9 in whichever direction
+  # PREFLIGHT-02 actually points. NM2 and NM4's "verification owed" rows are
+  # also G2's to discharge.
+  - core/RISK_REGISTER.md
+
+  # G2's own row in the gate ledger. Note for the operator: that table's "G0
+  # required outputs" block still reads PENDING/DRAFT for items B, C, D, F..O
+  # while governance/G0_CLOSURE_REPORT.md reads them as closed. G1's manifest
+  # flagged the same contradiction and it is still unresolved at 9355864. If G1
+  # does not fix it, G2 inherits an internally contradictory ledger.
+  - core/PLAN_MASTER_GATES.md
+
+  # ADRs, named individually rather than as core/adr/** -- an ADR is an adopted
+  # decision record and a gate should not be able to amend one it has no
+  # business in. Each of these five names G2 in its own text:
+  #   004  placeholder, "to be written and adopted no later than G2 planning"
+  #   006  same, the durable ingest/outbox decision itself
+  #   011  "verification owed at gate time (G0 item E, G2)", and the mandatory
+  #        correction under PREFLIGHT-02 branch (b) above
+  #   005  "verification owed at gate time (G2 primitives, G6 AI integration)"
+  #   010  "verification owed at gate time (G2, G8)" -- the HARD_ZERO budget
+  # CODEOWNERS owns /core/adr/, so the operator still approves each merge.
+  - core/adr/ADR-004-normalized-event.md
+  - core/adr/ADR-005-value-provenance-dag.md
+  - core/adr/ADR-006-durable-ingest-outbox.md
+  - core/adr/ADR-010-hard-zero-cost.md
+  - core/adr/ADR-011-queue-consumer-runtime.md
+
+  # One reserved number for a NEW G2 decision record -- realistically the D1
+  # schema/migration strategy or the reconciler's scheduling mechanism. Reserving
+  # exactly one is deliberate friction: a second new ADR means re-reading and
+  # re-hashing this manifest, which is the right cost for a gate that wants to
+  # record two architecture decisions nobody planned for.
+  - core/adr/ADR-012-*.md
+
+  # DATA_MODEL.md says of itself that it "gets expanded into real migrations/
+  # schema at G2, at which point this file should start carrying the actual
+  # entity-relationship detail and diverge from being a pointer". This entry is
+  # that sentence's authorization.
+  - docs/architecture/DATA_MODEL.md
+
+  # PROVENANCE_MODEL.md is an index whose implementation begins at G2; once
+  # packages/provenance and packages/policy exist, an index that points at
+  # nothing is worse than no index.
+  - docs/architecture/PROVENANCE_MODEL.md
+
+  # The live-verification record. G2's "live Analytics Engine limits snapshot"
+  # deliverable lands here (section C already carries the 100,000 data points/day
+  # and 250-per-invocation figures from the G0 pass, which G2 must re-fetch
+  # rather than trust), as do the PREFLIGHT-02 finding and any D1/Queue limit
+  # that moved since 2026-09-10.
+  - docs/architecture/EXTERNAL_ASSUMPTIONS.md
+
+  # The normative errata against the frozen TDD. G2 is the first gate to execute
+  # TDD sections 14/16/17/34/35 rather than read them, so it is the likeliest
+  # gate to find a concrete detail that is stale -- section 65's platform facts
+  # above all. Overlap with G1 is intentional and unavoidable: the errata file is
+  # the ONLY sanctioned way to correct the baseline, since TDD.md is forbidden to
+  # every gate. The errata never amends an invariant (E-001); a change to
+  # INV-01..31 needs an ADR plus independent review plus operator approval, which
+  # no manifest can grant.
+  - docs/architecture/TDD_ERRATA.md
+
+  # The three runbooks that say, in their own headers, "placeholder -- to be
+  # written with real steps at G2 (Queue/Reliability gate)". Named individually;
+  # the other six runbooks belong to G3, G4 and G8. Universal DoD item 26
+  # (rollback/recovery documented) is what makes these part of the gate rather
+  # than follow-up work.
+  - docs/runbooks/DLQ.md
+  - docs/runbooks/QUEUE_EXPIRED.md
+  - docs/runbooks/QUEUE_BUDGET_EXHAUSTED.md
+
+  # G2's plan and its manifest proposal. The plan does not exist yet (see
+  # plan_hash above). This proposal is non-binding by construction, so allowing
+  # a gate PR to carry it grants no authority -- the binding object is
+  # governance/gate-manifests/g2.yaml, which is forbidden below. Named files
+  # rather than governance/plans/**, so G0's and G1's plans stay out of reach.
+  - governance/plans/G2_PLAN.md
+  - governance/plans/G2_MANIFEST_PROPOSAL.yaml
+
+  # The preflight evidence record: what PREFLIGHT-01/02/03 actually measured,
+  # with raw output, in the shape G1_PREADOPTION_EVIDENCE.md took. Separate from
+  # the closure report because evidence is written as it is gathered and a
+  # closure report is written once.
+  - governance/plans/G2_PREFLIGHT_EVIDENCE.md
+
+  # The closure report. Does not exist yet. Universal DoD item 30.
+  - governance/G2_CLOSURE_REPORT.md
+
+  # Fresh-context independent reviews (universal DoD item 21) land here as new
+  # files. Shared with every gate by design; `**` as the last segment covers the
+  # subtree and never the bare directory name.
+  - governance/reviews/**
+
+  # The mandated Russian+English report pair per closed piece of work.
+  # Segment-bounded, so it reaches reports/ and no subdirectory -- which is a
+  # real constraint, not a formality: TDD section 55 sketches reports/gate-*/
+  # subdirectories, and the repository's actual convention is flat files. If G2
+  # writes reports/gate-2/foo.html instead, the scope check refuses it. Flagged
+  # in the open questions below rather than pre-emptively widened.
+  - reports/*.html
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# Everything not in allowed_paths is already out of scope and the checker
+# reports it as such. These are a different class: each one is an authority
+# surface, where touching it from inside a gate would mean the constrained party
+# editing the thing that constrains it. They get their own refusal, with their
+# own message, and they are checked BEFORE allowed_paths -- so a forbidden entry
+# wins over any pattern above that would otherwise cover it.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # INV-28, mandatory for every gate. Includes g2.yaml itself -- deliberately,
+  # not paradoxically: a gate PR carrying its own authorizing manifest would be
+  # validated against a file the same diff had just written, which is NM3 from
+  # the v0.2 adversarial review and the entire reason the hash step runs before
+  # the scope step. Taken as the whole subtree rather than as *.yaml/*.yml (the
+  # narrower form G1 used so it could edit that directory's README): G2 has no
+  # business in that directory at all, so the wider refusal costs it nothing.
+  - governance/gate-manifests/**
+
+  # The operator's own record of what they approved, mandatory for every gate.
+  # An implementer that can write approvals can manufacture the evidence that it
+  # was approved.
+  - governance/operator-approvals/**
+
+  # THE FROZEN ARCHITECTURE BASELINE, INV-01..INV-31 included. FORBIDDEN, and
+  # the reasoning is worth stating for G2 specifically rather than inherited:
+  # G2 is the first gate whose code has to LIVE inside INV-27's 10 ms budget and
+  # INV-29's terminal-state rule. A gate that finds its own invariant
+  # inconvenient must not be able to edit the invariant; TDD_ERRATA.md exists
+  # for concrete corrections and is allowed above, and E-001 states the errata
+  # never amends an invariant. Changing INV-27 would need an ADR, independent
+  # review and operator approval -- three things a path pattern cannot grant.
+  # Also matches scripts/verify/check-floor-scope.mjs, which forbids this path
+  # even to an ungated PR.
+  - docs/architecture/TDD.md
+
+  # THE ENFORCEMENT MECHANISM. FORBIDDEN, decided against the convenience of
+  # allowing it: G1 allowed .github/workflows/*.yml because the workflow WAS
+  # G1's deliverable; G2's deliverable is a data pipeline, and a PR that edits
+  # these files edits the checks that police that same PR (GitHub runs the
+  # workflow as it exists in the PR's merge commit). check-floor-scope.mjs
+  # refuses this path even for an ungated PR, so forbidding it here keeps the
+  # floor and the gate consistent rather than making a gate label the way to
+  # acquire authority no ungated PR has. The cost is real and is named in the
+  # open questions below: TDD section 61 lists "migration validation" as a CI
+  # requirement, and G2 is the gate that first has migrations. The answer
+  # proposed here is that migration validation ships as a vitest test under
+  # tests/ -- which CI already runs via `npm run test` -- not as a new workflow
+  # step. If the operator disagrees, the fix is to widen this manifest before
+  # the gate starts, not during it.
+  - .github/workflows/**
+
+  # MERGE AUTHORITY. FORBIDDEN. CODEOWNERS decides who must approve a merge, and
+  # INV-20 says the implementer cannot approve or merge its own gate. G2 does
+  # add directories a reviewer might reasonably want owned (infra/migrations/,
+  # services/), and that is exactly why this stays an operator action: a gate
+  # that can edit the ownership map can narrow the review it is subject to, and
+  # the scope check cannot tell a tightening from a loosening -- it sees a
+  # changed path, not a direction. R13 already narrows what this file proves at
+  # all, since one GitHub identity cannot mechanically separate implementer from
+  # operator.
+  - .github/CODEOWNERS
+
+  # THE CHECKS THEMSELVES. FORBIDDEN. check-floor-scope.mjs says in its own
+  # header that the floor's rules live here as ordinary code, "changeable through
+  # whichever gate's own manifest permits editing scripts/verify/*.mjs" -- so a
+  # manifest that allowed this directory would hand G2 the power to rewrite the
+  # floor scope, the gate-scope checker, the secret scan, the test-deletion
+  # guard and the mutation harness. CODEOWNERS protects /scripts/verify/ for the
+  # same reason. G2 needs nothing here: see the .github/workflows/** note above
+  # for where migration validation goes instead.
+  - scripts/verify/**
+
+  # G1's OWN POLICY TESTS. FORBIDDEN, while tests/policy/** stays allowed above.
+  # These three are the evidence that the governance checks actually bite; a
+  # gate that could edit them could keep the checks nominally present and
+  # quietly stop them failing. G2's policy tests are about provenance and the
+  # AI boundary (TDD section 70), which needs no change to any of these files.
+  - tests/policy/gate-scope.test.mjs
+  - tests/policy/floor-scope.test.mjs
+  - tests/policy/codeowners.test.mjs
+
+  # SECRET MATERIAL. G2 is the first gate to hold real credentials -- Cloudflare
+  # API tokens for wrangler, D1 and Queue bindings, wrangler's local .dev.vars.
+  # .gitignore already covers .env and .env.*, and scripts/verify/check-secrets
+  # .mjs scans tracked file CONTENT for token patterns; this is the third layer,
+  # refusing the FILE regardless of what is in it and regardless of a .gitignore
+  # edit made in the same PR. Quoted because the reader rejects an unquoted
+  # value starting with `*` as a YAML alias. `**` as a leading segment matches
+  # at any depth, root included.
+  - '**/.env'
+  - '**/.dev.vars'
+
+# ---------------------------------------------------------------------------
+# The fields below are part of the manifest shape described in
+# governance/gate-manifests/README.md. Stated honestly, as G1's manifest does:
+# scripts/verify/check-gate-scope.mjs reads allowed_paths and forbidden_paths
+# and NOTHING ELSE. These three are documentation for a human reviewer, not
+# enforcement -- and two of the commands below do not exist yet.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+  - npm run test:quota (DOES NOT EXIST YET -- G2 creates it; TDD 35, 62; R10)
+  - npm run test:resilience (DOES NOT EXIST YET -- G2 creates it; TDD 62, 71)
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+  - DATA-01 (data/state) and REL-01 (reliability/SRE) per TDD 59, on this gate's surface
+
+policy_sensitive_files:
+  - infra/migrations/**
+  - packages/provenance/**
+  - packages/policy/**
+  - docs/architecture/PROVENANCE_MODEL.md
+  - docs/architecture/EXTERNAL_ASSUMPTIONS.md
+  - core/adr/ADR-011-queue-consumer-runtime.md
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why -- the entries most likely to be argued about
+#
+#   connectors/**            G3 (Gmail) and G4 (Telegram). G2 builds the pipe
+#                            those connectors will push into; it does not build
+#                            them. The ingest endpoint can be exercised by a
+#                            test client without a connector existing.
+#
+#   services/resolver/**     G5. The consumer needs a BOUNDED CANDIDATE FETCH
+#                            (<= MAX_TOPIC_CANDIDATES, one batched query), and
+#                            that belongs to services/processor/. The scoring
+#                            and merge logic is G5's and is not reachable from
+#                            this manifest.
+#
+#   services/api,            G6, G7, G8 and G4 respectively. None is needed to
+#   services/decision,       prove the durable-ingest and queue invariants.
+#   services/notification,
+#   services/reporting,
+#   services/content-request-broker
+#
+#   apps/pwa/**              G7.
+#
+#   host/**                  G4 (content gateway), G8 (backup agent) -- and,
+#                            pointedly, host/optional-http-pull-consumer/ is
+#                            excluded even though PREFLIGHT-02 is in scope.
+#                            MEASURING whether a pull consumer exists on Free is
+#                            evidence; IMPLEMENTING one is a runtime change that
+#                            would follow ADR-011's correction, not precede it.
+#
+#   packages/domain/**       G5/G6. Entities, not primitives.
+#
+#   docs/architecture/       G8 expands observability, per that file's own text;
+#     OBSERVABILITY.md       G2 emits counters, it does not build dashboards.
+#
+#   docs/architecture/       Excluded on the narrow reading, and this is the
+#     THREAT_MODEL.md        excluded entry with the weakest case: G2 introduces
+#                            the first authenticated ingest endpoint and the
+#                            first stored credentials, which is a genuine change
+#                            of attack surface. It is left out because no G2
+#                            deliverable names it and because widening later is
+#                            safer than widening pre-emptively. See the open
+#                            questions -- the operator may reasonably add it.
+#
+#   docs/architecture/       G3/G4.
+#     CONNECTOR_ARCHITECTURE.md
+#
+#   core/SOURCE_POLICY.md,   Policy-sensitive, CODEOWNERS-protected, and not
+#   core/DATA_RETENTION_     something a schema gate should be editing. Retention
+#     POLICY.md              execution is G8.
+#
+#   core/MVP1_SCOPE_LOCK.md, Product-level documents. A gate that can edit the
+#   core/PRODUCT_VISION.md   scope lock can redefine what it was asked to build.
+#
+#   governance/plans/        G0's and G1's plans, and the G1 manifest proposal.
+#     G0_PLAN.md,            Closed or closing work. Named exclusions rather than
+#     G1_*                   a governance/plans/** pattern, which is why the two
+#                            G2 plan files above are listed individually.
+#
+#   governance/gate-         Documentation of the manifest format. Allowed at G1
+#     manifests/README.md    because G1 wrote that format; refused here by the
+#                            whole-subtree forbidden entry above.
+#
+#   AGENTS.md, CLAUDE.md,    The operating contracts and the front page. G1's
+#   README.md, CONTRIBUTING  surface, CODEOWNERS-protected for the first two.
+#     .md, SECURITY.md
+#
+#   .prettierignore,         Untouched by G2 as far as can be determined at
+#   .prettierrc.json         9355864; if a generated migration artifact turns out
+#                            to need a prettier exemption, that is a manifest
+#                            amendment, not a quiet widening.
+#
+#   .claude/**               Agent configuration, not a gate deliverable.
+#
+#   Personal_Decision_OS_    The original v0.3 delivery pack. Historical input,
+#     v0.3_Implementation_   never edited.
+#     Pack/**
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN IF ITS HASH IS APPROVED
+#
+#   1. It cannot make G2 startable. G1's closure and a plan-level GO are
+#      separate requirements, and the three preflight items are separate again.
+#   2. It cannot tell a tightening from a loosening. The scope check sees a
+#      changed path, never the direction of the change. Branch protection plus
+#      code-owner review is what covers direction, and per CODEOWNERS the
+#      directories most at risk here (/docs/architecture/, /core/adr/) are
+#      already operator-owned.
+#   3. The `Gate: G2` label that selects this manifest comes from the branch
+#      name or the PR body, both written by the implementer. A PR that declared
+#      a different gate would be checked against a different manifest
+#      (limitation 6 in governance/GATE_MANIFEST_INTEGRITY.md) -- or, declaring
+#      `Gate: NONE`, against the floor scope, which allows everything except the
+#      five paths in check-floor-scope.mjs. Three of this file's own forbidden
+#      entries -- scripts/verify/**, the three G1 policy tests, the two secret
+#      files -- are NOT in that floor list, so the ungated path is genuinely
+#      weaker than this manifest on exactly those paths.
+#   4. Nothing checks plan_id or plan_hash, which is just as well here, since
+#      neither can be filled in truthfully today.
+#   5. The check runs on pull_request only. A direct push to main is not
+#      examined by it at all; the `PDCC` ruleset, not this file, is what closes
+#      that.
+#   6. THE APPROVAL HASH IS NOT OUT OF THE IMPLEMENTER'S REACH (G1
+#      limitation 5, measured 2026-09-10 and unchanged). The separation remains
+#      procedural until the credential model changes.
+#   7. An implementer wrote it. The only control standing between that and a
+#      self-authorized scope is the operator actually reading these bytes.
+#
+# ---------------------------------------------------------------------------
+# OPEN QUESTIONS ONLY THE OPERATOR CAN SETTLE
+#
+#   1. ADOPTION ORDER. Adopt a manifest now with an empty plan_hash, or write
+#      governance/plans/G2_PLAN.md first and adopt a manifest that pins it? This
+#      file recommends the second and does not assume it.
+#   2. .github/workflows/** stays forbidden, which means TDD section 61's
+#      "migration validation" CI requirement must be satisfied by a vitest test
+#      rather than a workflow step, and any genuinely new CI job for G2 needs
+#      this manifest widened and re-hashed mid-gate. Accept that friction, or
+#      pre-authorize .github/workflows/ci.yml alone (never governance.yml)
+#      before the gate starts?
+#   3. docs/architecture/THREAT_MODEL.md is excluded. G2 adds the first
+#      authenticated endpoint and the first stored platform credentials. Add it?
+#   4. reports/*.html is segment-bounded and would refuse reports/gate-2/*.html,
+#      which is the layout TDD section 55 sketches. Keep the flat convention the
+#      repository actually uses, or widen to reports/**?
+#   5. core/adr/ADR-012-*.md reserves exactly one new decision record. Enough?
+#   6. PREFLIGHT-02 is the only preflight item with architectural consequence.
+#      Its branch (b) requires correcting ADR-011 BEFORE any G2 runtime
+#      implementation. Does the operator want that correction as its own small
+#      operator-approved change, or inside G2's PR under the ADR-011 entry above?
+#
+# ---------------------------------------------------------------------------
+# HOW TO ADOPT THIS, AND WHY NO HASH IS PRINTED HERE
+#
+# Do NOT copy this file byte-for-byte into governance/gate-manifests/g2.yaml. It
+# declares, about itself, that it has no authority, and a binding manifest
+# asserting that would be absurd. Adoption means editing at least the header and
+# the status block -- and any edit changes the sha256, which is why printing a
+# hash here would be worse than useless: it would either be wrong, or it would
+# pin a document that calls itself non-binding. The value exists to prove the
+# operator saw the exact bytes, so the implementer computing it in advance is
+# the wrong shape regardless.
+#
+#   1. operator   Read this -- 47 allowed_paths and 11 forbidden_paths as
+#                 drafted. Narrowing is always safe; widening is the thing to be
+#                 suspicious of. Settle the six questions above.
+#   2. operator   Write the result to governance/gate-manifests/g2.yaml as its
+#                 own commit on main -- NOT inside a gate PR, which that path's
+#                 own forbidden entry would correctly refuse.
+#   3. operator   sha256 the committed file (PowerShell:
+#                 Get-FileHash -Algorithm SHA256 <path>). The workflow computes
+#                 it from the LF bytes the runner checks out, so a hash taken
+#                 from a CRLF working copy will not match.
+#   4. operator   Set repository variable GATE_MANIFEST_APPROVED_HASH_G2 to that
+#                 value. Settings -> Secrets and variables -> Actions ->
+#                 Variables.
+#   5. anyone     Only then does a G2 PR reach the scope step instead of failing
+#                 closed at the hash step.
+#
+# None of the five steps makes G2 startable. G1's closure, a G2 plan with a GO,
+# and PREFLIGHT-01/02/03 are separate and still outstanding.
+# ---------------------------------------------------------------------------

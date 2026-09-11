@@ -1,0 +1,746 @@
+<title>Nine Proposals, One Blind Guard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Gates G1–G10 · Scope preparation</p>
+    <h1>Nine proposals and one blind guard</h1>
+    <p class="standfirst">
+      Scope manifests for G2–G10 were drafted in parallel and checked with the same code CI
+      runs. Along the way the test-deletion guard turned out to be blind to three quarters of
+      the project's own test corpus — including exactly the suites that enforce governance.
+    </p>
+    <div class="masthead-meta">
+      <span>11 September 2026</span>
+      <span>branch gate/manifest-proposals-g2-g10</span>
+      <span>9 proposals · 204 allowed paths · 178 forbidden</span>
+      <span>G1 NOT closed</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/manifest-proposals-g2-g10 @ 1361c7d</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+  <div class="verdict">
+    <span class="stamp">G1 cannot close today</span>
+    <p>
+      Nine items remain, not two. The three refusal controls the remediation plan requires to
+      be demonstrated on a real PR never were — and one of them, as it turns out, would not
+      have fired.
+    </p>
+    <p class="who">
+      GPT-PM: <strong>VERDICT: APPROVE</strong> — for the branch and the sequencing only. No
+      manifest is accepted, no G2–G10 implementation is authorized, G1 is not closed.
+    </p>
+  </div>
+
+  <section>
+    <h2><span class="num">§1</span> What was asked</h2>
+    <p>
+      The operator's instruction: finish G1, and in parallel prepare the scope manifests for
+      gates two through ten. The second is done in full. The first is not, and the reason my
+      earlier "only the sign-off remains" estimate was wrong is set out below.
+    </p>
+    <p>
+      Nine files were drafted by five agents working in parallel, each reading the primary
+      sources itself. They live in <code>governance/plans/</code> as
+      <strong>proposals</strong>, not manifests. That is not caution:
+      <code>governance/gate-manifests/README.md</code> prescribes this exact route in its own
+      words — "Claude may propose a next-gate manifest as a non-binding artifact (e.g. in
+      <code>../plans/</code>), but it becomes binding only once the operator adopts/commits
+      the actual file here". Adoption by the operator is what makes a manifest bind, per
+      INV-28.
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="num">§2</span> The nine proposals</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Gate</th>
+            <th>Allowed</th>
+            <th>Forbidden</th>
+            <th>The decision that mattered</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>G2 — D1, ingest/outbox, queue</td>
+            <td>47</td>
+            <td>11</td>
+            <td>
+              <code>scripts/verify/**</code> forbidden: the floor script's own header says it
+              is editable by any gate that allows that path
+            </td>
+          </tr>
+          <tr>
+            <td>G3 — Gmail connector</td>
+            <td>25</td>
+            <td>14</td>
+            <td><code>package.json</code> allowed — the one path a model SDK could arrive through</td>
+          </tr>
+          <tr>
+            <td>G4 — Telegram connector</td>
+            <td>26</td>
+            <td>23</td>
+            <td>
+              Nothing under <code>packages/</code> or <code>apps/</code>: the Telegram→AI
+              barrier holds by construction, not by instruction
+            </td>
+          </tr>
+          <tr>
+            <td>G5 — identity and topic resolver</td>
+            <td>15</td>
+            <td>20</td>
+            <td>"G5 may define the combined Topic; G5 has no path to serialize one"</td>
+          </tr>
+          <tr>
+            <td>G6 — intent, decisions, commitments</td>
+            <td>15</td>
+            <td>21</td>
+            <td><code>packages/contracts/**</code> forbidden: blast radius plus the temptation to loosen AI policy</td>
+          </tr>
+          <tr>
+            <td>G7 — PWA, Today, opaque push</td>
+            <td>24</td>
+            <td>14</td>
+            <td>Push opacity is proven by an executable test, not asserted</td>
+          </tr>
+          <tr>
+            <td>G8 — observability, retention, backup</td>
+            <td>36</td>
+            <td>14</td>
+            <td>The restore gets its own artifact, not folded into the closure report</td>
+          </tr>
+          <tr>
+            <td>G9 — shadow evaluation and calibration</td>
+            <td>8</td>
+            <td>31</td>
+            <td>
+              An evaluation gate may <strong>not</strong> edit implementation: it is forbidden
+              by name, so the refusal cites a rule rather than looking like an oversight
+            </td>
+          </tr>
+          <tr>
+            <td>G10 — MVP1 closure</td>
+            <td>8</td>
+            <td>30</td>
+            <td>The yardstick (scope lock, DoD, TDD, all tests) is forbidden: a gate that edits its own criterion proves nothing</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p>
+        GPT-PM corrected my rationale: manifests do <strong>not</strong> have to form a
+        disjoint partition of the tree. Shared governance, test and report paths may
+        legitimately repeat across gates. The real test is unexplained gaps and overlaps, not
+        zero overlap as an invariant. The proposals were drafted under the corrected rule.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">§3</span> How they were checked — and what the check missed</h2>
+    <p>
+      An agent's summary is a claim, not a fact, so all nine files were run through an
+      <strong>independent</strong> validator importing the repository's real
+      <code>parsePathList</code>, <code>compilePattern</code> and <code>checkScope</code>. For
+      all nine: <code>allowed_paths</code> non-empty, every pattern compiles, no vacuous
+      <code>**</code>, both mandatory authority exclusions present, and a probe of those two
+      paths refused by every file.
+    </p>
+    <div class="note warn">
+      <p>
+        <strong>And that check lied.</strong> It reported all nine "ok" while
+        <code>G8_MANIFEST_PROPOSAL.yaml</code> was invalid YAML: an unquoted scalar containing
+        <code>: "</code> parses as a mapping separator. The validator could not see it because
+        the repository's manifest reader is a deliberately tiny YAML <em>subset</em> parser
+        that walks only the two path blocks. So "validated against the real parser" was a
+        claim broader than the check behind it — precisely the defect I look for in others.
+        Prettier's full parser found it. Fixed.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">§4</span> BLOCKER: the test-deletion guard is blind</h2>
+    <p>
+      <code>scripts/verify/check-test-deletion.mjs</code> exists so a PR cannot quietly delete
+      or disable tests. Both of its halves are restricted to <code>.test.ts</code>:
+    </p>
+    <pre><code>const TEST_FILE = /(^|\/)tests\/.*\.test\.ts$|\.test\.ts$/;
+git diff -U0 BASE...HEAD -- '*.test.ts'</code></pre>
+    <p>
+      Both branches of the alternation end in <code>.test.ts</code>, and the second pass is
+      pinned to the same pattern. The project's test corpus looks like this:
+    </p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>File</th><th>Tests</th><th>Protected</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>packages/contracts/tests/event.test.ts</code></td><td>21</td><td><span class="chip done">yes</span></td></tr>
+          <tr><td><code>packages/contracts/tests/queue.test.ts</code></td><td>16</td><td><span class="chip done">yes</span></td></tr>
+          <tr><td><code>tests/policy/gate-scope.test.mjs</code></td><td>39</td><td><span class="chip block">no</span></td></tr>
+          <tr><td><code>tests/policy/floor-scope.test.mjs</code></td><td>13</td><td><span class="chip block">no</span></td></tr>
+          <tr><td><code>tests/policy/codeowners.test.mjs</code></td><td>12</td><td><span class="chip block">no</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      64 of 101 tests are unprotected — and they are exactly the three suites that enforce
+      governance. A PR may delete <code>gate-scope.test.mjs</code> outright and the guard will
+      print "no tests removed or skipped".
+    </p>
+    <div class="note warn">
+      <p>
+        <strong>Why it survived matters more than the bug.</strong> This guard is one of the
+        three refusal controls the remediation plan requires to be demonstrated
+        <em>on a real PR</em>. None of the three ever were: they are evidenced by unit tests
+        only, and those were written against <code>.test.ts</code> fixtures. One run against
+        the repository's real corpus would have exposed it immediately.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">§5</span> G1: what actually remains</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Item</th><th>Status</th><th>Basis</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>G1-B1 — no authorized gate</td><td><span class="chip done">done</span></td><td>g1.yaml adopted, hash variable set</td></tr>
+          <tr><td>G1-B2 — remote CI red</td><td><span class="chip done">done</span></td><td>CI and Governance runs succeed</td></tr>
+          <tr><td>G1-M1 — PR controls bypassed by direct push</td><td><span class="chip done">done</span></td><td>Ruleset PDCC active, no bypass actors</td></tr>
+          <tr><td>G1-M2 — two workflows with needs: []</td><td><span class="chip done">done</span></td><td>Single governance.yml; scope step unreachable behind a failed hash</td></tr>
+          <tr><td>G1-M3 — protection unproven, CODEOWNERS</td><td><span class="chip part">partial</span></td><td><code>require_code_owner_review: false</code> — CODEOWNERS stays decoration</td></tr>
+          <tr><td>Hash-mismatch refusal on a real PR</td><td><span class="chip block">not done</span></td><td>That branch of the code has never executed</td></tr>
+          <tr><td>Scope-check refusal on a real PR</td><td><span class="chip block">not done</span></td><td>Step 6 has only ever been SKIPPED or success</td></tr>
+          <tr><td>Test-deletion guard tripping on a real PR</td><td><span class="chip block">not done</span></td><td>See §4 — and it would not have fired</td></tr>
+          <tr><td>Fresh-context independent G1 review</td><td><span class="chip block">not done</span></td><td><code>governance/reviews/</code> holds only three pre-G1 files</td></tr>
+          <tr><td>G1 closure report</td><td><span class="chip block">not done</span></td><td>File absent; the manifest itself lists it as remaining</td></tr>
+          <tr><td>G1-specific Definition of Done</td><td><span class="chip block">does not exist</span></td><td>TDD §68–82 are component DoDs; none applies to G1</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">§6</span> Documents the repository contradicts</h2>
+    <p>Each was verified at its cited line personally, not taken from an agent's summary.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Where</th><th>What it claims</th><th>What is true</th></tr></thead>
+        <tbody>
+          <tr><td><code>core/RISK_REGISTER.md</code> R8</td><td>probe "NOT YET RUN"</td><td>run 11 Sep; evidence sits in unmerged PR #2</td></tr>
+          <tr><td><code>core/RISK_REGISTER.md</code> R11</td><td>"GitHub Actions is not running at all"</td><td>CI ran repeatedly today</td></tr>
+          <tr><td><code>core/RISK_REGISTER.md</code> R12</td><td>"branch protection is not configured, 404"</td><td>true only of the classic endpoint; the ruleset is active and the repo is public</td></tr>
+          <tr><td><code>governance/GATE_MANIFEST_INTEGRITY.md</code>:31</td><td>"implementer has no merge permission"</td><td>the permission exists; direct push is blocked by the ruleset</td></tr>
+          <tr><td><code>governance/GATE_MANIFEST_INTEGRITY.md</code>:160</td><td>88 tests / 30 mutations</td><td>101 / 34</td></tr>
+          <tr><td><code>.github/CODEOWNERS</code>:3</td><td>"the control that actually enforces"</td><td>contradicted by its own lines 7–9</td></tr>
+          <tr><td><code>core/PLAN_MASTER_GATES.md</code>:36–53</td><td>G0 outputs PENDING/DRAFT</td><td>the G0 closure report records DONE/ADOPTED</td></tr>
+          <tr><td><code>governance/gate-manifests/README.md</code>:15</td><td>"No manifest exists yet"</td><td>g1.yaml is adopted and sits in that directory</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note warn">
+      <p>
+        <strong>A catch-22 only the operator can break.</strong> The status field inside
+        <code>g1.yaml</code> still says the manifest is awaiting its approval hash — while the
+        hash is set. Correcting that line changes the file's hash and breaks the very check
+        the hash exists to satisfy. The implementer cannot fix it; the operator would have to
+        re-approve a new hash.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">§7</span> What only the operator can decide</h2>
+    <p>
+      <strong>R13 — the credential model.</strong> One admin PAT does everything. Options:
+      narrow it to a fine-grained token without admin; keep it and record the separation as
+      procedural; or move merge to a separate identity. A credentials decision is not mine.
+    </p>
+    <p>
+      <strong>Whether <code>require_code_owner_review</code> stays off.</strong> It is off
+      today, which is why CODEOWNERS is decoration. It cannot simply be switched on: with one
+      account, PR author = code owner = required reviewer, and GitHub forbids approving one's
+      own PR.
+    </p>
+    <p>
+      <strong>Demonstrating the hash-mismatch refusal</strong> needs a PR in which the
+      manifest is modified — a file INV-28 forbids the implementer to touch. Such a PR could
+      never merge, because the check fails by construction, but touching a protected file even
+      on a deliberately failing branch is not something to do without the operator's word.
+    </p>
+    <p>
+      The agents also raised substantive questions whose answers change the shape of the
+      manifests: where <code>AIContextBuilder</code> lives; whether AI extraction belongs to
+      G3 or G6 (ADR-005 and the master plan disagree); whether enabling R2 requires a payment
+      instrument, which is a direct HARD_ZERO threat for G8; and whether
+      <code>reports/*.html</code> stays flat against TDD §55's <code>reports/gate-*/</code>.
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="num">§8</span> What happens next</h2>
+    <p>
+      The order GPT-PM approved: G1 closes <strong>separately and first</strong>, through its
+      own <code>Gate: G1</code> PR under the binding <code>g1.yaml</code>; the manifest
+      proposals go as a separate <code>Gate: NONE</code> PR carrying nothing from G1's
+      closure. G2 implementation does not begin until G1 is closed and the three preflight
+      items are satisfied.
+    </p>
+    <p>
+      The nearest substantive G1 work is fixing the test guard together with a regression
+      test, running the three refusal controls on real PRs, correcting the eight stale
+      assertions, and either defining a G1 Definition of Done or recording its absence as an
+      accepted deviation.
+    </p>
+  </section>
+</div>
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->

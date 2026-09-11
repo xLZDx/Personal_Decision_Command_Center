@@ -5,6 +5,91 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — Nine manifest proposals for G2..G10; and a BLOCKER found in G1's own test-deletion guard
+
+**Decision:** nine non-binding scope-manifest proposals, `governance/plans/G<N>_MANIFEST_PROPOSAL.yaml`
+for G2 through G10, drafted in parallel and landed as one `Gate: NONE` PR. They are PROPOSALS, not
+manifests. `governance/gate-manifests/README.md` prescribes exactly this route in its own words --
+"Claude may propose a next-gate manifest as a non-binding artifact (e.g. in `../plans/`), but it
+becomes binding only once the operator adopts/commits the actual file here" -- so this is the
+repository's documented process, not an invented one. INV-28 is the reason: a manifest the
+implementer authored has no authority.
+
+**Authorized by:** GPT-PM, `VERDICT: APPROVE`, which under global CLAUDE.md §20 satisfies §14's two
+branch approvals for `gate/manifest-proposals-g2-g10` (base `main@1361c7d`). That APPROVE explicitly
+does NOT accept any manifest's contents, does not authorize G2..G10 implementation, and does not
+close G1. GPT-PM also ruled the sequencing: G1 closes FIRST and separately, through its own
+`Gate: G1` path under the binding `g1.yaml`; this proposal branch carries no G1 closure material.
+
+**Corrected reasoning, recorded because it was mine and it was wrong:** I argued the nine should be
+reviewed together because their `allowed_paths` must partition the tree without gaps or overlaps.
+GPT-PM rejected the premise -- manifests need not form a disjoint partition; shared governance,
+test and report paths may legitimately repeat across gates. The real test is that no gap or overlap
+is UNEXPLAINED, and that no gate leaks scope. The proposals were drafted under the corrected rule.
+
+**Verification of the proposals, done independently of the agents that wrote them:** a validator
+importing the repository's own `parsePathList`/`compilePattern`/`checkScope`
+(scratchpad, not committed) confirms for all nine: `allowed_paths` non-empty, every pattern
+compiles, no vacuous `**`/`*` allow, both mandatory authority exclusions
+(`governance/gate-manifests/**`, `governance/operator-approvals/**`) present, and a probe of those
+two paths refused by every file.
+
+**A defect in my own verification, recorded because it is the same class this project keeps
+hitting.** That validator reported all nine "ok" while `G8_MANIFEST_PROPOSAL.yaml` was in fact
+unparseable YAML: an unquoted scalar containing `: "` (`(§53: "backup data key...")`) reads as a
+mapping separator. The validator missed it because the repository's manifest reader is a deliberate
+tiny YAML SUBSET parser that only walks the two path blocks -- so "validated against the real
+parser" was a claim broader than the check behind it. CI would have caught it, because
+`npm run format` runs prettier's full YAML parser over the repository; prettier is what found it.
+Fixed by quoting the scalar.
+
+**BLOCKER found in G1's own deliverable, and it is not cosmetic.**
+`scripts/verify/check-test-deletion.mjs` is blind to the repository's actual governance tests. Both
+halves of the guard are restricted to `.test.ts`:
+
+- `const TEST_FILE = /(^|\/)tests\/.*\.test\.ts$|\.test\.ts$/;` -- both branches of the alternation
+  end in `.test.ts`, so a deleted `.test.mjs` is never examined.
+- `git diff -U0 BASE...HEAD -- '*.test.ts'` -- so a newly added `.skip`/`.todo` in a `.test.mjs`
+  file is never seen either.
+
+The repository's test corpus is `packages/contracts/tests/event.test.ts`, `queue.test.ts` (covered)
+and `tests/policy/gate-scope.test.mjs`, `floor-scope.test.mjs`, `codeowners.test.mjs` (NOT covered).
+That is 64 of 101 tests unprotected, and precisely the three suites that enforce governance: a PR
+may delete `gate-scope.test.mjs` outright and the guard prints "no tests removed or skipped."
+
+**Why it survived until now, which matters more than the bug:** this guard is one of the three
+refusal controls G1's remediation plan requires to be "demonstrated on a real PR". None of the three
+ever were -- they are evidenced by unit tests only, and those unit tests were written against
+`.test.ts` fixtures. A single negative control run against the repository's real corpus would have
+exposed it immediately. Same lesson as the existing note about scanning a real corpus before
+trusting a check.
+
+**Catalogue of documents the repository now contradicts** (all verified at their cited lines, not
+taken from a summary): `core/RISK_REGISTER.md` R8 ("probe NOT YET RUN" -- it was run 2026-09-11),
+R11 ("GitHub Actions is not running at all" -- it runs), R12 ("branch protection is not configured,
+404" -- true only of the classic endpoint; ruleset `PDCC` is active, and the private-repo/paid-plan
+clause is moot since the repository is public); `governance/GATE_MANIFEST_INTEGRITY.md` line 31
+("the implementer has no direct-push and no merge permission" -- direct push is blocked by the
+ruleset, but the merge permission exists) and line 160 (88 tests / 30 mutations -- now 101 / 34,
+same figures stale in `governance/plans/G1_REMEDIATION_PLAN.md` lines 149-150);
+`.github/CODEOWNERS` line 3 ("the control that actually enforces" -- contradicted by its own lines
+7-9 and by `require_code_owner_review: false`); `core/PLAN_MASTER_GATES.md` lines 36-53 (G0 outputs
+PENDING/DRAFT against the closure report's DONE/ADOPTED); `governance/gate-manifests/README.md`
+line 15 ("No manifest exists yet" -- `g1.yaml` is adopted).
+
+**A catch-22 the operator must break:** `g1.yaml`'s own status field still says it is awaiting its
+approval hash, while the hash is set. Correcting that line changes the file's hash and therefore
+breaks the very check the hash exists to satisfy, so the implementer cannot fix it and the operator
+must re-approve a new hash if it is to be corrected at all. Recorded rather than worked around.
+
+**One agent claim rejected rather than propagated:** the G1 audit reported that the implementer
+merged PR #1 and PR #3, citing `mergedBy: xLZDx`. That is an inference wider than its evidence --
+a single GitHub identity means the audit trail CANNOT distinguish who clicked, which is R13 itself,
+not proof of who did. The document correction still stands, but on the accurate ground that the
+permission exists, not that it was exercised.
+
+---
+
 ## 2026-09-11 — The floor for "Gate: NONE" PRs is code under scripts/verify/, not a YAML manifest
 
 **Decision:** `governance/gate-manifests/_floor.yaml` (the fixed allow-list for an ungated PR,

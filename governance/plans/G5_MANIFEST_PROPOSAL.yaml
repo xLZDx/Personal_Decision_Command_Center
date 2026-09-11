@@ -1,0 +1,685 @@
+# NON-BINDING IMPLEMENTER PROPOSAL.
+# This file does not authorize any mutation.
+# Only an operator-authored or operator-adopted copy at
+# governance/gate-manifests/g5.yaml plus the
+# operator-controlled approved hash has authority.
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL
+# EXCLUSIVITY. The authenticated implementation session on this machine holds a
+# classic PAT with `repo`, `workflow` and `admin:org` and `.permissions.admin`
+# true on this repository (measured 2026-09-10, recorded in
+# governance/plans/G1_PREADOPTION_EVIDENCE.md section 3.1). It is therefore
+# CAPABLE of setting GATE_MANIFEST_APPROVED_HASH_G5 itself. The separation is
+# procedural until that credential model changes.
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS FILE IS, AND WHERE IT LIVES
+#
+# It is a draft for the operator to read, reject, edit or adopt, written at the
+# operator's request. It is deliberately NOT in governance/gate-manifests/:
+# INV-28 makes that directory operator-owned, and the directory is additionally
+# forbidden to every pull request -- by every adopted gate manifest and by
+# scripts/verify/check-floor-scope.mjs for ungated ones -- so a file placed
+# there by an implementer branch could not legally reach `main` anyway.
+#
+# The name is G5_MANIFEST_PROPOSAL.yaml rather than g5.yaml so that a draft can
+# never be mistaken for the authoritative manifest at a glance in a listing.
+#
+# Nothing here has been approved. The scope below is an argument, not a ruling.
+# ---------------------------------------------------------------------------
+# WHAT G5 IS, AND WHY ITS MANIFEST IS NOT AN ORDINARY ONE
+#
+# G5 is the Identity + Project + Stream + Topic resolver: the component whose
+# entire purpose is to take a Gmail event and a Telegram event and decide they
+# are one Topic. That is the product's core hypothesis (TDD §22) and it is also
+# the single place in the architecture where the project's hardest invariant is
+# most likely to fail:
+#
+#   INV-03  Raw Telegram content never enters AI.
+#   INV-04  Any value or assignment derived from Telegram content inherits
+#           Telegram provenance/taint, regardless of datatype.
+#   INV-05  MVP1 AI accepts Gmail-source-local evidence only; shared
+#           Topic/Stream/Person/cross-channel state is not an AI input.
+#   INV-26  Cross-channel Topic/Decision state is never fed back into AI in
+#           MVP1.
+#
+# The leak G5 creates is not a string. It is an AGGREGATE. Once a Topic spans
+# both sources, its mere membership -- which Gmail messages ended up beside
+# which Telegram messages -- is Telegram-derived information (ADR-005, NM2 in
+# core/RISK_REGISTER.md). An AI request built from that Topic would carry
+# Telegram influence back in even with no Telegram character anywhere in the
+# payload, and even if every individual field looked Gmail-only in isolation.
+# The master plan's own one-line scope for G5 says so: "cross-project hard
+# barrier, no AI feedback from combined topic".
+#
+# A manifest cannot read code, so it cannot detect that leak semantically. What
+# it CAN do is make the leak unreachable from this gate by construction, and
+# that is what the shape below is for. Stated as one sentence:
+#
+#   G5 MAY DEFINE THE COMBINED TOPIC. G5 HAS NO PATH TO SERIALIZE ONE.
+#
+# Every surface on which an AI request can be constructed, or on which the
+# fail-closed provenance gate that refuses one can be weakened, is in
+# forbidden_paths -- not merely absent from allowed_paths. The distinction
+# matters: an out-of-scope path produces "outside G5's approved scope", while a
+# forbidden path produces its own refusal naming the pattern, which is the
+# message a reviewer should see when a resolver PR reaches for the AI boundary.
+# Concretely, the following are on the forbidden side and none of them is
+# G5's work: packages/policy, packages/provenance, packages/contracts
+# (provenance.ts defines the AI_POLICY wrapper the whole taint model rests on),
+# connectors/, services/processor, core/SOURCE_POLICY.md, ADR-005/ADR-009,
+# docs/architecture/PROVENANCE_MODEL.md, and the three tool configs whose
+# strictness IS the type-level half of the enforcement (tsconfig.json,
+# eslint.config.js, vitest.config.ts).
+#
+# So a G5 pull request that tried to hand a combined Topic to AI would have to
+# either (a) touch a forbidden path and fail the Governance check with a named
+# pattern, or (b) construct an AI request out of nothing but resolver-local
+# code, with no provider, no context builder and no serializer available to it.
+# Neither is a review catching a mistake. Both are the mechanism refusing.
+#
+# HONEST LIMIT, stated here rather than at the bottom because it bounds the
+# claim above: this holds only while the AI entry point actually lives at one
+# of the forbidden paths. TDD §55's repository tree names packages/policy and
+# packages/provenance but never says where `AIProvider`/`AIContextBuilder`
+# (§24) live. If G3 puts the Gmail AI extraction somewhere this list does not
+# name, this manifest's barrier has a hole in it and the forbidden list must be
+# re-cut before G5 opens. That is item 1 under "DECISIONS ONLY THE OPERATOR CAN
+# SETTLE".
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+  - NOT_ADOPTABLE_YET_NO_G5_PLAN_EXISTS
+
+authored_by: Claude (implementer)
+authored_on: 2026-09-11
+authored_against_commit: main as of 2026-09-11 (G1 remediated, not yet closed)
+
+gate: G5
+
+# Declared, not created. Naming the branch here is not authorization to create
+# it: global CLAUDE.md §14 requires its own double consent for any new branch
+# (or, per §20, one genuine GPT-PM VERDICT: APPROVE in place of both).
+branch: gate/g5-resolver
+
+# ---------------------------------------------------------------------------
+# PLAN PROVENANCE -- DELIBERATELY UNFILLED, AND THE FILE IS NOT ADOPTABLE UNTIL
+# IT IS FILLED.
+#
+# There is no G5 plan in governance/plans/ yet. A manifest is the scope of a
+# PLAN's merge, so pinning it before the plan exists would be pinning nothing.
+# Two things must be true of these fields at adoption time, both learned the
+# hard way on G1:
+#
+#   1. Pin a COMMIT and a BLOB, never `HEAD:<path>`. G1's first revision said
+#      to recompute from HEAD and GPT-PM caught it as a MAJOR: the same path is
+#      a different, older object on `main` than on the gate branch, so the
+#      recompute would have hashed the wrong file and written false provenance
+#      that nothing downstream checks.
+#   2. Nothing verifies plan_hash. .github/workflows/governance.yml verifies
+#      THIS FILE's own sha256 against the operator-held repository variable and
+#      never reads plan_hash (limitation 7 in
+#      governance/GATE_MANIFEST_INTEGRITY.md). It is a human-auditable pin, not
+#      an enforced one, which is exactly why it must name immutable objects.
+plan_id: UNASSIGNED -- no G5 plan exists yet
+plan_source_commit: UNASSIGNED
+plan_source_blob: UNASSIGNED
+plan_hash: UNASSIGNED
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: G5 -- the deterministic Identity, Project,
+  Stream and Topic resolver (TDD §19-§22), its canonical domain entities and
+  display projections (§8), its D1 tables/indexes, its merge/split audit, and
+  the automated proofs that a combined Gmail+Telegram Topic can neither
+  auto-merge across confirmed projects (INV-16) nor reach an AI request
+  (INV-03/04/05/26). Explicitly NOT in scope: any AI/inference code, any
+  connector, any shared contract, and any governance or enforcement surface.
+
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# WHAT THIS LIST IS SCOPED TO: the permissible MERGE SCOPE of the G5 pull
+# request. The check runs `git diff BASE_SHA...HEAD_SHA` over the CUMULATIVE
+# range from the `main` base to the PR head, so this must cover everything the
+# branch carries at merge time, not only what is left to do.
+#
+# Derived from: the master plan's G5 line, TDD §19-§22 and §8, the Topic
+# Resolver DoD (§72), the Provenance/AI Policy DoD (§70) insofar as G5 owes
+# proofs against it, and the ACTUAL directory skeleton in this repository.
+# Measured 2026-09-11: apps/, services/, infra/, host/ and connectors/ contain
+# ZERO tracked files; the only tracked source anywhere is packages/contracts/
+# (7 files). So every entry below names where code WILL live, taken from
+# TDD §55's repository tree and §9's component diagram -- not from a layout
+# invented for this document.
+#
+# One derivation worth stating because it looks like an omission: §9 draws
+# Identity, Project/Stream and Topic Resolver as three boxes, and §55's tree
+# has exactly one directory for them, `services/resolver/`. This manifest
+# follows §55. It does not create services/identity/ or services/topic/,
+# because inventing directories the frozen baseline does not name is how a
+# gate's scope quietly stops matching its manifest.
+#
+# Grammar is the segment-bounded one scripts/verify/check-gate-scope.mjs
+# enforces, NOT shell globbing: `*` matches within one path segment and never
+# crosses `/`, `**` is a whole segment. There is no bare `**` anywhere in this
+# file -- a manifest containing one cannot refuse anything, and the checker
+# warns about it on every run for exactly that reason.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # The gate's own code: the deterministic resolvers (identity graph §19,
+  # project/stream resolution order §21, cross-channel topic candidate scoring
+  # §22), merge/split handling, and the audit of every merge decision
+  # (INV-15: merges are reversible and audited). The subtree includes this
+  # workspace's own package.json and its colocated tests -- vitest.config.ts
+  # already includes `services/**/tests/**/*.test.ts` and tsconfig.json already
+  # includes `services/**/*.ts`, which is why neither config file needs to be
+  # in scope and both are forbidden below.
+  - services/resolver/**
+
+  # Canonical domain entities and their display projections: Person, Project,
+  # Stream, Topic, and the §8 split that keeps source-derived display text out
+  # of shared machine-identity fields.
+  #
+  # THIS IS THE ALLOWED HALF OF THE ASYMMETRY THE HEADER DESCRIBES. G5 may
+  # define the combined Topic type here. It cannot define any way to send one:
+  # the only MVP1 AI entry point accepts exactly `GmailEvidenceBundle` and has
+  # no overload for Topic/Stream/Person (TDD §24.1, ADR-005), and every path on
+  # which that entry point or its fail-closed `assert_ai_safe()` could be
+  # written or widened is forbidden below. A type is not a channel.
+  - packages/domain/**
+
+  # Forward-only, additive D1 migrations for the resolver's own tables and
+  # indexes: topics, topic_events, topic_merge_events, people, identities,
+  # projects, streams (TDD §34). Segment-bounded, so it reaches .sql files
+  # directly in that directory and nothing nested.
+  #
+  # TWO CONSTRAINTS THE OPERATOR SHOULD HOLD THIS TO. First, additive only: an
+  # edit to an already-applied migration is a rewrite of state that exists on
+  # the operator's real D1 database, and nothing in this manifest can tell that
+  # apart from a new file. Second, R10 (core/RISK_REGISTER.md): D1 Free allows
+  # 50 queries per Worker invocation, so candidate selection must be ONE
+  # batched, indexed query -- a per-candidate loop is not a performance
+  # preference here, it is a quota failure. See also item 2 under "DECISIONS
+  # ONLY THE OPERATOR CAN SETTLE": if G2 delivers the whole §34 schema, the
+  # correct number of G5 migrations may be zero, and this entry should then be
+  # struck rather than used.
+  - infra/migrations/*.sql
+
+  # The proofs, in the test class TDD §70 names ("automated policy/type-boundary
+  # tests"). `.ts` only, on purpose: tests/policy/ currently holds the .mjs
+  # tests of the governance checks themselves, and those are forbidden below --
+  # G5 may add proofs about its own barrier there, never edit the tests that
+  # police G5. The two file extensions are already separated by tooling
+  # (vitest.config.ts includes both `tests/**/*.test.ts` and
+  # `tests/**/*.test.mjs`; `tsc` typechecks only the former), so this split
+  # follows an existing boundary rather than inventing one.
+  - tests/policy/*.ts
+
+  # The scenario tests §72 requires end to end: the Telegram+Gmail
+  # deterministic-link case, auto-merge at threshold, candidate merge, manual
+  # merge, manual split, UNKNOWN/separate, and confirmed-cross-project
+  # auto-merge proven IMPOSSIBLE rather than merely unobserved.
+  - tests/integration/**
+
+  # Fixtures for the above. INV-12 applies with full force: raw message bodies
+  # never enter CI fixtures. A fixture here is synthetic, or it is a defect.
+  - tests/fixtures/**
+
+  # A MECHANICAL CONSEQUENCE, NOT A LICENCE. Root package.json already declares
+  # `workspaces: ["packages/*", "services/*", ...]`, so creating
+  # services/resolver/ needs no root manifest edit -- but npm records the new
+  # workspace in the lockfile regardless of whether it declares a dependency,
+  # so the PR cannot avoid touching this file. Root package.json itself is
+  # therefore NOT in scope: it is where a new dependency or a new script would
+  # be declared, and a deterministic resolver needs neither.
+  #
+  # STATED LIMITATION: a lockfile is exactly where a paid or an AI-provider
+  # dependency would enter, and the scope check sees a changed path, not the
+  # direction or content of the change (the same class of blindness g1.yaml
+  # records for CODEOWNERS). The control for that is the §61 dependency scan,
+  # ADR-010's HARD_ZERO startup rejection, and a reviewer reading the lockfile
+  # diff -- not this line.
+  - package-lock.json
+
+  # Durable decisions this gate produces: the merge-threshold calibration
+  # baseline, any deviation from §22's suggested scoring, and the decision
+  # record for anything the operator settles from the list at the bottom.
+  - core/DECISION_LOG.md
+
+  # The gate ledger row for G5. Allowed so the gate's own status stays current.
+  # Worth a reviewer's eye: a PR can write "CLOSED" in its own row, and that
+  # word is not what closes a gate -- GPT-PM's APPROVE and the operator's merge
+  # are (INV-20, TDD §58). The row is a record of closure, never its cause.
+  - core/PLAN_MASTER_GATES.md
+
+  # R4 (Telegram semantic recall ceiling) and R10 (50 queries per invocation)
+  # both get their first real gate-time evidence here, and a false-merge rate
+  # measured against a real candidate set may add a row.
+  - core/RISK_REGISTER.md
+
+  # The data model index, which says of itself that it starts carrying real
+  # entity-relationship detail once migrations exist. The resolver's entities
+  # and the merge/split audit shape belong in it.
+  - docs/architecture/DATA_MODEL.md
+
+  # The G5 plan itself, named rather than matched by a pattern so that no other
+  # gate's plan is in scope. `governance/plans/*.md` would have pulled in
+  # G0_PLAN.md and the G1 remediation plan, both of which are history.
+  - governance/plans/G5_PLAN.md
+
+  # The fresh-context independent review (§67 item 21) lands a new file here.
+  # `**` as the last segment covers the subtree and, because the separator is
+  # part of the pattern, never the bare directory name.
+  - governance/reviews/**
+
+  # The closure report (§67 item 30). Does not exist yet.
+  - governance/G5_CLOSURE_REPORT.md
+
+  # The mandated report pair (Russian and English). Segment-bounded, so it
+  # reaches reports/ and no subdirectory.
+  - reports/*.html
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# These are not merely "out of scope" -- everything not in allowed_paths is
+# already out of scope and the checker reports it as such. These are a
+# different class: each one is a surface on which this gate could either grant
+# itself authority or weaken the barrier it exists to respect, so each gets its
+# own refusal naming the pattern that refused it.
+#
+# The first two are mandatory in every gate manifest in this repository.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # INV-28. Gate manifests are operator-owned governance state. A gate PR
+  # carrying its own authorizing manifest would validate a diff against a file
+  # that same diff had just rewritten -- NM3 from the v0.2 adversarial review,
+  # and the reason the hash check runs BEFORE the scope check at all.
+  #
+  # Written as the whole subtree, which is stricter than g1.yaml's
+  # `**/*.yaml` + `**/*.yml` pair. That pair existed because G1 legitimately
+  # rewrote governance/gate-manifests/README.md, the documentation of the
+  # format it was building. G5 has no such claim on any file in that directory,
+  # and this form also matches what check-floor-scope.mjs forbids an UNGATED PR.
+  - governance/gate-manifests/**
+
+  # The operator's own record of what they approved. An implementer that can
+  # write approvals can manufacture the evidence that it was approved.
+  - governance/operator-approvals/**
+
+  # The frozen architecture baseline, INV-01..INV-31 included. G5's whole
+  # obligation is to four of those invariants; the gate bound by them must not
+  # be able to edit them.
+  - docs/architecture/TDD.md
+
+  # THE ERRATA FILE IS AN AUTHORITY SURFACE, and this is the entry most likely
+  # to be argued with, so the reasoning is spelled out. TDD_ERRATA.md says of
+  # itself: "Where this file and TDD.md disagree, this file wins." It is
+  # therefore the one document that can change what the frozen baseline MEANS.
+  # Its own rules say it may not amend an invariant and that an entry needs a
+  # quoted GPT-PM ruling -- but those rules are prose inside the file being
+  # edited, which is not a control. For the gate whose central obligation is
+  # INV-26, "prefer forbidding an authority surface over allowing it for
+  # convenience" points one way only.
+  #
+  # THIS IS NOT A DEAD END, which is why forbidding it is fair rather than
+  # merely strict: check-floor-scope.mjs does NOT forbid this path, so a
+  # genuine erratum -- say, the resolver's real layout deviating from §55's
+  # tree -- lands through its own "Gate: NONE" pull request, carrying the
+  # required GPT-PM quotation, reviewed on its own terms instead of riding in
+  # on a 40-file feature diff.
+  - docs/architecture/TDD_ERRATA.md
+
+  # The normative description of the provenance/taint model G5 must obey. A
+  # gate that could edit the definition of the barrier could redefine its own
+  # compliance without changing a line of code.
+  - docs/architecture/PROVENANCE_MODEL.md
+
+  # THE ENFORCEMENT MECHANISM THAT POLICES THIS VERY PULL REQUEST. governance.yml
+  # resolves the gate, verifies the manifest hash and runs the scope check;
+  # CODEOWNERS is what makes merge authority reviewable at all.
+  #
+  # G1's own manifest ALLOWED `.github/workflows/*.yml` and `.github/CODEOWNERS`,
+  # and that was correct for G1: building that mechanism WAS G1's deliverable.
+  # Carrying it forward into a feature gate would invert the design, because
+  # check-floor-scope.mjs forbids both paths to an UNGATED PR -- so allowing
+  # them here would make a gate-labeled pull request strictly more powerful
+  # than one that declares no gate at all. A gate label is a narrowing device.
+  # It must never be a way to acquire authority.
+  - .github/workflows/**
+  - .github/CODEOWNERS
+
+  # The executable governance checks themselves, including the gate-scope
+  # checker that evaluates this PR and the test-deletion guard. Same reasoning
+  # as the workflow: the policed does not edit the police.
+  - scripts/verify/**
+
+  # The tests of those checks. Forbidding the scripts while leaving their tests
+  # editable would leave the guards intact and their proof removable, which is
+  # the shape of "a broken instrument imitates the result you wanted". The
+  # `.ts` policy tests G5 legitimately adds are allowed above; these `.mjs`
+  # ones belong to the governance mechanism.
+  - tests/policy/*.mjs
+
+  # THE TYPE-LEVEL HALF OF THE AI BARRIER. ADR-005 does not ask for the
+  # Topic-object rejection to be a runtime policy check; it asks for the TYPE
+  # SYSTEM to refuse it ("not just policy-blocked -- the type system itself
+  # must reject it"). That property is only as strong as these two files:
+  # tsconfig.json carries `strict`, `noUncheckedIndexedAccess` and
+  # `exactOptionalPropertyTypes`, and eslint.config.js makes
+  # `@typescript-eslint/no-explicit-any` an ERROR with the comment "The
+  # AI/provenance boundary is enforced by types (ADR-005). `any` erases exactly
+  # the distinctions that enforcement rests on" -- plus `no-console: error`,
+  # which is INV-12's practical enforcement. Relaxing either would disarm the
+  # barrier while every test still passed. Neither needs to change for G5:
+  # tsconfig already includes `services/**/*.ts`, `packages/**/*.ts` and
+  # `tests/**/*.ts`.
+  - tsconfig.json
+  - eslint.config.js
+
+  # The ability to decide which tests RUN. vitest.config.ts already includes
+  # `services/**/tests/**/*.test.ts`, `tests/**/*.test.ts` and
+  # `tests/**/*.test.mjs`, and sets `passWithNoTests: false` with a comment
+  # naming this exact failure mode. G5 needs no change here, and a gate that
+  # could edit its own include list could stop its own proofs from running
+  # without deleting a single test.
+  - vitest.config.ts
+
+  # THE SHARED CONTRACT, AND THE REASONING IS TWO-PART.
+  #
+  # Blast radius: packages/contracts is the connector-neutral envelope every
+  # other gate consumes -- NormalizedEvent (G2/G3/G4), QueuePayload (G2),
+  # PushPayload (G7). Changing it from inside a feature gate alters behavior
+  # those gates already verified, under a review scoped to the resolver, and it
+  # is the classic way a gate quietly widens its own blast radius.
+  #
+  # And, specific to G5: packages/contracts/src/provenance.ts defines
+  # `AI_POLICIES`, `AiPolicySchema` and `ProvenanceValue` -- the wrapper the
+  # entire INV-04 taint model is expressed in. The gate most able to benefit
+  # from a looser AI policy enum is precisely this one. That is not an
+  # accusation; it is the reason the boundary belongs on the forbidden side
+  # where it produces a named refusal instead of a judgement call.
+  #
+  # The honest counterpoint, recorded rather than hidden: G5 may well discover
+  # it needs a field the contract does not have. The route is a contract change
+  # with its own plan and its own GO, not a widened G5 manifest. Rule of thumb
+  # for telling the cases apart: a type only the resolver reads is not a
+  # contract, and belongs in packages/domain/ or services/resolver/.
+  - packages/contracts/**
+
+  # THE AI GATE ITSELF. ADR-005 assigns the provenance DAG and the fail-closed
+  # composition rule `ai_safe(value) = all provenance ancestors are AI_ALLOW`
+  # to these two packages, "as testable primitives, not documentation". They are
+  # what refuses a Telegram-tainted value, and they are G2's deliverable, not
+  # G5's. G5 must PASS this gate; G5 must never be able to MOVE it.
+  - packages/policy/**
+  - packages/provenance/**
+
+  # Where the Gmail AI extraction and `GmailEvidenceBundle` construction live
+  # (master plan G3; TDD §12, §24.1), and where the Telegram deterministic
+  # parser lives (§11.1, G4). Two independent reasons to forbid the subtree:
+  # it is the most likely home of the only code in MVP1 that may legally call
+  # AI, and INV-23 says connector protocol details do not leak into core domain
+  # services -- a resolver PR editing a connector is that leak happening.
+  - connectors/**
+
+  # The queue consumer (G2). Named explicitly rather than left merely
+  # out-of-scope because the processing-order rule in §7.1 -- Gmail AI
+  # enrichment strictly BEFORE cross-channel resolution -- is enforced on this
+  # side of the boundary, and because if the Gmail AI step turns out to live
+  # here rather than under connectors/, this entry is what keeps the barrier
+  # whole. See limitation 1 at the bottom.
+  - services/processor/**
+
+  # The policy documents that define what may be sent to AI at all, and which
+  # sources exist. core/SOURCE_POLICY.md carries the verbatim Telegram
+  # prohibition and says of itself that changes require ADR + independent
+  # review + operator approval; MVP1_SCOPE_LOCK.md is the two-source lock.
+  # Neither is editable from inside a gate bound by them.
+  - core/SOURCE_POLICY.md
+  - core/MVP1_SCOPE_LOCK.md
+
+  # The adopted architecture decisions, ADR-005 (the provenance DAG and the
+  # Gmail-only pre-aggregation AI boundary) and ADR-009 (the Gmail-only AI
+  # provider decision) above all. §67 item 19 requires an ADR when architecture
+  # or policy changes -- and if G5 finds it needs one, that IS the signal that
+  # G5's scope was wrong: stop, new plan, new GO. As with the errata file this
+  # is not a dead end, because check-floor-scope.mjs leaves core/adr/ reachable
+  # by a "Gate: NONE" pull request reviewed on its own merits.
+  - core/adr/**
+
+# ---------------------------------------------------------------------------
+# The fields below are part of the manifest shape described in
+# governance/gate-manifests/README.md. Stated honestly: the checker reads
+# allowed_paths and forbidden_paths and NOTHING ELSE. These three are
+# documentation for a human reviewer, not enforcement.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+  # §72 Topic Resolver DoD, every line of it, each an independent assertion:
+  # project-scoped identifier namespace enforced; confirmed cross-project
+  # auto-merge IMPOSSIBLE; auto-merge threshold; candidate merge; manual merge;
+  # manual split; merge reason/score/version audited; Telegram+Gmail
+  # deterministic-link scenario; UNKNOWN/separate; false-merge metric exposed.
+  - vitest run tests/integration
+  # The §70 assertions G5 owes as the gate that creates the aggregate: a
+  # combined Gmail+Telegram Topic is never serialized into an AI request; a
+  # Topic/Stream/Person object is rejected by the AI API's TYPE/SCHEMA, not
+  # only by a runtime policy check; a Telegram-derived routing hint, enum
+  # assignment and count/aggregate are each blocked; unknown/mixed ancestry
+  # fails closed. Before citing any of these as evidence, check the assertion
+  # would actually fail if the guard were removed -- a test that passes because
+  # the object never reached the serializer proves nothing.
+  - vitest run tests/policy
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+  # Project review roles, per project CLAUDE.md §5 / TDD §59. AI-01 and PRIV-01
+  # are not optional for this gate: it is the one that builds the aggregate.
+  - AI-01 (AI/Decision Reviewer)
+  - PRIV-01 (Privacy/Platform Compliance Reviewer)
+  - DATA-01 (Data/State Reviewer)
+  - RED-01 (Final Adversarial Reviewer)
+
+policy_sensitive_files:
+  - docs/architecture/PROVENANCE_MODEL.md
+  - core/SOURCE_POLICY.md
+  - core/adr/ADR-005-value-provenance-dag.md
+  - packages/policy
+  - packages/provenance
+  - packages/contracts/src/provenance.ts
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why
+#
+#   package.json            Root manifest. The workspaces globs already cover
+#                           services/*, so G5 needs no edit here; a new
+#                           dependency or script is what this file is for, and
+#                           a deterministic resolver needs neither. Only the
+#                           lockfile is a mechanical necessity (see above).
+#
+#   packages/telemetry/**   §72 requires a "false-merge metric exposed", and
+#                           this is where a metric would live -- but the
+#                           observability gate is G8. Left OUT on the principle
+#                           that narrowing is always safe and widening is what
+#                           to be suspicious of. It is item 3 under "DECISIONS
+#                           ONLY THE OPERATOR CAN SETTLE", because as written
+#                           this manifest makes one line of G5's own DoD
+#                           unreachable, and that should be a conscious choice
+#                           rather than a surprise at closure.
+#
+#   packages/testkit/**     Fixture builders. tests/fixtures/ and colocated
+#                           tests cover G5's needs; a shared testkit is a
+#                           cross-gate asset.
+#
+#   services/api/**,        The read path and the surfaces that consume the
+#   apps/pwa/**             resolver's output. G7.
+#
+#   services/decision/**    Intent/Decision/Commitment/Milestone/Priority. G6.
+#                           The resolver produces the Topic those attach to;
+#                           it does not produce them.
+#
+#   host/**, infra/cloudflare/**,
+#   infra/connector-host/** Deployment and the connector host. G2/G4/G8.
+#
+#   docs/runbooks/**        Not required by §72. If the operator wants a
+#                           merge-reversal runbook (INV-15 makes reversal a
+#                           real operator action), adding ONE named file here
+#                           at adoption is a reasonable narrow widening --
+#                           `docs/runbooks/TOPIC_MERGE_REVERSAL.md`, not the
+#                           subtree.
+#
+#   docs/product/**         Product surface. G7.
+#
+#   core/DATA_RETENTION_POLICY.md
+#                           Retention is source-aware and provenance-aware
+#                           (INV-19) and G8's subject. A resolver that changes
+#                           retention has misunderstood its own scope.
+#
+#   governance/plans/G5_MANIFEST_PROPOSAL.yaml
+#                           This file. Once the operator has adopted a manifest
+#                           from it, editing the proposal inside the very gate
+#                           it authorizes would let the record of what was
+#                           PROPOSED drift from what was ADOPTED. It is history
+#                           the moment the hash is set.
+#
+#   .claude/**, AGENTS.md,  Agent configuration and repository front matter.
+#   CLAUDE.md, README.md    Not G5 deliverables.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN ONCE ITS HASH IS APPROVED
+#
+#   1. THE BARRIER IS ONLY AS COMPLETE AS THE PATHS IT NAMES. The forbidden
+#      list assumes the AI entry point lives under packages/policy,
+#      packages/provenance, connectors/ or services/processor. TDD §55 never
+#      states where `AIProvider`/`AIContextBuilder` (§24) actually go. If G3
+#      puts them somewhere else -- services/api/, a new packages/ai/ -- a G5 PR
+#      could edit them without tripping a single pattern here. RE-CUT THIS LIST
+#      ONCE G3 HAS LANDED, before G5 opens.
+#
+#   2. IT CANNOT SEE SEMANTICS. It cannot tell a resolver that exports a
+#      Gmail-safe projection from one that exports a "hint" carrying combined
+#      membership which a later gate then feeds to AI in good faith. Nothing
+#      about that PR touches a forbidden path. Only `assert_ai_safe()` failing
+#      closed at runtime, plus the §70 tests, plus AI-01's review, covers it.
+#      The manifest narrows the blast radius; it does not read intent.
+#
+#   3. IT CANNOT TELL DIRECTION. A tightening and a loosening of the same file
+#      are the same event to a path check -- the property g1.yaml records for
+#      CODEOWNERS, and the reason package-lock.json above is a stated residual
+#      risk rather than a solved one.
+#
+#   4. THE GATE LABEL IS WRITTEN BY THE IMPLEMENTER. The `Gate: G5` line, or a
+#      `gate/g5-...` branch name, is what selects THIS manifest. A PR that
+#      declared a different gate would be checked against a different manifest
+#      (limitation 6 in governance/GATE_MANIFEST_INTEGRITY.md).
+#
+#   5. NOTHING CHECKS plan_hash, as stated in the provenance block above.
+#
+#   6. THE CHECK RUNS ON pull_request ONLY. A direct push to `main` is not
+#      examined by it. That gap is closed by the `PDCC` ruleset on `main`, not
+#      by this file.
+#
+#   7. THE APPROVAL HASH IS NOT OUT OF THE IMPLEMENTER'S REACH -- the
+#      credential measurement in the header. The separation is procedural.
+#
+#   8. AND THE ONE THIS FILE ADDS BY EXISTING: an implementer drafted the scope
+#      that binds the implementer. The only thing standing between that and a
+#      self-authorized scope is the operator actually reading these bytes
+#      before setting the hash.
+#
+# ---------------------------------------------------------------------------
+# DECISIONS ONLY THE OPERATOR CAN SETTLE (with GPT-PM as roadmap owner)
+#
+#   1. WHERE DOES THE AI ENTRY POINT LIVE? The barrier above is path-based and
+#      TDD §55 does not place `AIProvider`/`AIContextBuilder`. Settle this at
+#      G3 and re-cut forbidden_paths before G5 opens. Until then, treat the
+#      barrier as strong-but-conditional, not proven.
+#
+#   2. DOES G2 DELIVER THE WHOLE §34 SCHEMA? The master plan's G2 line says
+#      "D1 schema"; docs/architecture/DATA_MODEL.md says it "gets expanded into
+#      real migrations/schema at G2"; TDD §35 says "indexes in migration 001",
+#      singular. If all §34 tables land at G2, G5's correct migration count is
+#      ZERO and `infra/migrations/*.sql` should be struck from allowed_paths.
+#      If G2 ships only the ingest side, G5 owns the resolver tables and the
+#      entry stays. This cannot be inferred from the documents as they stand.
+#
+#   3. WHO EXPOSES THE FALSE-MERGE METRIC? §72 requires it inside G5's DoD;
+#      packages/telemetry and the observability surface are G8's. As proposed,
+#      G5 cannot satisfy that DoD line. Either add packages/telemetry/** to
+#      allowed_paths (narrowly: G5 may add a metric definition, never
+#      restructure telemetry), or record that the metric is derived at G8 from
+#      the topic_merge_events audit rows G5 does write -- which is the cheaper
+#      answer and the one this draft leans toward.
+#
+#   4. A CONTRADICTION FOUND WHILE READING, WHICH G6 INHERITS MORE THAN G5.
+#      ADR-005's verification section says the §70 proofs are owed at
+#      "G2 primitives, G6 AI integration", and core/RISK_REGISTER.md's NM2 row
+#      says "at G2/G6". But core/PLAN_MASTER_GATES.md puts "GmailEvidenceBundle
+#      + source-local AI extraction before merge" in G3, and G6's own scope line
+#      contains no AI at all. Either the ADR and the risk register are stale
+#      (written before the gate numbering settled) or G6 really is expected to
+#      carry the AI integration. That changes which gate must own the §70 tests
+#      and, for G5, which gate this manifest is holding the line against.
+#      Flagged, not resolved -- it is a roadmap ruling, not an implementer's.
+#
+#   5. SEQUENCING ODDITY, SMALLER BUT REAL. TDD §71, the QUEUE/RELIABILITY DoD
+#      (G2's), contains "MAX_TOPIC_CANDIDATES is bounded and tested". Topic
+#      candidate selection is G5's code. As written, a G2 DoD line can only be
+#      closed by code G5 has not written yet, or by a G2 stub that G5 then
+#      replaces. Worth deciding before G2 closes, not after.
+#
+# ---------------------------------------------------------------------------
+# HOW TO ADOPT THIS, AND WHY NO HASH IS PRINTED HERE
+#
+# Do NOT copy this file byte-for-byte into governance/gate-manifests/g5.yaml.
+# It carries `status: NON_BINDING_PROPOSAL / HAS_NO_AUTHORITY`, so the copy
+# would be a binding manifest asserting about itself that it has none. Adoption
+# means editing at least the header, the status block and the plan provenance
+# -- and the moment anything is edited, the sha256 changes. Any hash printed
+# here would be the hash of the wrong bytes.
+#
+# The sequence, with each step's owner:
+#
+#   1. GPT-PM    Settle items 1-5 above, or explicitly defer each one with a
+#                reason. Item 2 changes this file's allowed_paths; item 4
+#                changes which gate owns the §70 proofs.
+#   2. operator  Write the G5 plan (governance/plans/G5_PLAN.md), or approve
+#                one drafted for review, and give G5 its own GO. A manifest
+#                without a plan pins nothing.
+#   3. operator  Review and edit this draft. It is an argument, not a ruling.
+#                Narrowing is always safe; widening is the thing to be
+#                suspicious of.
+#   4. operator  Write the result to governance/gate-manifests/g5.yaml with the
+#                header, status block and plan provenance replaced by adoption
+#                markers, and with plan_source_commit / plan_source_blob /
+#                plan_hash pinned to immutable objects. This must be its own
+#                commit on `main`, NOT part of the gate PR -- that path is in
+#                forbidden_paths above, so a gate PR carrying it fails the
+#                Governance check, correctly.
+#   5. operator  sha256sum governance/gate-manifests/g5.yaml
+#                (PowerShell: Get-FileHash -Algorithm SHA256 <path>)
+#                Note the value is computed from the LF bytes the runner checks
+#                out; a hash taken from a CRLF working copy will NOT match.
+#   6. operator  Set that value as the repository variable
+#                GATE_MANIFEST_APPROVED_HASH_G5. Settings -> Secrets and
+#                variables -> Actions -> Variables. Setting whatever CI printed
+#                without reading the manifest reduces this control to a rubber
+#                stamp -- governance.yml says so in its own error text.
+#   7. anyone    Open the gate PR. The Governance check now reaches the scope
+#                step instead of stopping at the hash step.
+#
+# Step 6 is what makes any of this real. Until it is done the Governance check
+# fails closed at the hash step, the scope step is never reached, and G5 has no
+# enforced scope at all -- which is the correct behaviour.
+# ---------------------------------------------------------------------------

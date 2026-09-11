@@ -1,0 +1,592 @@
+# NON-BINDING IMPLEMENTER PROPOSAL FOR GATE G3 (Gmail connector).
+# This file does not authorize any mutation, and it is not in the repository.
+#
+# It was written to a scratchpad directory on purpose. INV-28 makes gate manifests and their
+# approved hashes operator-owned governance state; an implementer-authored file placed in
+# governance/gate-manifests/ would not acquire authority by being there, and could not be merged
+# anyway -- every manifest in this repository, and the ungated floor in
+# scripts/verify/check-floor-scope.mjs, forbids that directory to every pull request that exists.
+# So the draft stays outside the repository until the operator decides what to do with it.
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL EXCLUSIVITY. The
+# authenticated implementation session on this machine holds a classic PAT with `repo`, `workflow`
+# and `admin:org`, and `.permissions.admin` is true on this repository (measured 2026-09-10,
+# recorded in governance/plans/G1_PREADOPTION_EVIDENCE.md section 3.1). It is able to set
+# GATE_MANIFEST_APPROVED_HASH_G3 itself. The separation is procedural until that credential model
+# changes:
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# WHAT G3 IS
+#
+# core/PLAN_MASTER_GATES.md, G3 row, verbatim:
+#
+#   "Gmail connector (OAuth, push/watch auth, renewal, bounded gap recovery, billing-account
+#    check + poll fallback, GmailEvidenceBundle + source-local AI extraction before merge)"
+#
+# G3 is the ONE gate in this project whose deliverable deliberately touches AI. That is not an
+# exception to the AI isolation rule, it is the rule: ADR-005 and TDD 7.1/24.1 place AI extraction
+# source-locally on the Gmail side, BEFORE the deterministic cross-channel resolver runs, precisely
+# so that no combined Gmail+Telegram object ever exists at the moment AI is called. G4's manifest
+# is the mirror image of this one and forbids every AI-adjacent path outright.
+#
+# Status of the repository when this was written (measured, not assumed):
+#
+#   connectors/gmail/          exists as an empty directory, zero tracked files
+#   connectors/common/         exists as an empty directory, zero tracked files
+#   connectors/telegram-tdlib/ exists as an empty directory, zero tracked files
+#   packages/contracts/        4 source files + 2 test files, landed in b784265
+#
+# So every allowed path below is either a file that must be CREATED, or a small set of existing
+# files a named G3 action must edit. There is no "already in the branch" half to this manifest --
+# unlike g1.yaml, which had to authorize a diff that already existed.
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+  - WRITTEN_BEFORE_G3_HAS_A_PLAN
+
+authored_by: Claude (implementer)
+authored_on: 2026-09-11
+gate: G3
+
+# ---------------------------------------------------------------------------
+# PLAN PROVENANCE -- deliberately unset, and that is not an oversight.
+#
+# G3 has no plan yet. TDD 57(5) lists plan_id and plan_hash as part of the manifest shape, and
+# g1.yaml carries both pinned to an immutable commit+blob pair. A proposal written before the
+# gate's plan exists cannot honestly carry either. Putting a plausible-looking value here would be
+# worse than leaving it unset: nothing in CI reads plan_hash (limitation 7 in
+# governance/GATE_MANIFEST_INTEGRITY.md), so a fabricated value would never be contradicted by
+# anything and would sit in the record looking like evidence.
+#
+# Both fields must be filled in, from the real G3 plan, before this is adopted.
+# ---------------------------------------------------------------------------
+plan_id: UNASSIGNED -- G3 has no plan yet; fill in before adoption
+plan_hash: UNASSIGNED -- pin to a commit and a blob, not to HEAD (see g1.yaml's own note)
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: implement the Gmail connector -- OAuth with least privilege,
+  Pub/Sub push authentication (OIDC/JWT) or an explicitly selected poll mode, watch renewal,
+  bounded post-connection gap recovery, the operator-run billing-account experiment that decides
+  between the two modes, the GmailEvidenceBundle contract, and Gmail-source-local AI extraction
+  running before any cross-channel merge. Gmail lives entirely in the cloud control plane and has
+  no dependency on the Telegram connector host (TDD 39).
+
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# WHAT THIS LIST IS SCOPED TO: the permissible MERGE SCOPE of the G3 pull request. The check runs
+# `git diff BASE_SHA...HEAD_SHA` and evaluates the cumulative range from the main base to the PR
+# head, so this is "what may legitimately arrive on main through this gate", not "what is left to
+# do".
+#
+# Every entry carries the named G3 action or DoD line that needs it. An entry no G3 action needs is
+# not here; see "deliberately excluded" at the bottom, which is longer than usual on purpose --
+# several of the exclusions are the actual decisions in this document.
+#
+# Grammar is the segment-bounded one scripts/verify/check-gate-scope.mjs enforces, NOT shell
+# globbing: `*` matches within one path segment and never crosses `/`, `**` is a whole segment.
+# There is no bare `**` anywhere in this file; a manifest containing one cannot refuse anything,
+# and the checker warns about it on every run for exactly that reason.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # The connector itself: OAuth flow, watch/renewal scheduler, the Pub/Sub push receiver, the
+  # history.list incremental reader, the bounded gap-recovery path, the poll-mode reader, and the
+  # GmailEvidenceBundle builder. Gmail is a cloud-plane Worker (TDD 39: "Gmail should remain
+  # entirely in the cloud control plane"), so its wrangler config and its own README live here too.
+  # This is also where this proposal recommends the Gmail AI extraction code live -- see Q1 below,
+  # which is a question for the operator and not a decision this file makes.
+  - connectors/gmail/**
+
+  # Shared connector scaffolding: the normalized-envelope emitter (TDD 13), the authenticated
+  # ingest client (TDD 14/41) and the retry/backoff helper. It does not exist yet and G3 is the
+  # first connector, so G3 creates it.
+  #
+  # READ THE MIRROR OF THIS ENTRY IN G4. That manifest FORBIDS connectors/common/**, because shared
+  # connector code sits upstream of the Gmail evidence path: a Telegram gate able to edit it could
+  # change what ends up inside a GmailEvidenceBundle without touching a single Gmail file. The
+  # asymmetry is deliberate and is the point of having two manifests rather than one.
+  - connectors/common/**
+
+  # The normalized event contract, plus the two new Gmail-side types G3 introduces:
+  # GmailEvidenceBundle (the ONLY accepted MVP1 AI input type, ADR-005/TDD 24.1) and
+  # GmailSourceEnrichment (its Gmail-provenance-only output).
+  #
+  # Narrowed to the two directories that exist rather than packages/contracts/**, so a new
+  # subdirectory is a scope conversation rather than a silent widening. Honest limitation: the
+  # scope check sees a changed path, never the direction of the change -- it cannot tell an
+  # additive type from a breaking edit to the envelope every source depends on. G3's plan must
+  # state that changes here are additive, and the reviewer must check that claim against the diff.
+  - packages/contracts/src/*.ts
+  - packages/contracts/tests/*.ts
+  - packages/contracts/package.json
+
+  # npm workspaces already globs `connectors/*` (measured in package.json), so registering
+  # connectors/gmail and connectors/common needs no config change -- but their own package.json
+  # files and any new dependency do change the root lockfile, and CI runs `npm ci`.
+  #
+  # SUPPLY-CHAIN NOTE, stated rather than left implicit: adding a dependency is the largest
+  # external-trust surface either connector gate opens, package.json is NOT covered by
+  # .github/CODEOWNERS, and `npm audit` is advisory-only at this point (ci.yml line 56-59, deferred
+  # to G8 by its own comment). So nothing mechanical reviews a new dependency today. G3's plan must
+  # enumerate every dependency it adds and its HARD_ZERO implication (ADR-010: "Every gate that
+  # adds a new external dependency must state ... what the HARD_ZERO degrade path is").
+  - package.json
+  - package-lock.json
+
+  # The decisive Pub/Sub billing experiment, following the precedent G0 set with
+  # scripts/probes/cloudflare-free-cpu/: a script plus exact reproducible instructions, run by the
+  # operator on their own Google account, with results recorded and never fabricated.
+  # docs/architecture/EXTERNAL_ASSUMPTIONS.md D states the experiment in full and calls it
+  # "operator-run ... so not Claude's to run".
+  #
+  # Note the directory: scripts/probes/ is excluded from tsconfig (measured) and is NOT
+  # scripts/verify/, which this manifest forbids. A probe gathers evidence; a verify script
+  # enforces a rule. G3 may do the first and not the second.
+  - scripts/probes/gmail-pubsub-billing/**
+
+  # This file's own header says it is an "Index only, expanded into real implementation notes
+  # starting at G3 (Gmail) / G4 (Telegram)". G3 is where that expansion is owed.
+  # It sits under /docs/architecture/, which CODEOWNERS assigns to @xLZDx, so operator review still
+  # applies on the merge path even though the scope check permits the path.
+  - docs/architecture/CONNECTOR_ARCHITECTURE.md
+
+  # Gate-time re-verification, required by the file's own rule ("Re-verify at each gate that
+  # depends on the item") and by two explicit debts:
+  #   - the billing-account question, recorded as AMBIGUOUS with the experiment that settles it;
+  #   - ADR-009's "live re-fetch of Workers AI Customer Content policy and the selected model's
+  #     license/terms before any production Gmail content is sent to AI", owed at G3 by name.
+  # This is a record of measured fact, not an authority surface: it records what was fetched and
+  # when, and an entry that cannot be verified is required to say so.
+  - docs/architecture/EXTERNAL_ASSUMPTIONS.md
+
+  # TDD 69 (Gmail Connector DoD): "failure/recovery runbook exists". The file exists as a stub and
+  # G3 owns its real content -- the expired-history-cursor path, the bounded recovery window, and
+  # the fact that Google's documented recovery is a FULL sync while this project deliberately does
+  # something narrower (EXTERNAL_ASSUMPTIONS.md D, "Correction to the TDD's framing of gap
+  # recovery").
+  #
+  # Only this one runbook. The three connector-host runbooks (TELEGRAM_CONNECTOR_DOWN,
+  # CONNECTOR_KEY_COMPROMISE, CONTENT_GATEWAY_KEY_ROTATION) belong to G4: Gmail is cloud-plane only
+  # and has no connector identity, no session material and no gateway.
+  - docs/runbooks/GMAIL_GAP_RECOVERY.md
+
+  # Durable decisions: the push-vs-poll mode of record and the evidence behind it, the
+  # GmailEvidenceBundle placement decision, and any deviation recorded honestly.
+  - core/DECISION_LOG.md
+
+  # R3 ("Gmail Pub/Sub may require a GCP billing-account attachment despite $0 usage") is marked
+  # "ACCEPTED, verify at G3" by name. G3 is the gate that either closes it with the experiment's
+  # result or records why it still cannot be closed. The register's own instruction applies: do not
+  # mark a row CLOSED until the verification has run and produced evidence.
+  - core/RISK_REGISTER.md
+
+  # The gate tracker's G3 row. See the contradiction note at the bottom of this file -- this table
+  # is already out of step with governance/G0_CLOSURE_REPORT.md and with g1.yaml's own adoption
+  # state, and G3 should not add a third inconsistency to it.
+  - core/PLAN_MASTER_GATES.md
+
+  # The gate's own plan and its evidence artifacts. A `G3_`-prefixed glob rather than named files:
+  # it cannot reach another gate's plan (G0_PLAN.md, G1_*.md stay out by construction), and it does
+  # not require this proposal to guess file names that do not exist yet.
+  #
+  # `.md` only, deliberately. A `G3_MANIFEST_PROPOSAL.yaml` landing through the gate's own PR would
+  # put a document arguing about this gate's scope inside the diff this manifest is checking --
+  # harmless in itself, since a proposal has no authority, but it is the shape of the mistake INV-28
+  # exists to prevent, and it is better not to practise it.
+  - governance/plans/G3_*.md
+
+  # The closure report (Universal DoD item 30). Does not exist yet.
+  - governance/G3_CLOSURE_REPORT.md
+
+  # The fresh-context review (Universal DoD item 21) lands a new file here. `**` as the last
+  # segment covers the subtree and, because the separator is part of the pattern, never the bare
+  # directory name.
+  - governance/reviews/**
+
+  # The mandated report pair (Russian + English) for the gate. Segment-bounded, so it reaches
+  # reports/ and no subdirectory -- note that TDD 55's tree shows `reports/gate-*/`, which nothing
+  # in the repository has ever used; the existing six reports are flat files.
+  - reports/*.html
+
+  # Tests. Split by directory rather than a single tests/** entry, because tests/policy is not like
+  # the others: it currently holds the governance guards' own tests (gate-scope, floor-scope,
+  # codeowners -- 51+ assertions in .mjs), and those police this gate.
+  #
+  #   tests/contract/     the normalized envelope and the GmailEvidenceBundle schema
+  #   tests/integration/  watch renewal, history.list incremental read, mode switching
+  #   tests/resilience/   TDD 62 by name: "Gmail watch renewal", "Gmail history cursor 404 ->
+  #                       bounded gap recovery", "same event submitted 10 times", "AI quota
+  #                       exhausted", "AI disabled"
+  #   tests/security/     TDD 39: tokens never logged, never client-readable, never in URLs;
+  #                       TDD 42: no raw body in logs/metrics/fixtures; and the negative Pub/Sub
+  #                       test EXTERNAL_ASSUMPTIONS.md D insists on -- an unsigned push MUST be
+  #                       rejected, because authentication is OFF by default on that platform and
+  #                       "a G3 that merely enables push and sees messages arrive has proven
+  #                       nothing about authentication"
+  #   tests/fixtures/     shared fixtures. INV-12/TDD 42: no raw message bodies here either
+  - tests/contract/**
+  - tests/integration/**
+  - tests/resilience/**
+  - tests/security/**
+  - tests/fixtures/**
+
+  # The ONE positive AI-boundary case TDD 70 assigns to the Gmail side: "GmailEvidenceBundle with
+  # Gmail-only eligible ancestry -> ALLOWED", and "Gmail AI enrichment occurs before cross-channel
+  # resolution".
+  #
+  # `*.test.ts` and not `**`: it cannot match the `.mjs` governance-guard tests in the same
+  # directory, which this manifest forbids below. G3 may add a test that proves the AI boundary
+  # admits what it is supposed to admit; it may not edit the tests that prove the gate mechanism
+  # itself still bites.
+  - tests/policy/*.test.ts
+
+  # The repository front page. G3 is the first gate to land runnable application code, and
+  # core/DECISION_LOG.md (2026-09-10) records the debt explicitly: "A future gate that adds build/
+  # test commands must add them to AGENTS.md too -- that section currently says 'no code exists
+  # yet'." This proposal deliberately routes that to README.md and FORBIDS AGENTS.md and CLAUDE.md;
+  # see the forbidden list for why, and Q4 for the consequence.
+  - README.md
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# Everything not in allowed_paths is ALREADY refused -- allowed_paths is a closed allowlist, and
+# that is what actually constrains this gate. These entries are a different class: each one is a
+# path where a change would be the implementer adjusting its own constraints, so each gets its own
+# refusal naming the reason instead of a generic "outside scope".
+#
+# Two entries are mandatory in every gate's manifest in this repository and are not judgement
+# calls. The rest are, and each carries its argument.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # MANDATORY, INV-28. A gate must never be able to widen its own authority. Broader than g1.yaml's
+  # pair of `**/*.yaml` / `**/*.yml` entries, which were narrowed only so that G1 could edit the
+  # directory's README while it was building the mechanism. G3 has no business anywhere in this
+  # directory, so this matches the ungated floor's own entry exactly
+  # (scripts/verify/check-floor-scope.mjs FORBIDDEN_PATHS).
+  - governance/gate-manifests/**
+
+  # MANDATORY. The operator's own record of what they approved. An implementer that can write
+  # approvals can manufacture the evidence that it was approved.
+  - governance/operator-approvals/**
+
+  # The frozen architecture baseline, INV-01..INV-31 included.
+  - docs/architecture/TDD.md
+
+  # AND THE FILE THAT OUTRANKS IT. TDD_ERRATA.md declares itself NORMATIVE -- "Where this file and
+  # TDD.md disagree, this file wins" -- so an implementer able to edit it can change the binding
+  # architecture by declaring a restriction superseded, without touching TDD.md at all. CODEOWNERS
+  # makes exactly this argument in its own comments. g1.yaml ALLOWED this path, correctly: G1 was
+  # the gate that created the errata mechanism and wrote E-001. G3 is not, and an errata entry
+  # requires a quoted GPT-PM ruling by the file's own rules -- which is a governance act, not a
+  # connector change, and does not belong inside a Gmail implementation diff.
+  #
+  # See the contradiction note at the bottom: the ungated floor forbids TDD.md but NOT this file.
+  - docs/architecture/TDD_ERRATA.md
+
+  # THE ENFORCEMENT MECHANISM. Broader than the floor's two entries (.github/workflows/** and
+  # .github/CODEOWNERS) because a gate has no legitimate business anywhere under .github/.
+  #
+  # The reasoning is governance.yml's own: for `pull_request` events GitHub runs the workflow as it
+  # exists in the PR's merge commit, so a PR that edits these files edits the checks that police
+  # it. CODEOWNERS is the thing that would decide whether such an edit is reviewed, so it cannot be
+  # in the same PR either.
+  #
+  # g1.yaml allowed .github/workflows/*.yml and .github/CODEOWNERS. That was right for G1 and is
+  # wrong for G3: G1's deliverable WAS the CI and the ownership model. Measured consequence, so the
+  # cost is visible rather than implied -- G3 needs no workflow change at all: vitest's include
+  # globs already cover `connectors/**/tests/**/*.test.ts` and `tests/**/*.test.ts`
+  # (vitest.config.ts), tsconfig's include already covers `connectors/**/*.ts`, and ci.yml runs
+  # `npm run test` over all of it. A new test file is picked up with no CI edit.
+  #
+  # What this DOES cost: if G3 genuinely needs a new CI step, it cannot add one, and after G1
+  # closes there is no PR route to .github/ at all unless the operator adopts a manifest that
+  # permits it. That is the correct shape -- changing what CI enforces should require the operator
+  # to say so -- but it is a real constraint and it is stated here rather than discovered later.
+  - .github/**
+
+  # THE CHECKS THEMSELVES. .github/workflows/governance.yml is a thin wrapper; check-gate-scope.mjs
+  # and check-floor-scope.mjs are where the rules actually live, and check-floor-scope.mjs holds the
+  # ungated floor's rules AS CODE rather than as a manifest. Forbidding .github/ while leaving this
+  # directory writable would protect the definition of a check and not its implementation --
+  # CODEOWNERS says precisely this about the same pair of paths.
+  #
+  # TDD 57, verbatim: "The actor being constrained cannot modify the authoritative object that
+  # defines the constraint."
+  - scripts/verify/**
+
+  # The governance guards' own tests. Deleting or weakening these would not trip
+  # check-test-deletion.mjs's intent even if it tripped its letter, and a guard whose tests no
+  # longer bite is a guard that has stopped enforcing without anyone being told. Paired with the
+  # `tests/policy/*.test.ts` allowance above: G3 may add policy tests in TypeScript, and may not
+  # touch the .mjs ones.
+  - tests/policy/*.mjs
+
+  # POLICY-SENSITIVE FILES, TDD 57(13) by name. Each requires "ADR + independent review + operator
+  # approval" (SOURCE_POLICY.md's own header) and each is CODEOWNERS-assigned to @xLZDx.
+  #
+  # SOURCE_POLICY.md matters most on this gate specifically: it is the document that says what
+  # Gmail content may be sent to AI at all, and G3 is the gate that first sends any. A gate able to
+  # edit the policy that authorizes its own AI call has no policy.
+  - core/SOURCE_POLICY.md
+  - core/DATA_RETENTION_POLICY.md
+
+  # THE ADOPTED ARCHITECTURE DECISIONS, including the four this gate is built on: ADR-002 (two
+  # sources only), ADR-005 (the Gmail-only pre-aggregation AI boundary), ADR-009 (the AI provider
+  # and its data-use terms) and ADR-010 (HARD_ZERO, which forbids the paid fallback a billing
+  # prompt would invite).
+  #
+  # This is stricter than g1.yaml, which merely EXCLUDED core/adr/**. The stricter reading is
+  # deliberate: G3 is the first gate with a real incentive to amend one of these -- if the billing
+  # experiment goes badly, "adjust ADR-009" is an easier-looking fix than "switch to POLL and say
+  # so". Universal DoD item 19 still requires an ADR when architecture or policy changes, and this
+  # does not block that: an ADR change reaches main through an ungated PR (the floor permits
+  # core/adr/**, and CODEOWNERS requires @xLZDx's review on it), landed separately and cited by the
+  # gate PR. That is the same route g1.yaml itself took to reach main outside PR #1.
+  - core/adr/**
+
+  # THE OPERATING CONTRACTS. CLAUDE.md section 2 is literally the list of things the implementer
+  # must not do -- including "send Telegram-derived data to AI in any form" -- and AGENTS.md is the
+  # same contract for any other agent. A gate PR able to edit them could remove the sentence that
+  # constrains it, and the scope check would report only that a path changed, never in which
+  # direction.
+  #
+  # Both are CODEOWNERS-assigned to @xLZDx, so this is a second lock rather than the only one. The
+  # cost is real and is named in Q4: the build/run documentation debt recorded in DECISION_LOG goes
+  # to README.md instead.
+  - CLAUDE.md
+  - AGENTS.md
+
+  # THE OTHER SOURCE. A Gmail gate has no business in the Telegram connector, and the direction
+  # that matters is the one that looks harmless: Gmail is the AI-bearing side, so a G3 PR reaching
+  # into Telegram code is either scope creep or the beginning of a path by which Telegram-derived
+  # material could reach a GmailEvidenceBundle. INV-05 forbids the result; this forbids the route.
+  - connectors/telegram-tdlib/**
+
+  # THE PWA. G7 owns apps/pwa/**. Forbidding it here is not a scope preference, it is how the
+  # question in Q3 gets asked out loud instead of being answered quietly by whichever gate writes
+  # the first screen. TDD 69 requires "full original message/thread drill-down works" for G3's own
+  # DoD, and there is no PWA to drill down in until G7.
+  - apps/**
+
+# ---------------------------------------------------------------------------
+# The three fields below are part of the manifest shape in
+# governance/gate-manifests/README.md and TDD 57(5). Stated honestly, as g1.yaml states it: the
+# checker reads allowed_paths and forbidden_paths and NOTHING ELSE. These are documentation for a
+# human reviewer, not enforcement.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+  - npm run verify:secrets
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+  - sec-01 (Gmail OAuth/token handling, Pub/Sub push authentication)
+  - priv-01 (source policy, AI data-use terms re-verification)
+  - ai-01 (GmailEvidenceBundle boundary, AIContextBuilder entry point)
+  - rel-01 (watch renewal, gap recovery, mode fallback)
+
+policy_sensitive_files:
+  - connectors/gmail/** (the only code path in MVP1 that may call AI)
+  - packages/contracts/src/*.ts (GmailEvidenceBundle -- the only accepted AI input type)
+  - docs/architecture/EXTERNAL_ASSUMPTIONS.md (the AI data-use terms record)
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why. Several of these are the real decisions in this document.
+#
+#   packages/policy/**,      ADR-005: "packages/provenance and packages/policy must implement the
+#   packages/provenance/**   DAG and the fail-closed composition rule as testable primitives" --
+#                            owed at G2, not G3. G3 USES the provenance primitives to tag Gmail
+#                            values; it does not build or alter them.
+#                            THIS EXCLUSION IS CONDITIONAL ON Q1. If the operator places
+#                            AIContextBuilder in packages/policy rather than inside
+#                            connectors/gmail/, this manifest must be re-issued with that path
+#                            added BEFORE G3's PR opens -- widening a manifest to fit a diff that
+#                            already exists is the failure mode the whole mechanism exists to
+#                            prevent.
+#
+#   services/**              G2 owns durable ingest and the outbox; G5 owns the resolver. G3 is a
+#                            CLIENT of the ingest endpoint (TDD 14), not its author. If G3 finds
+#                            the ingest contract insufficient for Gmail, that is a finding against
+#                            G2's deliverable and goes back through G2's owner -- not a widening
+#                            of this gate.
+#
+#   infra/**                 Deployment configuration is shared across every Worker. The Gmail
+#                            Worker's own wrangler config lives under connectors/gmail/ and is
+#                            already covered.
+#
+#   host/**                  The connector host is Telegram's. TDD 39: "Gmail should remain
+#                            entirely in the cloud control plane; it does not require the Telegram
+#                            connector host."
+#
+#   tsconfig.json,           MEASURED, not assumed: tsconfig's include already carries
+#   vitest.config.ts         `connectors/**/*.ts` and vitest's include already carries
+#                            `connectors/**/tests/**/*.test.ts`. Neither needs an edit for a new
+#                            connector, so neither is in scope.
+#
+#   .gitignore               Gmail tokens live encrypted in D1 with the key-encryption secret as a
+#                            Worker Secret (TDD 39); nothing new lands on disk. `.env*` is already
+#                            ignored. G4 is different and DOES need this file -- TDLib session
+#                            material must never be committed (TDD 40).
+#
+#   .prettierignore,         Untouched by G3.
+#   .prettierrc.json,
+#   eslint.config.js,
+#   CONTRIBUTING.md,
+#   SECURITY.md
+#
+#   governance/              Documentation of the manifest mechanism. G1 owns it; G3 has no reason
+#   GATE_MANIFEST_           to restate what the mechanism guarantees, and a gate editing the
+#   INTEGRITY.md             description of its own constraints is the shape this manifest avoids
+#                            everywhere else.
+#
+#   scripts/probes/          G0/G2 evidence. Separate probe, separate question.
+#   cloudflare-free-cpu/**
+#
+#   .claude/**               Agent configuration, not a gate deliverable.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN ONCE ITS HASH IS APPROVED
+#
+#   1. It cannot see inside a file. `connectors/gmail/**` is allowed, so nothing in this mechanism
+#      would stop a G3 PR from writing an AI call that receives Telegram-derived material -- if
+#      such material were reachable from the Gmail Worker at all. What actually prevents that is
+#      the type boundary (ADR-005: no AIContextBuilder overload accepting Topic/Stream/Person/
+#      CrossChannelContext), the runtime assert_ai_safe() fail-closed traversal, and the tests TDD
+#      70 mandates. A path check is a coarse instrument and must not be described as if it were
+#      the AI isolation control.
+#   2. It cannot tell a tightening from a loosening. The scope check sees a changed path, not the
+#      direction of the change -- true of README.md, of packages/contracts, and of every other
+#      allowed entry. Only review covers direction.
+#   3. It does not review dependencies. package.json is allowed, CODEOWNERS does not cover it, and
+#      `npm audit` is advisory-only until G8. A new dependency arriving in this gate is reviewed by
+#      a human or not at all. See Q5.
+#   4. The `Gate: G3` label that selects this manifest comes from the branch name or the PR body,
+#      both written by the implementer (governance.yml, "Resolve the gate this PR belongs to"). An
+#      implementer who chose a different label would be checked against a different manifest --
+#      limitation 6 in governance/GATE_MANIFEST_INTEGRITY.md.
+#   5. Nothing checks plan_hash. governance.yml verifies THIS FILE's own sha256 against the
+#      operator-held repository variable; it never reads plan_hash.
+#   6. The check runs on pull_request only. A direct push to main is not examined by it at all;
+#      that gap is closed by the branch ruleset, not by this file.
+#   7. THE APPROVAL HASH IS NOT OUT OF THE IMPLEMENTER'S REACH -- see this file's header.
+#   8. AND THE ONE IT ADDS BY EXISTING: an implementer drafted it. The only thing between that and
+#      a self-authorized scope is the operator actually reading these bytes before setting the
+#      hash.
+#
+# ---------------------------------------------------------------------------
+# QUESTIONS ONLY THE OPERATOR (WITH GPT-PM) CAN SETTLE. Each one changes this file.
+#
+#   Q1. WHERE DOES THE GMAIL AI EXTRACTION CODE LIVE? ADR-005 names AIContextBuilder and its single
+#       entry point but no directory, and TDD 55's tree has no AI package at all. This proposal
+#       recommends connectors/gmail/ -- because "source-local" then becomes a filesystem fact
+#       rather than a convention, and because G4's manifest can forbid one directory and be done.
+#       The alternative (packages/ai/ or packages/policy/) is defensible for reuse but requires
+#       widening this manifest and gives G4 a harder boundary to state. If the answer is the
+#       alternative, this file must be re-issued before G3's PR opens.
+#
+#   Q2. DOES THE BILLING EXPERIMENT RUN BEFORE OR INSIDE G3? EXTERNAL_ASSUMPTIONS.md D calls it
+#       "~10 minutes, operator-run". Running it first means G3 implements one mode with the other
+#       behind an interface; running it inside G3 means the gate's central design question is open
+#       while the gate is being built. Either is workable; the third option -- assuming push works
+#       -- is the one that document explicitly forbids: "Do not let a 'push works on my account'
+#       result harden into an architecture that cannot fall back."
+#
+#   Q3. HOW DOES G3 SATISFY "full original message/thread drill-down works" (TDD 69) WITH NO PWA?
+#       apps/** is forbidden here and G7 is the PWA gate. Either that DoD line is formally deferred
+#       to G7 by a quoted GPT-PM ruling, or this manifest needs a narrow apps/pwa/ allowance and
+#       G3 builds a first screen. The same question applies verbatim to G4 (TDD 68, "full-message
+#       drill-down works on Android PWA"), so it should be answered once for both.
+#
+#   Q4. WHO UPDATES AGENTS.md/CLAUDE.md WHEN THE FIRST REAL BUILD COMMANDS EXIST? DECISION_LOG
+#       (2026-09-10) records the debt; this manifest forbids both files. Recommended: the run
+#       instructions go in README.md and in connectors/gmail/README.md, and the operator syncs the
+#       two contracts separately. If the operator would rather the gate do it, both paths move to
+#       allowed_paths -- knowing that CODEOWNERS review is then the only control on them.
+#
+#   Q5. SHOULD /package.json AND /package-lock.json BE ADDED TO .github/CODEOWNERS? They are the
+#       one allowed path in this gate with no operator-review requirement and the largest
+#       external-trust surface. This is a one-line change to an operator-owned file and it would
+#       close limitation 3 above for every future gate, not just this one.
+#
+# ---------------------------------------------------------------------------
+# CONTRADICTIONS FOUND WHILE WRITING THIS, reported rather than tidied away
+#
+#   C1. g1.yaml's own status says it is awaiting the thing that has already happened.
+#       governance/gate-manifests/g1.yaml line 64 reads
+#       `OPERATOR_DIRECTED_IMPLEMENTER_AUTHORED_CANDIDATE_AWAITING_OPERATOR_REVIEW_AND_HASH`, while
+#       core/PLAN_MASTER_GATES.md's G1 row states "manifest g1.yaml adopted by the operator,
+#       GATE_MANIFEST_APPROVED_HASH_G1 set". Both cannot be current.
+#       This is not carelessness, it is structural, and it is worth understanding before adopting
+#       ANY manifest: correcting that status line changes the file's bytes, which changes its
+#       sha256, which invalidates GATE_MANIFEST_APPROVED_HASH_G1 and fails the gate closed until
+#       the operator re-reads and re-sets it. An adopted manifest cannot describe its own adoption.
+#       CONSEQUENCE FOR THIS PROPOSAL, applied above: the `status:` and `approved_scope:` fields are
+#       written so that they stay true after adoption -- approved_scope describes what the scope IS
+#       and what its authority is contingent on, exactly as g1.yaml's own approved_scope does. The
+#       status block is the part that must be rewritten at adoption time, and it must be rewritten
+#       to a statement that does not go stale.
+#
+#   C2. The ungated floor forbids TDD.md but not TDD_ERRATA.md.
+#       scripts/verify/check-floor-scope.mjs FORBIDDEN_PATHS lists `docs/architecture/TDD.md` and
+#       calls it "the frozen architecture baseline" -- but TDD_ERRATA.md declares itself NORMATIVE
+#       and outranks TDD.md on every concrete detail. So a "Gate: NONE" PR may today edit the
+#       document that overrides the one the floor protects. CODEOWNERS covers /docs/architecture/,
+#       so the merge path still requires @xLZDx -- but R13 in core/RISK_REGISTER.md records that
+#       CODEOWNERS cannot mechanically separate implementer from operator while one GitHub identity
+#       does both. This manifest forbids the errata for G3; the floor is a separate file and a
+#       separate decision, and it is the operator's.
+#
+#   C3. core/PLAN_MASTER_GATES.md's G0 output table still reads PENDING/DRAFT.
+#       Items B, C, D, N, O read PENDING and F through M read DRAFT, while
+#       governance/G0_CLOSURE_REPORT.md records all of them DONE or ADOPTED and G0 as CLOSED.
+#       g1.yaml already allowed core/PLAN_MASTER_GATES.md for exactly this correction and tagged it
+#       [REMAINING]; it is still unfixed on the current checkout.
+#
+#   C4. Two DoD lines are assigned to gates that cannot satisfy them.
+#       TDD 69 requires Gmail drill-down at G3 and TDD 68 requires PWA drill-down at G4, while G7
+#       is the PWA gate -- that is Q3. Separately, ADR-005 assigns the TDD 70 AI-policy tests to
+#       "G2 primitives, G6 AI integration", while TDD 68 requires "AI policy test proves Telegram
+#       ancestry blocked" as part of the TELEGRAM CONNECTOR's DoD, which is G4. The two documents
+#       disagree about which gate owes that test. G4's proposal resolves it in the only direction
+#       that is safe -- G4 may add the test, and may not touch the code that enforces it -- but the
+#       disagreement itself is the operator's to settle.
+#
+# ---------------------------------------------------------------------------
+# HOW TO ADOPT THIS, AND WHY NO HASH IS PRINTED
+#
+# Do NOT copy this file byte-for-byte into governance/gate-manifests/g3.yaml. It still carries
+# `status: NON_BINDING_PROPOSAL / HAS_NO_AUTHORITY`, so the binding manifest would assert about
+# itself that it has no authority. Adoption means editing at least the header and the status block,
+# and the moment anything is edited the sha256 changes -- which is why no "approved hash" appears
+# here. A hash printed in a proposal is either wrong (because the file must be edited) or pins a
+# document that declares itself non-binding.
+#
+#   1. operator   Review and edit. Narrowing is always safe; widening is the thing to be
+#                 suspicious of. Answer Q1 first -- it is the only question that changes
+#                 allowed_paths.
+#   2. operator   Write the result to governance/gate-manifests/g3.yaml, as its own commit,
+#                 NOT part of the gate PR: that path is forbidden above, so a gate PR carrying it
+#                 fails the Governance check, correctly.
+#   3. operator   sha256sum governance/gate-manifests/g3.yaml
+#                 (PowerShell: Get-FileHash -Algorithm SHA256 <path>)
+#                 The value must be computed from the LF bytes the runner checks out; a hash taken
+#                 from a Windows working copy with CRLF line endings will NOT match.
+#   4. operator   Set GATE_MANIFEST_APPROVED_HASH_G3 to that value.
+#                 Settings -> Secrets and variables -> Actions -> Variables.
+#   5. anyone     Open the gate PR. The Governance check now reaches the scope step instead of
+#                 stopping at the hash step.
+#
+# Until step 4 is done the Governance check fails closed at the hash step, the scope step is never
+# reached, and G3 has no enforced scope at all -- which is the correct behaviour.
+# ---------------------------------------------------------------------------

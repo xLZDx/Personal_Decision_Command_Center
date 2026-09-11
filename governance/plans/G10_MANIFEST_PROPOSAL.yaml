@@ -1,0 +1,538 @@
+# NON-BINDING IMPLEMENTER PROPOSAL.
+# This file does not authorize any mutation.
+# Only an operator-adopted copy at governance/gate-manifests/g10.yaml, plus the
+# operator-set repository variable GATE_MANIFEST_APPROVED_HASH_G10, has
+# authority.
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL
+# EXCLUSIVITY. The authenticated implementation session on this machine is
+# technically capable of setting that repository variable and of changing the
+# repository's admin settings; the separation is therefore procedural until the
+# credential model recorded as R13 / g1.yaml limitation 5 is resolved.
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS FILE IS, AND WHAT IT IS NOT
+#
+# A draft for the operator to read, reject, edit or adopt. It was NOT written
+# into governance/gate-manifests/, and must not be: INV-28 makes a gate manifest
+# operator-owned governance state, that directory is in every gate manifest's
+# forbidden_paths and in check-floor-scope.mjs's FORBIDDEN_PATHS, and so no pull
+# request of any kind could legally carry a file into it.
+#
+# The name is G10_MANIFEST_PROPOSAL.yaml, not g10.yaml, so that a draft can
+# never be mistaken for the authoritative manifest in a listing.
+#
+# Nothing here has been approved. The scope below is an argument, not a ruling.
+#
+# ---------------------------------------------------------------------------
+# WHAT G10 ACTUALLY IS
+#
+# G10 is not the gate that finishes MVP1. G2 through G9 finish MVP1. G10 is the
+# gate that DEMONSTRATES it is finished and records the demonstration: it walks
+# the 31 universal Definition of Done items (core/DEFINITION_OF_DONE.md) across
+# the whole system rather than one component, walks TDD 82's exit list line by
+# line, cites for each the evidence that already exists at a named path and
+# commit, collects the final independent reviews, and produces the closure
+# report.
+#
+# Two consequences follow directly, and they shape the entire path list.
+#
+# FIRST, G10 WRITES NO CODE. Every item it checks was built and proven in an
+# earlier gate. If an item is not satisfied, the correct outcome is that G10
+# does not close -- not that G10 repairs it. TDD 82 says "No partial closure",
+# and the mirror of that rule is that there is no partial repair either: a
+# missing proof belongs to the gate that owns it, and it is fixed there, with
+# its own plan, GO and manifest. A closure gate holding a hammer will find a
+# reason to use it, at exactly the moment when nobody is left to review the
+# swing.
+#
+# SECOND, AND THIS IS THE JUDGEMENT THAT MATTERS MOST HERE: MVP1 CLOSURE MUST
+# NOT BE ABLE TO REWRITE THE SCOPE IT IS MEASURED AGAINST. See the next block.
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+
+authored_by: Claude (implementer)
+authored_on: 2026-09-11
+gate: G10
+
+# The Governance workflow resolves the gate from `gate/g<N>-...` in the branch
+# name or a `Gate: G<N>` line in the PR body, then looks for
+# governance/gate-manifests/g10.yaml and GATE_MANIFEST_APPROVED_HASH_G10.
+# A mechanical detail, checked rather than assumed, because G10 is the first
+# two-digit gate in the program and "G1" and "G10" have different manifests and
+# different approved hashes: the resolver's regex in
+# .github/workflows/governance.yml is `^gate/([gG][0-9]+)`, `[0-9]+` is greedy,
+# and `gate/g10-mvp1-closure` therefore resolves to G10, not G1. Measured
+# 2026-09-11 by running that exact expression in bash against
+# `gate/g10-mvp1-closure`, `gate/g9-shadow-evaluation` and
+# `gate/g1-remediation`, which produced G10, G9 and G1 respectively. Re-check if
+# the workflow's resolver is ever rewritten.
+branch: gate/g10-mvp1-closure (proposed name, not yet created)
+
+# G10 has no plan and no plan hash, and this file does not invent either.
+plan_id: NOT_YET_ASSIGNED
+plan_hash: NOT_YET_COMPUTED
+
+# Nothing verifies plan_hash -- governance.yml verifies THIS FILE's own sha256
+# against the operator-held repository variable and never reads plan_hash
+# (limitation 7 in governance/GATE_MANIFEST_INTEGRITY.md). At adoption, pin the
+# plan to an immutable commit and blob rather than to `HEAD:<path>`; g1.yaml's
+# provenance block records the defect that convention exists to prevent.
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: G10 -- MVP1 closure. Demonstrate the 31 universal
+  Definition of Done items across the whole system, walk the TDD 82 exit list
+  item by item citing pre-existing evidence at named paths and commits, land the
+  final independent and adversarial reviews, settle the risk register's open and
+  verification-owed rows against real evidence, and produce the MVP1 closure
+  report. G10 builds nothing, repairs nothing, and amends no document that
+  defines what MVP1 is. This scope is authoritative only while
+  GATE_MANIFEST_APPROVED_HASH_G10 matches the SHA-256 of the exact adopted bytes;
+  absent that match the Governance check fails closed and G10 has no enforced
+  scope at all.
+
+# ---------------------------------------------------------------------------
+# THE YARDSTICK DECISION
+#
+# DECISION: core/MVP1_SCOPE_LOCK.md, core/DEFINITION_OF_DONE.md,
+# docs/architecture/TDD.md and docs/architecture/TDD_ERRATA.md are all in
+# forbidden_paths for G10. So is docs/product/MVP1.md, which restates the same
+# deliverables in product language. G10 may not touch any of them.
+#
+# WHY, in one sentence: a gate that can edit its own yardstick proves nothing,
+# and every one of these files is a yardstick for this gate specifically.
+#
+# The longer form, because each file fails for a slightly different reason:
+#
+#   core/MVP1_SCOPE_LOCK.md   Defines what MVP1 IS -- exactly Gmail plus
+#                             personal Telegram, an explicit POST-MVP exclusion
+#                             list, the non-goals, the $0/month constraint. TDD
+#                             82's first exit line is literally "MVP1 source
+#                             scope contains exactly Gmail + Telegram". A
+#                             closure gate able to edit this file could close
+#                             MVP1 by narrowing MVP1, and the diff would look
+#                             like a documentation tidy. The file says of itself
+#                             that changing its scope "requires an
+#                             operator-approved scope revision, not an
+#                             implementer decision"; this entry is that sentence
+#                             made mechanical for the one gate most tempted to
+#                             ignore it.
+#
+#   core/DEFINITION_OF_DONE.md
+#                             The 31 universal items are G10's checklist. An
+#                             item that cannot be satisfied must be reported as
+#                             unsatisfied. Editing the checklist at the moment
+#                             of closure converts a failed gate into a passed
+#                             one with a one-line diff, and item 24 ("accepted
+#                             MINOR debt is explicit") is precisely where that
+#                             would be dressed up as honesty.
+#
+#   docs/architecture/TDD.md  Sections 78 (functional deliverables), 79 (the
+#                             critical proof scenario), 80 (quantitative
+#                             thresholds), 81 (performance targets) and 82 (the
+#                             exit DoD) are the whole measure, and 5 holds
+#                             INV-01..31. Already forbidden in the adopted
+#                             g1.yaml and in the ungated floor; there is no gate
+#                             for which forbidding it matters more.
+#
+#   docs/architecture/TDD_ERRATA.md
+#                             The route around the previous entry, and the
+#                             subtle one. The errata exists so concrete details
+#                             can be corrected without amending the TDD, and
+#                             E-001 states it never amends an invariant -- but
+#                             an erratum can restate how an exit item is to be
+#                             READ, and "E-0NN: 82's iPhone Home Screen item is
+#                             understood as satisfied by the Android result" is
+#                             a moved goalpost wearing a correction's clothes.
+#                             G1 could hold the errata open because G1 was
+#                             building, not grading. If G10 genuinely needs an
+#                             erratum, it is authored and landed as its own
+#                             change BEFORE the closure evaluation runs, so that
+#                             the measurement and the yardstick never arrive in
+#                             the same commit.
+#
+#   docs/product/MVP1.md      The same deliverables in product language. Editing
+#                             it would not change the enforced yardstick, but it
+#                             would change the one a human reviewer is most
+#                             likely to read while checking the closure claim.
+#
+# AND THE SAME RULE, APPLIED TO CODE AND TESTS. The entire implementation tree
+# and every test subtree are forbidden below for the reason given at the top:
+# G10 demonstrates, it does not build or repair. That includes tests/eval/**,
+# which G9 authored and which G10 may re-run and cite but may not adjust -- a
+# closure gate that can retune the evaluation harness can produce any exit
+# number it likes.
+#
+# THE COST, STATED PLAINLY. This manifest makes it impossible to fix anything
+# during closure. That is deliberate, and it means G10 can fail. A G10 that
+# fails is working correctly: it has found that MVP1 is not finished, which is
+# the only finding a closure gate exists to be capable of producing.
+#
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# The permissible MERGE SCOPE of the G10 pull request. The check runs
+# `git diff BASE_SHA...HEAD_SHA` over the cumulative range from the main base to
+# the PR head, so it evaluates everything the branch carries.
+#
+# Grammar is the segment-bounded one scripts/verify/check-gate-scope.mjs
+# enforces, NOT shell globbing: `*` matches within one path segment and never
+# crosses `/`, `**` is a whole segment. There is no bare `**` anywhere in this
+# file; a manifest containing one cannot refuse anything.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # The MVP1 closure report -- the gate's actual deliverable, in the shape
+  # governance/G0_CLOSURE_REPORT.md established: what was approved and by whom,
+  # what the measurements actually were, what was found, what is carried
+  # forward, and whose action each remaining item is. G0's report is also the
+  # model for the harder half: it records a discrepancy in its own approving
+  # verdict rather than resolving it quietly, and an MVP1 closure report that
+  # cannot do the same for its own weak spots is not a closure report.
+  - governance/G10_CLOSURE_REPORT.md
+
+  # The G10 plan and its evidence records: the item-by-item DoD walk, the TDD 82
+  # exit walk, the evidence index mapping each exit line to a path and commit,
+  # and the record of the real-device results (Android, iPhone Home Screen) and
+  # restore test that 82 requires. A `G10_`-prefixed pattern rather than a wider
+  # governance/plans/*.md, so no other gate's plan is in scope: `*` does not
+  # cross `/`.
+  - governance/plans/G10_*.md
+
+  # The final independent reviews. Universal DoD item 21 requires at least one
+  # substantive fresh-context review; TDD 59's RED-01 final adversarial role
+  # lands its output here, and at MVP1 closure the security and privacy roles
+  # (SEC-01, PRIV-01) have the last word on the AI and content boundaries.
+  - governance/reviews/**
+
+  # Durable decisions: the closure disposition of each open item, every accepted
+  # MINOR debt with its owner, and each finding routed to another gate rather
+  # than repaired here.
+  - core/DECISION_LOG.md
+
+  # The gate ledger. G10's own row, and G9's if it is still stale. Closing MVP1
+  # is exactly when the ledger's long-standing internal contradiction must be
+  # settled rather than inherited: the G0 required-outputs table in that file
+  # still reads PENDING/DRAFT for items B, C, D, F-M, N and O, while
+  # governance/G0_CLOSURE_REPORT.md reads DONE/ADOPTED for the same items. G1's
+  # adopted manifest flagged it as remaining work; it is still open today. One
+  # of the two documents is wrong, and an MVP1 closure that inherits it is
+  # citing a ledger it knows to be self-contradictory.
+  - core/PLAN_MASTER_GATES.md
+
+  # Final risk disposition. R8/R9/R10 (the G2 preflights), R11/R12/R13 (CI
+  # execution, branch protection, implementer identity) and the NM1-NM4
+  # verification-owed rows all need a real end state at MVP1 closure. The
+  # register's own instruction binds here and is not softened by being inside a
+  # gate: a row moves to CLOSED only when the verification has run and produced
+  # evidence, cited at a path and commit that exist -- never because closure is
+  # otherwise blocked by it. A risk that is genuinely still open at MVP1 closure
+  # is recorded as an accepted residual risk with an owner, which is a different
+  # and honest outcome.
+  - core/RISK_REGISTER.md
+
+  # The mandated Russian + English report pair. Segment-bounded, so it reaches
+  # files directly in reports/ and no subdirectory. As in the G9 proposal, this
+  # follows the adopted practice in g1.yaml and in the repository rather than
+  # TDD 55's drawing of `reports/gate-*/`, which is stale; the correction
+  # belongs in the errata, which this gate may not write, so it goes in the
+  # decision log instead.
+  - reports/*.html
+
+  # The repository front page, for one narrow purpose: recording that MVP1 is
+  # closed and linking the closure report. Bounded deliberately -- the README
+  # may state the closure FACT and point at the evidence; the exit numbers, the
+  # DoD walk and any claim about what the system guarantees belong in the
+  # closure report, where a reviewer reads them next to the evidence. G1's own
+  # remediation found governance overclaims in this file once already, and a
+  # closure gate is the likeliest moment for a second crop.
+  - README.md
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# Everything not in allowed_paths is already out of scope and the checker
+# reports it as such. These are a different class: each one, if touched by this
+# gate, would let the gate manufacture its own closure. They get their own
+# refusal, with its own message, so the intent survives a reader who no longer
+# remembers this prose.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # INV-28, mandatory in every gate manifest. A gate PR carrying its own
+  # authorizing manifest would validate a diff against a file that same diff had
+  # just written -- NM3 from the v0.2 adversarial review, and the reason the hash
+  # check runs before the scope check at all.
+  - governance/gate-manifests/**
+
+  # Mandatory in every gate manifest. The operator's own record of what they
+  # approved. An implementer that can write approvals can manufacture the
+  # evidence that it was approved -- and at MVP1 closure, "the operator approved
+  # this" is the last signature the whole program rests on.
+  - governance/operator-approvals/**
+
+  # THE YARDSTICK. Reasoning in full in the block above; in short, these four
+  # define what MVP1 is and what "done" means, and G10 is the gate measured
+  # against them. docs/architecture/TDD.md is additionally the frozen baseline
+  # holding INV-01..31, already forbidden in the adopted g1.yaml and in the
+  # ungated floor.
+  - core/MVP1_SCOPE_LOCK.md
+  - core/DEFINITION_OF_DONE.md
+  - docs/architecture/TDD.md
+  - docs/architecture/TDD_ERRATA.md
+  - docs/product/MVP1.md
+
+  # REASONED EXPLICITLY, AS REQUIRED. .github/workflows/** is the CI whose green
+  # result G10 cites as evidence, and it contains the Governance job that
+  # resolves this gate, verifies this manifest's hash and runs the scope check on
+  # this very PR. G1 allowed `.github/workflows/*.yml` because G1 BUILT those
+  # workflows and because CI on this repository had never executed a single step
+  # (R11), so a first correction was expected; by G10 they exist, have run, and
+  # are part of the evidence. Universal DoD items 7-10 and 28 are satisfied by
+  # what these workflows do, so a gate editing them is editing its own proof.
+  # check-floor-scope.mjs already forbids this subtree to ungated PRs.
+  - .github/workflows/**
+
+  # REASONED EXPLICITLY, AS REQUIRED. CODEOWNERS is the merge-authority control,
+  # and INV-20 -- the implementer cannot approve or merge its own gate -- is the
+  # invariant on which G10's final signature depends. The scope check sees a
+  # changed path and not the direction of the change, so it cannot tell a
+  # tightening from a loosening (g1.yaml limitation 1, unchanged). R13 is also
+  # still open: with one GitHub account, CODEOWNERS cannot mechanically prove
+  # implementer-versus-operator separation, so its value here is procedural and
+  # the closure gate quietly editing it would remove even that.
+  - .github/CODEOWNERS
+
+  # THE IMPLEMENTATION TREE. G10 demonstrates; it does not build or repair. A
+  # failed exit item is a failed gate, not a patch. Listed as forbidden rather
+  # than merely omitted because absence reads like an oversight in the manifest
+  # and invites the reflex to widen it, while a forbidden entry produces a
+  # refusal that names a rule -- and widening a manifest to fit a diff is the
+  # failure mode this whole mechanism exists to prevent.
+  - apps/**
+  - services/**
+  - connectors/**
+  - host/**
+  - infra/**
+  - packages/**
+
+  # EVERY TEST SUITE, WITHOUT EXCEPTION, tests/eval/** included. G10 runs the
+  # suites and cites what they do. Universal DoD items 9-12 and TDD 82's
+  # "proven" lines are claims about what these files already assert; a gate that
+  # can amend an assertion, or retune G9's evaluation harness, can produce any
+  # exit number it wants. Note also that
+  # scripts/verify/check-test-deletion.mjs matches `.test.ts` only, so the
+  # repository's `.test.mjs` governance suites could be deleted or `.skip`-ed
+  # without the guard tripping -- forbidding tests/** outright is what closes
+  # that hole for this gate.
+  - tests/**
+
+  # THE ENFORCEMENT MECHANISM AND THE VERIFICATION PIPELINE. scripts/verify/
+  # holds the scope check, the floor check, the test-deletion guard, the secret
+  # scan, the test-count assertion and the mutation harness; the root
+  # configuration files define what `npm run verify` even means, and the lockfile
+  # defines what actually gets installed to run it. Universal DoD item 28
+  # ("policy-sensitive file integrity checks pass") is a claim about these files,
+  # so editing them in the PR that makes the claim is circular.
+  - scripts/**
+  - package.json
+  - package-lock.json
+  - vitest.config.ts
+  - tsconfig.json
+  - eslint.config.js
+  - .prettierrc.json
+  - .prettierignore
+
+  # POLICY-SENSITIVE GOVERNANCE STATE (TDD 57(13)). The source policy, the
+  # retention policy and the ADRs are rules G10 checks compliance against.
+  # ADR-010 is the HARD_ZERO definition behind universal DoD item 27 and TDD
+  # 82's cost lines; ADR-009 is the Gmail-only AI decision behind the zero-
+  # violation lines. A closure gate amending an ADR is closing MVP1 against a
+  # different architecture than the one that was built.
+  - core/SOURCE_POLICY.md
+  - core/DATA_RETENTION_POLICY.md
+  - core/adr/**
+
+  # THE REMAINING ARCHITECTURE AND OPERATIONS DOCUMENTATION. Not the yardstick,
+  # but the same rule applies for the same reason: if closure reveals that one of
+  # these describes something the system does not do, that is a finding reported
+  # against the gate that owns the component, not a document the closure gate
+  # quietly corrects while grading it. Universal DoD item 18 ("documentation
+  # updated") is satisfied by the gate that changed the behaviour, not by G10
+  # retrofitting the record at the end.
+  - docs/architecture/**
+  - docs/product/**
+  - docs/runbooks/**
+
+# ---------------------------------------------------------------------------
+# The fields below are part of the manifest shape in
+# governance/gate-manifests/README.md and TDD 57(5). Stated honestly, as g1.yaml
+# states it: check-gate-scope.mjs reads allowed_paths and forbidden_paths and
+# NOTHING ELSE. These three are documentation for a human reviewer, not
+# enforcement.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+  # Re-run, not re-authored. G9's shadow evaluation must reproduce at the
+  # closure commit; a stale G9 result cited against a later HEAD is not evidence
+  # that the shipped system meets the TDD 80 thresholds.
+  - npx vitest run tests/eval
+  # Not runnable in CI and not skippable either: TDD 82 requires real-device
+  # Android and iPhone Home Screen results, iOS standalone re-authentication,
+  # and a first isolated restore test. These are operator-witnessed evidence
+  # recorded under governance/plans/G10_*.md, and "no partial closure" means an
+  # unrecorded one blocks closure rather than becoming accepted debt.
+  - operator-witnessed real-device and restore evidence (TDD 82)
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+  # At MVP1 closure the relevant roles are the ones that own the invariants with
+  # no second chance after shipping, plus the final adversarial role.
+  - SEC-01 (security)
+  - PRIV-01 (privacy/platform compliance)
+  - RED-01 (final adversarial)
+
+policy_sensitive_files:
+  - core/MVP1_SCOPE_LOCK.md
+  - core/DEFINITION_OF_DONE.md
+  - docs/architecture/TDD.md
+  - docs/architecture/TDD_ERRATA.md
+  - .github/workflows/governance.yml
+  - .github/CODEOWNERS
+  - scripts/verify/check-gate-scope.mjs
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why (out of scope, not in the self-authorization
+# class above)
+#
+#   AGENTS.md, CLAUDE.md     Agent-facing governance instructions. Not a closure
+#                            deliverable; if they carry a stale claim at MVP1
+#                            closure, that is a finding, and correcting it is an
+#                            ordinary "Gate: NONE" PR -- the floor forbids only
+#                            five paths and these are not among them.
+#
+#   SECURITY.md,             Present in the repository, untouched by closure.
+#   CONTRIBUTING.md,
+#   .gitignore
+#
+#   .claude/**               Agent configuration, not a gate deliverable.
+#
+#   governance/plans/        Every other gate's plan, including G9's evidence.
+#   (other than G10_*)       G10 CITES them by path and commit. Citing a
+#                            document while being able to edit it is not
+#                            citation.
+#
+#   governance/              Both are records of how this mechanism came to be,
+#   GATE_MANIFEST_INTEGRITY  and of what it does not protect against. A closure
+#   .md, G0/G1 closure       gate editing an earlier gate's closure report, or
+#   reports                  the limitations list its own honesty depends on, is
+#                            rewriting history at the exact moment history is
+#                            being certified.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN ONCE ITS HASH IS APPROVED
+#
+#   1. It cannot make a closure report honest. Everything G10 produces is prose
+#      asserting that evidence exists elsewhere. The path list keeps G10 from
+#      manufacturing the evidence; it does nothing about a report that cites
+#      evidence which does not support the claim. That is 3 of the global
+#      contract -- a citation is not proof by itself -- and it is a reviewer's
+#      obligation, item by item, against real files.
+#   2. It cannot see the DIRECTION of a change, only that a path changed. Hence
+#      the yardstick files are forbidden outright rather than allowed with a
+#      warning.
+#   3. The `Gate: G10` label that selects this manifest comes from the branch
+#      name or the PR body, both written by the implementer. A PR labelled with
+#      a different gate is checked against a different manifest -- limitation 6
+#      in governance/GATE_MANIFEST_INTEGRITY.md. This matters more at G10 than
+#      anywhere else, because by then nine other manifests exist and at least
+#      one of them allows almost every path this one forbids. The only thing
+#      standing between those two facts is a line the implementer typed, and the
+#      operator reading it before merging.
+#   4. The check runs on `pull_request` only. A direct push to main is not
+#      examined by it; that gap is closed by the `PDCC` ruleset, not by this
+#      file.
+#   5. The approval hash is not out of the implementer's reach -- R13 and
+#      g1.yaml limitation 5, unchanged. The credential available to the
+#      implementation session has admin on this repository and can set
+#      GATE_MANIFEST_APPROVED_HASH_G10 itself. Everything above rests on that
+#      not being done, which at MVP1 closure is the single largest procedural
+#      assumption in the program.
+#   6. AND THE ONE THIS FILE ADDS BY EXISTING: an implementer drafted the scope
+#      that constrains the implementer. The only thing between that and a
+#      self-authorized closure is the operator actually reading the adopted
+#      bytes before setting the hash. That is not a formality; at this gate it
+#      is the entire remaining control.
+#
+# ---------------------------------------------------------------------------
+# OPEN QUESTIONS ONLY THE OPERATOR CAN SETTLE
+#
+#   Q1. WHAT HAPPENS WHEN AN EXIT ITEM FAILS. This proposal assumes the strict
+#       reading of TDD 82's "No partial closure": a failed item means G10 does
+#       not close, the item goes back to its owning gate, and G10 re-opens
+#       afterwards. The alternative some programs use -- close with an explicit
+#       accepted-deviation list -- is not obviously wrong, but it is a different
+#       product decision and it is not what 82 currently says. If the operator
+#       wants it, 82 must be amended first, by the operator, outside this gate,
+#       and not by the gate that would benefit from the amendment.
+#
+#   Q2. WHO SIGNS. Universal DoD item 31 requires "GPT-PM + operator" to return
+#       APPROVE, and INV-20 forbids the implementer approving or merging its own
+#       gate. R13 records that this is currently procedural rather than
+#       mechanical -- one GitHub identity behind both roles. MVP1 closure is the
+#       moment to decide whether that is acceptable as the final signature on
+#       the whole program, or whether a separate identity is set up first.
+#
+#   Q3. THE BRANCH. `gate/g10-mvp1-closure` does not exist and creating it is
+#       its own act under global CLAUDE.md 14/20. The two-digit resolution
+#       question is already settled by measurement (see the `branch:` note
+#       above), so what remains here is only the operator's authorization of the
+#       branch itself and of its exact name -- the name is what selects this
+#       manifest.
+#
+# ---------------------------------------------------------------------------
+# HOW ADOPTION WOULD PROCEED, WITH EACH STEP'S OWNER
+#
+#   1. operator  Read this proposal and settle Q1-Q3. It is an argument, not a
+#                ruling. Narrowing it is always safe; widening it is the thing
+#                to be suspicious of -- and for a closure gate, a widening into
+#                core/MVP1_SCOPE_LOCK.md, core/DEFINITION_OF_DONE.md,
+#                docs/architecture/TDD.md or its errata is the specific widening
+#                that would make the closure meaningless, however reasonable the
+#                request that prompts it sounds at the time.
+#   2. operator  Write the adopted result to governance/gate-manifests/g10.yaml,
+#                with this header and status block replaced by adoption markers
+#                -- otherwise the binding manifest would assert, about itself,
+#                that it has no authority. Its own commit, NOT part of the G10
+#                PR: that path is forbidden above, so a gate PR carrying it
+#                fails the Governance check, correctly.
+#   3. operator  Compute the sha256 of the exact committed bytes. The runner
+#                hashes the LF bytes it checks out, so a value taken from a
+#                Windows working copy with CRLF endings will NOT match. Any edit
+#                at all changes the hash.
+#   4. operator  Set repository variable GATE_MANIFEST_APPROVED_HASH_G10 to that
+#                value. Settings -> Secrets and variables -> Actions ->
+#                Variables. The design intent is that this lives outside the
+#                implementer's reach; that intent is not currently met
+#                (limitation 5 above). This step is the operator's by authority,
+#                not by capability.
+#   5. anyone    Open the G10 PR. The Governance check now reaches the scope
+#                step instead of stopping at the hash step.
+#
+# Step 4 is what makes any of this real. Until it is done the Governance check
+# fails closed at the hash step, the scope step is never reached, and G10 has no
+# enforced scope -- which is the correct behaviour.
+#
+# No hash is printed in this file. Any hash printed here would be the hash of
+# the PROPOSAL, and the value exists precisely to prove the operator saw the
+# exact adopted bytes.
+# ---------------------------------------------------------------------------
