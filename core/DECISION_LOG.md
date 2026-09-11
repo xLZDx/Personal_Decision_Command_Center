@@ -31,9 +31,19 @@ lets work through has not been shown to refuse anything.
 **Expected result:** the `Governance` check FAILS, naming `.gitignore` as outside `allowed_paths`.
 A PASS here would be the finding, not the failure.
 
-**Evidence:** recorded in `governance/plans/G1_PREADOPTION_EVIDENCE.md` with the CI run id once the
-run completes. Commit B reverts the `.gitignore` change so the PR can return to green — the
-refusal is the deliverable, the file change is the instrument.
+**Evidence — the run happened and it refused.** PR #7, head `98716b3`, run `34640409639`, job
+`103398420489`. Step 5 (hash) **succeeded**, so step 6 genuinely executed rather than being skipped
+behind an earlier failure; step 6 then **failed** with `::error file=.gitignore::outside G1's
+approved scope` and `1 path(s) outside the approved scope for G1`. Four paths changed; the three in
+`allowed_paths` were not reported. The check-run annotation carries the path as structured data
+(`{"path":".gitignore","message":"outside G1's approved scope"}`), so the refusal is verifiable
+without reading a log. Full record in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §11.
+
+**Still unproven, and not claimed anywhere:** the `forbidden_paths` branch has never fired (no run
+has touched one of the four authority paths, so its distinct message has never been produced), and
+the hash-mismatch control still needs a branch that deliberately edits `g1.yaml` — operator-only
+under INV-28. This commit reverts the `.gitignore` change so the PR returns to green: the refusal is
+the deliverable, the file change was the instrument.
 
 **How to apply:** `.dev.vars` stays uncovered by `.gitignore` until a gate whose manifest allows
 that path lands the same three lines. Until then use `.env`, as the operator's setup steps already
