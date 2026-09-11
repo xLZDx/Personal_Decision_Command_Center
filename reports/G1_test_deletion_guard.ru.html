@@ -395,13 +395,15 @@
   <dl>
     <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 1361c7d</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 79009de</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Копировать страницу" data-done="Скопировано"
           data-fail="Выделите вручную">Копировать страницу</button>
 </div>
 <!-- report-conform:end -->
+
+
 
   <div class="verdict">
     <span class="stamp">BLOCKER ИСПРАВЛЕН · ДОКАЗАНО В ОБЕ СТОРОНЫ</span>
@@ -671,6 +673,32 @@
         <strong>До сегодняшнего дня этот контроль был недемонстрируем как написан.</strong> С
         файлом <code>.mjs</code> он бы молча прошёл. Исправление делает его осмысленным.
       </div>
+      <div class="block">
+        <p class="kicker">И страж тут же отказал — этому самому PR</p>
+        <p>
+          Первый прогон CI на PR #5 упал шестью сообщениями <code>newly skipped test</code>, и все
+          шесть — <strong>фикстуры из нового теста</strong>. Строки вроде
+          <code>"+  it.skip('refuses an out-of-scope path', () =&gt; {"</code> — это строковые
+          литералы, описывающие синтаксис пропуска, и построчный сканер не отличает их от
+          по-настоящему пропущенного теста. Часом раньше он бы их вообще не увидел: они лежат в
+          файле <code>.mjs</code>.
+        </p>
+        <p>
+          <strong>Чем это является и чем нет — узко.</strong> Это показывает, что половина про
+          <code>.skip</code> теперь достаёт до <code>.mjs</code> и <em>отказывает на реальном PR в
+          реальном CI</em>. Это <strong>не</strong> закрытый третий контроль: сработало ложное
+          срабатывание, а не настоящий пропуск, и половина про удаление на реальном PR не
+          проверялась ни разу. Записать это как «контроль продемонстрирован» было бы той же
+          подменой, против которой весь этот отчёт.
+        </p>
+        <p>
+          Починено <strong>в тесте, а не в стороже</strong>: фикстуры теперь собираются во время
+          выполнения, маркер не встречается в исходнике дословно. Научить страж игнорировать
+          строковые литералы или вывести его собственный тест из-под проверки — каждый из вариантов
+          проделывает дыру в стороже, вся ценность которого в том, что дыр нет. Неудобство
+          оставлено в тесте, ограничение задокументировано рядом с фикстурами.
+        </p>
+      </div>
       <p class="kicker">Заодно приведён в соответствие с реальностью сам план</p>
       <p>
         <code>governance/plans/G1_REMEDIATION_PLAN.md</code> утверждал, что шаги 2, 4, 5, 8 ждут
@@ -743,6 +771,8 @@
     </div>
   </section>
 </div>
+
+
 
 <!-- report-conform:script:begin -->
 <script>

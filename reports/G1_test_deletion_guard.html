@@ -395,13 +395,15 @@
   <dl>
     <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 1361c7d</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 79009de</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Copy page" data-done="Copied"
           data-fail="Select manually">Copy page</button>
 </div>
 <!-- report-conform:end -->
+
+
 
   <div class="verdict">
     <span class="stamp">BLOCKER FIXED · PROVED IN BOTH DIRECTIONS</span>
@@ -671,6 +673,32 @@
         <strong>Until today this control was undemonstrable as written.</strong> With an
         <code>.mjs</code> file it would have silently passed. The fix makes it meaningful.
       </div>
+      <div class="block">
+        <p class="kicker">And the guard immediately refused — this very PR</p>
+        <p>
+          The first CI run on PR #5 failed with six <code>newly skipped test</code> reports, and all
+          six were <strong>fixtures from the new test</strong>. Lines such as
+          <code>"+  it.skip('refuses an out-of-scope path', () =&gt; {"</code> are string literals
+          describing skip syntax, and a line-based scanner cannot tell them from a genuinely skipped
+          test. An hour earlier it would not have seen them at all: they live in an
+          <code>.mjs</code> file.
+        </p>
+        <p>
+          <strong>What that is and is not, stated narrowly.</strong> It shows the
+          <code>.skip</code> half now reaches <code>.mjs</code> and <em>refuses on a real PR in real
+          CI</em>. It is <strong>not</strong> the third control closed: what fired was a false
+          positive, not a genuine skip, and the deletion half has never been exercised on a real PR
+          at all. Recording it as "control demonstrated" would be the very substitution this whole
+          report is about.
+        </p>
+        <p>
+          Fixed <strong>in the test, not in the guard</strong>: the fixtures are now assembled at
+          runtime, so the marker never appears verbatim in the source. Teaching the guard to ignore
+          string literals, or exempting its own test file from scanning, would each put a hole in a
+          guard whose entire value is having none. The inconvenience stays in the test, and the
+          limitation is documented beside the fixtures.
+        </p>
+      </div>
       <p class="kicker">The plan itself has also been brought into line with reality</p>
       <p>
         <code>governance/plans/G1_REMEDIATION_PLAN.md</code> claimed that steps 2, 4, 5, 8 were waiting
@@ -743,6 +771,8 @@
     </div>
   </section>
 </div>
+
+
 
 <!-- report-conform:script:begin -->
 <script>

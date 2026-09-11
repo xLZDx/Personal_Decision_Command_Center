@@ -74,9 +74,14 @@ the negative control, arrived at by accident.** CI run `34632358953` failed with
 `newly skipped test` reports, every one of them a **fixture from the new test file**: lines like
 `"+  it.skip('refuses an out-of-scope path', () => {"` are string literals describing skip syntax,
 and a line-based scanner cannot tell them from a test someone actually skipped. Before this fix the
-guard could not have seen them at all, because they live in a `.mjs` file. So the remediation plan's
-third negative control — "a PR that deletes or `.skip`s a test must fail the test-deletion guard" —
-is now demonstrated on a real PR against a real `.test.mjs`, rather than pending.
+guard could not have seen them at all, because they live in a `.mjs` file.
+
+**What that is and is not evidence of, stated narrowly.** It shows the skip-detection half now
+reaches `.mjs` files and **refuses on a real PR in real CI** — which was impossible an hour earlier.
+It is **not** the remediation plan's third negative control completed: what tripped was a false
+positive, not a genuinely skipped test, and the deletion half has still never been exercised on a
+real PR. Recording it as "control demonstrated" would be the same substitution this entry is about.
+It counts as partial evidence, and the control stays open.
 
 **How that false positive was resolved, and the option deliberately refused.** The fixtures are now
 assembled at runtime (`` `+  it${SKIP}(...` ``) so the marker never appears verbatim in the source.

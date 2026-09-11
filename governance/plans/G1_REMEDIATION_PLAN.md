@@ -95,6 +95,11 @@ been seen saying no is not known to say no. It needs a PR that touches a path ou
 The **hash-mismatch control** has not been run either; it requires a branch that deliberately edits
 `g1.yaml`, which is operator-only territory.
 
+The **test-deletion control has partial evidence and stays open.** On PR #5 the guard refused a real
+PR in real CI (run `34632358953`), reaching `.mjs` files for the first time — but what it caught was
+a **false positive** (string fixtures describing skip syntax), not a genuinely skipped test, and the
+deletion half has still never fired on a real PR. Partial evidence is not the control.
+
 The **test-deletion control was not demonstrable
 as written until 2026-09-11**: the guard was blind to `.test.mjs`, so a PR deleting a `.mjs` test
 would have passed it silently. Fixed and regression-tested — see `../../core/DECISION_LOG.md`,
