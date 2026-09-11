@@ -37,7 +37,9 @@ check fails, but because no check runs. Recorded as `R11` in `../core/RISK_REGIS
 **Updated 2026-09-11: two of these three are settled.** The section heading used to read "nothing
 else can be verified until these are settled", which is no longer true and is left here only so the
 change is visible rather than silent. **R11 and R12: RESOLVED** — the operator took the
-make-it-public option, which closes both at zero cost. **R13: still open.**
+make-it-public option, which closes both at zero cost. **R13: CLOSED as an accepted risk**
+(operator decision, 2026-09-11) — no second GitHub identity will be created, so separation stays
+procedural and no document in this repository may claim otherwise.
 
 1. **R11 — GitHub Actions billing.** Billing/spending limits are account settings and are outside
    the implementer's authority entirely (global operating contract §4).
@@ -63,14 +65,16 @@ make-it-public option, which closes both at zero cost. **R13: still open.**
 
 ```
 1. G0 administrative closure                                    DONE (../G0_CLOSURE_REPORT.md)
-2. Operator settles R11/R12/R13                                 R11 DONE, R12 DONE, R13 OPEN
+2. Operator settles R11/R12/R13                                 R11 DONE, R12 DONE,
+                                                                R13 ACCEPTED (not fixed)
 3. G1 plan reviewed and GO given                                DONE
 4. Operator authors/adopts governance/gate-manifests/g1.yaml    DONE (operator-only, INV-28)
 5. Operator sets GATE_MANIFEST_APPROVED_HASH_G1 repo variable   DONE (operator-only, out of tree)
 6. Create branch gate/g1-remediation                            AUTHORIZED by GPT-PM APPROVE
 7. Fix G1-M2: one governance workflow, hash-check -> scope-check DONE (see below)
 8. Confirm CI actually runs and is green on that branch          DONE (run 34544309071, steps 4-6 green)
-9. Negative-control PR tests (see below)                         1 of 4 done
+9. Negative-control PR tests (see below)                         2 of 4 done; the other two
+                                                                are operator-owned
 10. Fresh-context G1 review                                      pending
 11. G1 closure report                                            pending
 ```
@@ -78,10 +82,11 @@ make-it-public option, which closes both at zero cost. **R13: still open.**
 **Status of step 2, measured on 2026-09-11 rather than assumed.** The operator took the second R12
 option: the repository is public (`gh repo view --json isPrivate` → `false`), which makes Actions
 free and unmetered and closes **R11** with it, and ruleset `PDCC` (id `22899342`) is
-`"enforcement": "active"` on `main`. **R13 remains open** and is the one item here no amount of
-implementation can settle: one GitHub identity behind both roles means the audit trail cannot
+`"enforcement": "active"` on `main`. **R13 is CLOSED as an accepted risk**, not fixed — it is the
+one item here no amount of implementation can settle: one GitHub identity behind both roles means the audit trail cannot
 distinguish implementer from operator, so any separation described in these documents is procedural,
-not mechanical.
+not mechanical. The operator declined the second-identity branch of the mitigation on 2026-09-11,
+which makes the other branch binding: no document here may assert mechanical separation.
 
 **Status of step 9 — stated narrowly, because the obvious wider claim is not supported.** Two of the
 four bullets are done: branch protection is now evidenced by `gh api` output rather than by this
