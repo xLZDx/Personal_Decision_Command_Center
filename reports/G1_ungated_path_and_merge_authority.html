@@ -1,0 +1,537 @@
+<title>Ungated PR path and merge authority</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead { border-bottom: 2px solid var(--ink); padding: 56px 0 20px; margin-bottom: 0; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600; font-size: var(--step-4); line-height: 1.12; letter-spacing: -0.015em;
+    text-wrap: balance; margin: 0 0 12px;
+  }
+
+  .standfirst { font-size: var(--step-1); color: var(--ink-2); max-width: var(--measure); margin: 0 0 18px; text-wrap: pretty; }
+
+  .masthead-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.78rem; color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600; font-size: var(--step-3); line-height: 1.22; letter-spacing: -0.01em;
+    text-wrap: balance; margin: 0 0 6px;
+  }
+  h3 { font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: var(--step-1); line-height: 1.35; margin: 0 0 6px; }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.78rem; color: var(--ink-3); padding-top: 6px; white-space: nowrap; }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono { font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace; font-size: 0.87em; }
+  code { background: var(--surface-2); border-radius: 3px; padding: 0.1em 0.34em; word-break: break-word; }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.82rem; line-height: 1.55;
+    background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+    padding: 14px 16px; margin: 0; overflow-x: auto; white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; align-items: start;
+    background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--pass);
+    padding: 20px 22px; margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 600; font-size: 0.8rem; letter-spacing: 0.08em;
+    color: var(--pass); background: var(--pass-soft); border: 1px solid var(--pass); padding: 4px 10px; white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who { grid-column: 2; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.76rem; color: var(--ink-3); margin-top: 6px; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption { text-align: left; font-size: 0.8rem; color: var(--ink-3); padding: 0 0 8px; max-width: var(--measure); }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+    background: var(--surface-2); border-bottom: 1px solid var(--rule-2); position: sticky; top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; color: var(--ink-3); white-space: nowrap; }
+
+  .chip {
+    display: inline-block; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.7rem;
+    letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border: 1px solid currentColor; white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+
+  .note {
+    background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--rule-2);
+    padding: 16px 18px; font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+  .note.warn { border-left-color: var(--warn); }
+
+  .limits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .limits li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; max-width: var(--measure); font-size: 0.95rem; }
+  .limits .tag {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.7rem; letter-spacing: 0.06em;
+    color: var(--ink-3); border: 1px solid var(--rule-2); padding: 1px 6px; white-space: nowrap;
+  }
+
+  .kicker { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+
+  blockquote {
+    margin: 0; padding: 2px 0 2px 16px; border-left: 2px solid var(--rule-2);
+    color: var(--ink-2); font-size: 0.95rem; max-width: var(--measure);
+  }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 2px solid var(--ink); font-size: 0.85rem; color: var(--ink-3); max-width: var(--measure); }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Gate G1 · Ungated PR path and merge authority</p>
+    <h1>The evidence PR finally merges — and who may now press merge</h1>
+    <p class="standfirst">
+      Once branch protection went live, any PR declaring no gate failed unconditionally — including
+      the PR carrying G0's own evidence. Closed with code, not a manifest: the first manifest design
+      could never have reached main through any path. Alongside it: a new rule letting Claude merge
+      a PR once GPT-PM's APPROVE has actually been verified.
+    </p>
+    <div class="masthead-meta">
+      <span>2026-09-11</span>
+      <span>PR #3 merged</span>
+      <span>64 tests · 34 mutations</span>
+      <span>PR #2 — conversion in progress</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; evidence/g0-cpu-probe-results @ 1c59677</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+  <div class="verdict">
+    <span class="stamp">64/64 · 34/34 · CI green</span>
+    <p>
+      <code>npm run test</code> — 64/64 (13 new). <code>npm run verify:mutation</code> — 34/34
+      killed (4 new). PR #3 in real CI: <code>governance</code> — 8s, <code>verify</code> — 23s,
+      both success.
+    </p>
+    <p class="who">Internal verification: local tests + mutations, real CI. No separate GPT-PM
+      round was requested for this specific diff's content this round — both GPT-PM exchanges were
+      about merge authority (§5), not a content review of the code.</p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 1</span>
+      <div><h2>The defect: an ungated-PR manifest could never reach main by any route</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Before this fix, <code>governance.yml</code> required <em>every</em> PR to declare a gate —
+        otherwise step 4 failed unconditionally. While direct pushes to <code>main</code> were still
+        possible, this did not matter. But this same session added branch protection requiring a PR
+        and a green <code>governance</code> check — and the PR carrying G0's own evidence (the CPU
+        probe itself) stopped being mergeable at all, because it belongs to no gate.
+      </p>
+      <p>
+        The first design — add <code>Gate: NONE</code>, read against a fixed
+        <code>governance/gate-manifests/_floor.yaml</code> — turned out to be structurally
+        unmergeable. INV-28 forbids any gate-labeled PR from touching
+        <code>governance/gate-manifests/**</code>: a diff cannot be validated against a manifest
+        that same diff could have just rewritten. The <code>_floor.yaml</code> file, living in that
+        same directory, forbade the identical thing of itself.
+      </p>
+      <div class="note warn">
+        <p><strong>Both introduction paths rejected it the same way:</strong> a <code>Gate: G1</code>
+          PR would fail under <code>g1.yaml</code>'s own rule; an ungated PR would fail under the
+          new file's own rule, applied to itself in the same check. No PR — gated or not — could
+          physically land this file on main.</p>
+      </div>
+      <p>
+        Found by tracing both check paths, not by inspection alone; the rule was already written and
+        sitting in the working tree before the conflict became apparent.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 2</span>
+      <div><h2>The fix: code instead of a manifest file</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The floor's rules moved out of a YAML file under <code>governance/gate-manifests/</code>
+        into a plain <code>.mjs</code> module, <code>scripts/verify/check-floor-scope.mjs</code> — a
+        path G1's own manifest already allows (<code>scripts/verify/*.mjs</code>). As ordinary code
+        it is protected exactly like <code>governance.yml</code> itself: changeable by whichever
+        gate's manifest permits editing <code>scripts/verify/**</code>, no more and no less. The
+        forbidden list (<code>governance/gate-manifests/**</code>, approval records, the frozen TDD,
+        the workflow and CODEOWNERS themselves) did not change at all — only the rule's address and
+        the ceremony for editing it did.
+      </p>
+      <p>
+        The function reuses <code>checkScope</code>/<code>changedPathsFrom</code> from
+        <code>check-gate-scope.mjs</code> — one audited path-matching engine, not two.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Evidence for the new code, before commit</caption>
+          <thead><tr><th>Check</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td><code>npm run test</code></td><td class="num-col">64/64 (13 new — <code>tests/policy/floor-scope.test.mjs</code>)</td></tr>
+            <tr><td><code>npm run verify:mutation</code></td><td class="num-col">34/34 killed (4 new for <code>run()</code>)</td></tr>
+            <tr><td><code>check-floor-scope.mjs</code> mutations</td><td>exits 0 despite a violation · skips the <code>BASE_SHA</code>/<code>HEAD_SHA</code> check · treats a failed <code>git diff</code> as empty · stops passing <code>FORBIDDEN_PATHS</code> into <code>checkScope</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 3</span>
+      <div><h2>Side finding: CRLF + <code>import.meta.url</code> breaks vitest locally</h2></div>
+    </div>
+    <div class="note">
+      <p>
+        The local suite occasionally failed with a <code>SyntaxError</code> pointing at an unrelated
+        file's import line. Root cause, confirmed by bisection: <code>check-gate-scope.mjs</code>
+        contains one <code>import.meta.url</code> reference, and Vite's SSR transform corrupts the
+        load when the file's line endings are CRLF. This machine's global
+        <code>core.autocrlf=true</code> rewrites the working copy to CRLF on ordinary git operations
+        (checkout, stash), even though the committed blob is — and always was — LF
+        (<code>git cat-file -p HEAD:…</code> — 0 CRLF pairs). No repository content changed to work
+        around it: the working copy was simply re-normalized to match what was already committed.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 4</span>
+      <div><h2>PR #3 — merged by the operator</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        <a href="https://github.com/xLZDx/Personal_Decision_Command_Center/pull/3">PR #3</a> —
+        <code>ac26d04</code>, both checks green in real CI. INV-20 required an operator merge for
+        this gate — that is exactly what happened. Right after, the operator asked why they still
+        had to click merge every time. That question led to §5.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 5</span>
+      <div>
+        <h2>Merge authority: two rounds with GPT-PM, not on the operator's word</h2>
+        <p class="kicker">Verified directly, not accepted as reported</p>
+      </div>
+    </div>
+    <div class="flow">
+      <p>
+        The operator reported that GPT-PM said it has full rights to merge. Before acting on that,
+        two direct questions went to GPT-PM itself, in the same conversation, rather than trusting
+        the paraphrase.
+      </p>
+      <h3>Round 1 — does APPROVE lift INV-20's requirement</h3>
+      <p>
+        Yes, for this project: explicit operator delegation + GPT-PM's APPROVE on the exact final
+        head + green required checks. With a mandatory carve-out — a PR that itself changes
+        <code>governance/gate-manifests/**</code>, approval records, or branch-protection/ruleset
+        settings gets no auto-merge even with a clean APPROVE: that needs the operator's own
+        separate authorization. A <code>.github/workflows/**</code> content change is covered if it
+        was part of the approved diff — exactly PR #3's case.
+      </p>
+      <h3>Round 2 — can GPT-PM itself merge, as a genuinely separate actor</h3>
+      <div class="note warn">
+        <p>
+          <strong>No real actor separation exists.</strong> GPT-PM technically holds GitHub write
+          access (<code>merge_pull_request</code>, review) through its connector — but that
+          connector authenticates as the same <code>xLZDx</code> account Claude's own <code>gh</code>
+          uses. To GitHub, "GPT-PM merges" and "Claude merges" are the same actor; a review GPT-PM
+          submits from that connector could itself be rejected as self-approval. Same root cause as
+          R13.
+        </p>
+      </div>
+      <p>
+        The operator was told this plainly, with no smoothing over. The adopted design: Claude
+        performs the mechanical merge as the executor of GPT-PM's verified decision — a logical
+        separation of decision-maker from implementer, not a GitHub-account-level one.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 6</span>
+      <div><h2>Recorded as a rule — globally and in this project</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The operator explicitly confirmed scope — not one project, all of them:
+        <code>~/.claude/CLAUDE.md</code> §24 (new section). Conditions: a fresh APPROVE naming the
+        current head; the head unchanged since that APPROVE; every required check green on that
+        same head; the PR mergeable; the ordinary merge method, no bypass/force/disabled checks; the
+        PR not touching an authority-surface path (manifests, approval records, CODEOWNERS,
+        protection settings) — that class still needs the operator's own separate authorization. The
+        bar is <code>VERDICT: APPROVE</code> specifically, never "roughly approved" or a paraphrase
+        of one.
+      </p>
+      <p>
+        For this project, the same rule is recorded in <code>core/DECISION_LOG.md</code> naming
+        exactly which paths here count as an authority surface:
+        <code>governance/gate-manifests/**</code>, <code>governance/operator-approvals/**</code>,
+        <code>.github/CODEOWNERS</code>, ruleset settings. The global file is the source of the rule;
+        the decision log is how it applies here specifically.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">§ 7</span>
+      <div><h2>Still open</h2></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Item</th><th>Status</th><th>Tail</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>PR #2 (CPU-probe evidence)</td>
+            <td><span class="chip part">In progress</span></td>
+            <td><code>main</code> merged into <code>evidence/g0-cpu-probe-results</code>; remaining: add <code>Gate: NONE</code> to the PR body, push, verify checks, merge per §5–6</td>
+          </tr>
+          <tr>
+            <td>Gmail OAuth (G3)</td>
+            <td><span class="chip part">In progress</span></td>
+            <td>Credentials saved locally by the operator (<code>.env.gmail-oauth-client.json</code>); Claude never saw them</td>
+          </tr>
+          <tr>
+            <td>Telegram api_id/api_hash (G4)</td>
+            <td><span class="chip done">Done</span></td>
+            <td><code>.env</code> verified structurally (without reading the values): <code>TELEGRAM_API_ID</code> — 8 digits, <code>TELEGRAM_API_HASH</code> — 32 chars</td>
+          </tr>
+          <tr>
+            <td>Branch <code>gate/g1-ungated-pr-path</code></td>
+            <td><span class="chip part">Deletion pending</span></td>
+            <td>Merged via PR #3; deletion is a routine git operation, not a blocker</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Written by the implementer and describes the implementer's own work. The merge authority
+      described in §5–6 was verified directly with GPT-PM in this same session, not taken on trust;
+      responsibility for the decisions in this change remains mine.
+    </p>
+  </footer>
+</div>
+
+
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
