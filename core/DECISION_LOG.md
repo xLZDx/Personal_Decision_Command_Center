@@ -5,6 +5,42 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — Negative control at the scope step, run on a real out-of-scope edit
+
+**Decision:** demonstrate the scope refusal with a change that is genuinely needed and genuinely
+out of G1's approved scope, rather than with a synthetic file created to be refused. The change:
+`.gitignore` gains `.dev.vars`, `.dev.vars.*` and a `!.dev.vars.example` negation.
+
+**Why this path and not another.** `governance/gate-manifests/g1.yaml` names `.gitignore` in its own
+"DELIBERATELY EXCLUDED" list — "Present in the repository, untouched by G1" — so it is out of scope
+by the manifest's own explicit reasoning, not by an omission someone could argue was accidental. It
+is also not in `forbidden_paths`, which matters: the four forbidden entries have their own refusal
+message, and the control being exercised here is the ordinary out-of-scope one.
+
+**Why the edit is real.** `.gitignore` covers `.env` and `.env.*` but not `.dev.vars`, which is the
+filename Wrangler reads local secrets from. The gap was found while writing the operator's setup
+steps and deferred there with an explicit note (_"Дыру закрою в гейте G2 — в G1 не могу, `.gitignore`
+не входит в утверждённый вами манифест"_). So the commit is a fix that was owed, timed to also serve
+as the control.
+
+**What is being proved, stated narrowly.** Until now the scope step had only ever been observed
+PASSING. The earlier refusals recorded in this log were at the **hash** step — a different control,
+which fails closed before scope is ever evaluated. A control observed only in the direction that
+lets work through has not been shown to refuse anything.
+
+**Expected result:** the `Governance` check FAILS, naming `.gitignore` as outside `allowed_paths`.
+A PASS here would be the finding, not the failure.
+
+**Evidence:** recorded in `governance/plans/G1_PREADOPTION_EVIDENCE.md` with the CI run id once the
+run completes. Commit B reverts the `.gitignore` change so the PR can return to green — the
+refusal is the deliverable, the file change is the instrument.
+
+**How to apply:** `.dev.vars` stays uncovered by `.gitignore` until a gate whose manifest allows
+that path lands the same three lines. Until then use `.env`, as the operator's setup steps already
+say.
+
+---
+
 ## 2026-09-11 — R13 CLOSED as an accepted risk: one identity, separation stays procedural
 
 **Decision (operator's, final, not to be reopened before the production release):** no second GitHub
