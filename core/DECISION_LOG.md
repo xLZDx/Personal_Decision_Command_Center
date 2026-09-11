@@ -33,6 +33,26 @@ headings quoted above were read directly.
 **How to apply:** when a ledger and a report disagree, check the artifact. Neither document is
 evidence about the other.
 
+**Round-1 MAJOR on this very correction, and it was right.** GPT-PM pointed out that the corrected
+"still missing" list was itself incomplete: `core/RISK_REGISTER.md` still recorded **R11 OPEN** and
+**R12 OPEN** long after the operator made the repository public and ruleset `PDCC` went active, and
+`governance/plans/G1_REMEDIATION_PLAN.md` said R13 was closed at the top and still open in three
+places lower down. Fixing one stale ledger while two others stayed stale would have recreated the
+same class inside the fix. All three records are reconciled in the same PR. R12's closure is written
+at its real width: the ruleset requires a PR and two checks and blocks deletion/force-push, but
+`required_approving_review_count` is **0** and `require_code_owner_review` is **false** — so
+CODEOWNERS is not the control, and the closure says so rather than letting the word "protected" imply
+it.
+
+**The three remaining negative controls are operator-owned, and that is now written down.** Asked
+directly, GPT-PM ruled (review 5182972216) that the implementer must not mutate a gate manifest, an
+operator approval or the frozen TDD even as a throwaway edit to provoke the `forbidden_paths`
+refusal — _"A later CI refusal does not retroactively authorize the mutation"_ — and agreed that a
+branch-local `git rm` of a tracked test is still a file deletion under `~/.claude/CLAUDE.md` §20,
+_"Reverting it later does not create an exception"_. Per §23 that ruling is a finding I weighed, not
+an authorization: the two questions go to the operator either way. What I can do without them is
+prepare the exact commands and the evidence checklist, which is what the closure report will carry.
+
 ---
 
 ## 2026-09-11 — Negative control at the scope step, run on a real out-of-scope edit
