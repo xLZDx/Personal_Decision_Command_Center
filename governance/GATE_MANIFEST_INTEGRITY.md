@@ -23,8 +23,21 @@ caught.
 
 ## What actually enforces, and in what order
 
-Ranked by how hard each is to circumvent from an implementer branch. **Only the first is real
-enforcement**; the rest are detection and friction.
+Ranked by how hard each is to circumvent from an implementer branch.
+
+**Corrected 2026-09-11:** this used to say "**Only the first is real enforcement**; the rest are
+detection and friction", on the belief that merge authority was mechanically held by the operator.
+Measurement says otherwise (see §1), and the ranking inverts:
+
+- **Mechanically enforced by the platform:** a pull request is required, `governance` and `verify`
+  must be green on the head being merged (strict), and deletion and non-fast-forward pushes are
+  blocked. That is controls (2) and (3) below, plus the ruleset itself.
+- **Procedural, resting on compliance and the audit trail:** who decides that a merge may happen —
+  control (1). There is no mechanically enforced human separation.
+
+So the first item is the one that is NOT mechanical, and the checks below it are. The order is kept
+because it still ranks by consequence — a wrong merge decision is worse than a missed check — but it
+no longer claims the first is enforcement.
 
 ### 1. Merge authority — procedural, NOT mechanical
 
@@ -141,9 +154,13 @@ The current matcher is segment-bounded:
 
 Note what the vacuity warning does and does not catch: it fires on the literal entry `**` only.
 A near-universal pattern written another way — `**/*`, for instance — is not flagged. Since the
-manifest's content is fixed by CODEOWNERS review plus the hash check before any diff is evaluated
-against it, an implementer cannot introduce one; this is a gap in the operator-facing warning, not
-a bypass.
+manifest's content is fixed by the hash check before any diff is evaluated against it, an
+implementer cannot introduce one **without the operator re-approving the changed bytes and updating
+the variable**; this is a gap in the operator-facing warning, not a bypass. **Corrected
+2026-09-11:** this previously credited "CODEOWNERS review plus the hash check". CODEOWNERS review
+contributes nothing mechanical — `require_code_owner_review` is `false` on the live ruleset (§1).
+The hash check alone is what closes this, and it closes it only because the approved hash lives
+outside the tree.
 
 Patterns are anchored at both ends, are repository-relative, and may not contain `\`, `//`, `.`
 or `..` segments. `**` glued to other characters in a segment (`a**b`) is rejected as ambiguous
@@ -201,8 +218,11 @@ function CI actually executes, and the one whose exit code IS the control — ha
 kind. A guard that computes violations correctly and then exits 0 provides nothing, and no test
 would have noticed.
 
-This matters more than usual here: remote CI on this repository currently executes nothing (R11),
-so local test and mutation evidence is the only evidence this control has.
+This used to matter more than usual, because remote CI on this repository executed nothing (R11).
+**No longer true as of 2026-09-11:** R11 is resolved — the repository is public, so Actions are free
+and unmetered, and `governance` and `verify` both run and pass on every PR head (measured on PR #6,
+head `fa2917b`). Local test and mutation evidence is now corroboration rather than the only evidence
+this control has.
 
 ## What this mechanism explicitly does NOT protect against — stated, not glossed
 
@@ -256,18 +276,32 @@ An honest design says where its own guarantees stop.
   variable **must** fail the `Governance` check, demonstrated on a real PR, not asserted.
 - A negative test: a PR touching a path outside `allowed_paths` must fail the same check — and it
   must fail at the scope step, having reached it only because the hash step passed.
-- Evidence that branch protection and CODEOWNERS review are actually enabled in repository
-  settings (a screenshot or `gh api` output), not merely described in this file — a CODEOWNERS
-  file with branch protection switched off is decoration.
+- Evidence from `gh api` — not a screenshot and not this file's word — of what the ruleset on
+  `main` actually enforces. **DONE 2026-09-11**, and the answer is the one §1 now records: ruleset
+  `PDCC` (`22899342`) is active with strict `governance` + `verify`, deletion and non-fast-forward
+  blocked, `required_approving_review_count: 0`, `require_code_owner_review: false`. This bullet
+  used to ask for evidence that "CODEOWNERS review is enabled"; it is **not** enabled, and asking
+  for evidence of a control that does not exist is how a document ends up asserting one. `CODEOWNERS`
+  here is a map of governance-bearing paths, not a gate.
 
-**None of the three can be produced yet, and the reason is not a code defect.** GitHub Actions on
-this repository currently starts no jobs at all: run `34513131209` for `b784265` finished in four
-seconds with zero steps executed, annotated _"The job was not started because recent account
-payments have failed or your spending limit needs to be increased."_ And branch protection on a
-**private** repository requires a paid GitHub plan; `/branches/main/protection` returns 404 here.
-So controls (1) and (2) above are, at this moment, described rather than operating. Tracked as R11
-and R12 in `../core/RISK_REGISTER.md`; both are operator decisions, not implementer work.
+**Status, rewritten 2026-09-11 — the blocker described here is gone.** This section used to say none
+of the three could be produced: GitHub Actions started no jobs at all (run `34513131209` for
+`b784265` finished in four seconds with zero steps, annotated _"The job was not started because
+recent account payments have failed or your spending limit needs to be increased."_), and branch
+protection on a **private** repository needs a paid plan (`/branches/main/protection` returned 404).
 
-Until they are settled, the honest statement of this mechanism's status is: **the matcher and the
-manifest reader are verified (unit tests + mutation testing, locally); the enforcement around them
-is not verified at all.**
+Both were operator decisions, and the operator settled them with one move: **the repository is now
+public.** Actions are free and unmetered for public repositories, and rulesets are available on Free
+— so **R11 and R12 are both resolved**, and `governance` and `verify` genuinely run and pass on every
+PR head. What remains is narrower than "the enforcement is unverified":
+
+| Owed                                                                  | Status                                                                                                                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Ruleset evidence from `gh api`                                        | **DONE** — see the bullet above                                                                                                |
+| Negative test: manifest edited without the variable updated must fail | **NOT DONE** — needs a branch that deliberately edits `g1.yaml`; operator territory                                            |
+| Negative test: out-of-scope path must fail, at the scope step         | **NOT DONE** — the scope step has only ever been observed PASSING; earlier refusals were at the hash step, a different control |
+
+So the honest statement of this mechanism's status is now: **the matcher and the manifest reader are
+verified (unit tests + mutation testing); the hash step has been observed both refusing and passing;
+the scope step has been observed only passing, and a guard never seen refusing is not known to
+refuse.**
