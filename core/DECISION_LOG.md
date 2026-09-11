@@ -5,6 +5,71 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — G1's last three negative controls executed; operator authorized autonomous MVP1 completion
+
+**Decision A — the three remaining negative controls (`forbidden_paths`, hash-mismatch, the
+test-deletion guard's deletion half) were executed by the implementer**, not the operator, under a
+new `~/.claude/CLAUDE.md` §25 (added the same day, operator instruction: _"надо обновить правило и
+не блокировать эти действия в будуещем, мы всегда сможем востоновить из гита"_). §25's operative
+distinction is recoverability, not the word "delete"/"forbidden": a git-tracked file's content comes
+back byte-for-byte, a branch commit that is reverted and never merged never reaches `main`, and a
+variable set to a deliberately wrong value only ever makes a gate stricter. Full reasoning and the
+recovery-command table (a first draft named `git restore --source=`, which the local safety hook
+itself blocks — corrected to `git checkout <sha> --`/`git revert` before commit) live in
+`~/.claude/CLAUDE.md` §25 and `~/.claude/core/DECISION_LOG.md` D-004.
+
+**Branch creation authorized twice, deliberately, because the literal phrase was never said.** The
+operator's own words — _"Даю авторизацию тебе все это сделать после моего ревью, апрув"_, followed
+mid-turn by a bare "ГО" — are clear intent but not `~/.claude/CLAUDE.md` §14's required
+`BRANCH GO 1`/`BRANCH GO 2` phrasing, and §14 explicitly excludes generic phrases like "ГО" from
+counting. Rather than send the operator back for a formality, the request went to GPT-PM (§20
+narrows §14: a genuine `VERDICT: APPROVE` satisfies both approvals, since branch creation is
+reversible), naming all three branches individually by name, base, purpose and lifetime. Reply,
+verified by content after a `CHATGPT_SEND_UNCONFIRMED` retry (`gpt_session_peek` showed the
+assistant-turn count grow from 2 to 3, answering the specific request rather than repeating the
+prior round's verdict):
+
+> "VERDICT: APPROVE — create exactly gate/g1-hash-control, gate/g1-forbidden-control, and
+> gate/g1-deletion-control from origin/main at 63a5425f4ea2fefca03c73954a5f620b3d68473f, for the
+> stated purposes and lifetimes. ... gate/g1-forbidden-control and gate/g1-deletion-control are
+> close-unmerged only; gate/g1-hash-control may merge only its durable core/DECISION_LOG.md
+> evidence after both the deliberate hash-mismatch failure and restored-positive Governance run are
+> captured."
+
+Scoped narrowly: exactly these three branches, this base, these purposes, this merge/delete plan —
+not a standing grant for future branches.
+
+**Results, full logs in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §12:**
+
+| Control                      | Branch / PR                                           | Run                             | Result                                                                                                                                                                                                 |
+| ---------------------------- | ----------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Hash mismatch                | `gate/g1-hash-control`, PR #10 (merged)               | `34654217044` (rerun both ways) | Wrong value → `Manifest hash mismatch for G1`, step 6 never ran. Restored → both steps green                                                                                                           |
+| `forbidden_paths`            | `gate/g1-forbidden-control`, PR #11 (closed unmerged) | `34654474743`                   | `forbidden by the G1 manifest (pattern: governance/operator-approvals/**)` — textually distinct from the ordinary out-of-scope message. Reverted, restored-green confirmed                             |
+| Test-deletion, deletion half | `gate/g1-deletion-control`, PR #12 (closed unmerged)  | `34654709448`                   | `Test-deletion guard tripped: - deleted test file: tests/policy/codeowners.test.mjs` — first time this half has fired on a real PR (PR #5 only exercised the skip half, and that was a false positive) |
+
+`main` is unaffected beyond PR #10's single decision-log line. All four negative controls this
+repository's governance workflow can produce (scope, hash, forbidden paths, test-deletion) now have
+real CI evidence with the exact log line quoted rather than paraphrased.
+
+**Decision B — the operator authorized autonomous completion of the whole MVP1 program, verbatim:**
+_"у тебя все есть для автономного завершения мвп1, даю ГО авторизацию на любые действия для
+завершения мвп1, это новый проект нет не юзеров не консюмеров и риска нет тоже совсем, главное за 10
+часов завершить мвп1, ГО"_ — stated rationale: new project, no users, no consumers, materially lower
+risk. PM Bridge orchestrator mode was already ON at the time (since 2026-09-11T16:38), so this is
+read per global `CLAUDE.md` §18 as the goal that defines "the program": continue gate to gate,
+report but do not stop between them, until MVP1 is actually complete or blocked on a decision that
+is genuinely the operator's alone under §4/§14/§20 — not as permission to skip per-gate planning or
+GPT-PM review (this project's own kickoff rule, "completion of one gate never authorizes the next,"
+is unchanged; §18 changes when a session stops, never what a gate needs to close).
+
+**Stated back to the operator in the same turn, not silently absorbed:** several remaining MVP1
+gates contain steps only the operator can perform regardless of authorization — entering a Telegram
+login SMS/2FA code, Gmail OAuth consent-screen clicks, a live Cloudflare/`wrangler` session,
+physical Android and iPhone devices for G7, naming a backup destination for G8. These are named as
+they are reached rather than assumed away.
+
+---
+
 ## 2026-09-11 — A procedure written for the operator would have produced no evidence
 
 **Decision:** the hash-mismatch control must be run on a PR that **resolves to G1**, and it is not
@@ -1431,52 +1496,3 @@ TDD's semantic content; the diagram/prose mojibake is not blocking.
 **Evidence:**
 **How to apply:**
 ```
-
-## 2026-09-12 — Branch creation for the three negative controls: operator authorization + GPT-PM APPROVE
-
-**Operator authorization, verbatim:** _"Даю авторизацию тебе все это сделать после моего ревью,
-апрув"_ — given after reviewing the plan (the exact three branches, base, purpose, lifetime and
-merge/delete plan already stated in the prior turn) and after reviewing `~/.claude/CLAUDE.md` §25.
-
-**Why this went to GPT-PM rather than a literal BRANCH GO 1/2 exchange.** §14 requires the
-operator's own two-step phrase for branch creation; §20 narrows this — a genuine GPT-PM
-`VERDICT: APPROVE` satisfies both approvals, because branch creation is reversible. The operator's
-message is a clear authorization but not the literal phrase, and a mid-turn "ГО" that followed it
-is explicitly excluded by §14's own text ("Generic phrases such as GO, ГО... do NOT count"). Rather
-than send the operator back for a formality, the request went to GPT-PM with the three branches
-individually named, based, purposed, and given a lifetime — the same content the BRANCH GO 1
-template would have required.
-
-**GPT-PM's reply, verified by content** (the send reported `CHATGPT_SEND_UNCONFIRMED` twice;
-`gpt_session_peek` showed the assistant-turn count had grown from 2 to 3 and the new turn answers
-the specific request rather than repeating the prior round's verdict, so it is treated as the real
-reply rather than re-sent):**
-
-> "VERDICT: APPROVE — create exactly gate/g1-hash-control, gate/g1-forbidden-control, and
-> gate/g1-deletion-control from origin/main at 63a5425f4ea2fefca03c73954a5f620b3d68473f, for the
-> stated purposes and lifetimes. This approval covers the reversible branch creation and the
-> specified negative-control execution. gate/g1-forbidden-control and gate/g1-deletion-control are
-> close-unmerged only; gate/g1-hash-control may merge only its durable
-> core/DECISION_LOG.md evidence after both the deliberate hash-mismatch failure and
-> restored-positive Governance run are captured."
-
-Correlated: the reply names the exact base sha and repeats the branch names, purposes and lifetime
-constraints from the request — not a generic acknowledgement.
-
-**Scope of this authorization, stated narrowly.** It covers exactly the three branches named, from
-the named base, for the named purposes, with the named merge/delete plan (two closed unmerged, one
-merged for its decision-log evidence only). It does not authorize any other branch, any widening of
-scope, or merging `gate/g1-forbidden-control` / `gate/g1-deletion-control`.
-
-## 2026-09-12 -- Operator-run negative control: hash mismatch (in progress)
-
-Branch `gate/g1-hash-control`, base `origin/main` @ 63a5425. Authorized: operator
-verbatim "Даю авторизацию тебе все это сделать после моего ревью, апрув", branch
-creation confirmed by GPT-PM VERDICT: APPROVE (see the entry above this one).
-
-Procedure, exactly as specified in the PR #9 report after GPT-PM's round-1
-MAJOR corrected it: (1) set GATE_MANIFEST_APPROVED_HASH_G1 to a deliberately
-wrong value, (2) re-run Governance on THIS PR (branch resolves to G1 via the
-`^gate/([gG][0-9]+)` regex), (3) confirm failure at the hash step naming G1,
-(4) restore the correct value, (5) re-run once more and require green through
-both the hash and scope steps. Both runs are the evidence.

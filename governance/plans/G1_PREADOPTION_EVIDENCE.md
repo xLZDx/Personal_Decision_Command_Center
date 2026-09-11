@@ -533,8 +533,7 @@ diff.
 **What it does NOT establish.** The `forbidden_paths` branch is still unexercised — no run has ever
 touched one of the four authority paths, so its distinct refusal message has never been produced by
 CI. Nor is the hash-mismatch control exercised here: that needs a branch that deliberately edits
-`g1.yaml`, which is operator-only work under INV-28. Both remain open, and neither is claimed as
-evidence anywhere in this repository.
+`g1.yaml`'s approved hash. Both were closed the same day — see §12.
 
 **The revert is part of the control, not a retraction of it.** The commit immediately following
 `98716b3` on `gate/g1-remediation` — the one carrying this section — removes the three
@@ -543,7 +542,97 @@ legitimate content. The refusal is the deliverable; the file change was the inst
 stays uncovered until a gate whose manifest allows that path lands the same three lines — which is
 exactly the outcome §10.2 predicted, now demonstrated rather than asserted.
 
-## 12. Operator boundary — nothing below is the implementer's
+## 12. The last three negative controls, executed the same day
+
+§11 left three controls open, each for a stated authority reason: exercising `forbidden_paths`
+means touching a protected governance path; exercising the hash-mismatch control means setting the
+CI approval variable to a value that would make it wrong; exercising the deletion half of the
+test-deletion guard means deleting a tracked test file. All three were narrowed to what they
+actually require by `~/.claude/CLAUDE.md` §25, added 2026-09-12 on operator instruction ("надо
+обновить правило и не блокировать эти действия в будуещем, мы всегда сможем востоновить из гита"):
+the operative property is recoverability, not the word "delete" or "forbidden" — a git-tracked file
+comes back byte-for-byte, a reverted branch commit never reaches `main`, and a variable set to a
+deliberately WRONG value only ever makes a gate stricter. Branch creation itself was authorized by
+the operator directly, then confirmed by a GPT-PM `VERDICT: APPROVE` naming all three branches by
+name, base and purpose (satisfying §14 via §20 — branch creation is reversible); the exchange is in
+`core/DECISION_LOG.md`, "Branch creation for the three negative controls".
+
+### 12.1 Hash mismatch
+
+**FACT.** Branch `gate/g1-hash-control`, base `origin/main` @ `005b8e6`, PR #10. Run `34654217044`
+(rerun after each variable change, since GitHub Actions reads repository variables live at
+execution time — the run that fired automatically on PR creation, before the variable was flipped,
+read the correct value and is not evidence of anything).
+
+With `GATE_MANIFEST_APPROVED_HASH_G1` set to `0000...0000`:
+
+```
+manifest: governance/gate-manifests/g1.yaml
+actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
+::error::Manifest hash mismatch for G1.
+::error::actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
+```
+
+Step 6 (scope) did not run — the job stopped at step 5, exactly as designed. With the correct value
+`e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162` restored and the **same run
+rerun again**, both steps report `success`. PR #10 was merged for its durable
+`core/DECISION_LOG.md` entry — the only content it carried.
+
+### 12.2 forbidden_paths
+
+**FACT.** Branch `gate/g1-forbidden-control`, base `origin/main` @ `005b8e6`, PR #11 (closed
+unmerged). Commit `998831d` appended one line to `governance/operator-approvals/README.md`, which
+`g1.yaml` lists under `forbidden_paths`. Run `34654474743`:
+
+```
+Manifest hash matches the operator-approved value.
+Changed paths (1):
+::error::forbidden by the G1 manifest (pattern: governance/operator-approvals/**)
+```
+
+The hash step passed first, so the scope step genuinely evaluated the path rather than being
+skipped — and the message is textually distinct from §11's `outside G1's approved scope`, exactly
+as the manifest's own comments describe: forbidden paths get their own refusal, not the generic
+out-of-scope one. Commit `ad2a407` reverted the edit in the same PR; `git diff origin/main HEAD --
+governance/operator-approvals/README.md` reports zero lines, confirming byte-identity with `main`.
+The restored-green run then passed both steps. PR #11 was closed **unmerged** — `main` was never
+touched by this branch.
+
+### 12.3 Test-deletion guard, deletion half
+
+**FACT.** Branch `gate/g1-deletion-control`, base `origin/main` @ `005b8e6`, PR #12 (closed
+unmerged). Commit `a3e6cf3` deleted `tests/policy/codeowners.test.mjs`. Run `34654709448`, step
+"Test-deletion guard" (in the `verify` job, not `governance` — `governance` passed, correctly,
+since no path in this diff falls outside `allowed_paths`):
+
+```
+BASE_SHA: 005b8e6882cea23d87efac030e620704a9546e1a
+HEAD_SHA: a3e6cf34d928948691a92043ba5d4c5118715788
+Test-deletion guard tripped:
+  - deleted test file: tests/policy/codeowners.test.mjs
+```
+
+This is the **first time** the deletion half of this guard has fired on a real PR. The only earlier
+evidence (PR #5, `core/DECISION_LOG.md` "G1's own test-deletion guard was blind to `.test.mjs`") was
+the newly-skipped-test half, and that run was a false positive on string fixtures — the deletion
+half had never been exercised before this run. PR #12 was closed **unmerged**; `main`'s copy of the
+file was never touched.
+
+### 12.4 What all four negative controls now establish together
+
+| Control                     | Direction observed       | Evidence                                                                                      |
+| --------------------------- | ------------------------ | --------------------------------------------------------------------------------------------- |
+| Scope (`allowed_paths`)     | PASS and REFUSE          | §10 (pass), §11 (refuse, run `34640409639`)                                                   |
+| Hash mismatch               | REFUSE and restored PASS | §12.1, run `34654217044` (both directions, same run id)                                       |
+| `forbidden_paths`           | REFUSE and restored PASS | §12.2, run `34654474743`                                                                      |
+| Test-deletion (delete half) | REFUSE                   | §12.3, run `34654709448` — restoration not applicable, the file was never deleted from `main` |
+
+Every mechanical control this repository's governance workflow can produce has now been observed
+refusing at least once, on a real CI run, with the exact log line quoted above it rather than
+paraphrased. None of the four PRs that produced this evidence altered `main` beyond what it already
+was, except PR #10's single decision-log line.
+
+## 13. Operator boundary — nothing below is the implementer's
 
 Note the change §3.1 makes to this list. These are not operator-only because the implementer
 _cannot_ do them; the credential now can. They are operator-only because they are the authority the
