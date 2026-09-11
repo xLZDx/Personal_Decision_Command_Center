@@ -22,7 +22,13 @@ and the credential-model decision as open. All three were already resolved — P
 2026-09-11 (`gh pr view 1`), branch protection is ruleset `PDCC` (R12, closed), and the credential
 model was decided the same day (R13, closed). Corrected on the same branch, pushed as a follow-up
 commit rather than a new branch (no new branch created — same already-authorized
-`gate/g1-evidence-update`), and sent for review before merge.
+`gate/g1-evidence-update`), opened as PR #14.
+
+PR #14 round 1 (`review.js --base a2a2794`, correlated) returned `VERDICT: MINOR`: item 1's own
+fix left a present-tense "What exists is a candidate" sentence sitting next to item 2's own record
+that adoption was already completed — both true at different times, contradictory read together.
+Fixed to read as history ("At this step what existed was only a candidate; adoption ... was
+completed at step 2 ... now also done"). Sent for round 2.
 
 ---
 

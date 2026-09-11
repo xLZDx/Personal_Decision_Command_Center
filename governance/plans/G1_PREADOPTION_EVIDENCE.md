@@ -667,7 +667,8 @@ whole mechanism is built on, and an implementer that adopts its own manifest and
 approval hash has authorized itself. The boundary is held by choice, and saying so is the point.
 
 1. ~~Adopt an authoritative `governance/gate-manifests/g1.yaml`~~ — **authoring delegated and
-   done** (§9). What exists is a candidate; adopting it is step 2, not step 1.
+   done** (§9). At this step what existed was only a candidate; adoption (setting the approval
+   hash) was completed at step 2, below — now also done.
 2. ~~Read the candidate, then set `GATE_MANIFEST_APPROVED_HASH_G1`~~ — **done 2026-09-11** (§10).
    The operator read the bytes, agreed, and adopted them; the variable is set and the scope check
    passes. Read §10.1 before treating this as a fully mechanical separation: it is not one yet.
