@@ -5,6 +5,36 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — The gate ledger disagreed with the closure report of the gate it tracks
+
+**Decision:** correct `core/PLAN_MASTER_GATES.md`'s G0 output block and G1 row **against the
+artifacts**, not against `governance/G0_CLOSURE_REPORT.md`.
+
+**What was wrong.** The block read `PENDING` for outputs B, C, D, N, O and `DRAFT` for F through M,
+while G0 had been closed since 2026-09-10 with those same outputs recorded as DONE/ADOPTED. A gate
+ledger and a closure report contradicting each other is worse than either being wrong alone: a
+reader has no way to tell which is stale.
+
+**Why not just copy the closure report.** Because that would make the ledger agree with a document
+instead of with reality, and the whole failure mode here is a document asserting a state nobody
+re-checked. Each row was verified against the file it names: `EXTERNAL_ASSUMPTIONS.md` carries
+sections B, C and D; each of the eight ADRs carries a `**Status:** ADOPTED at G0 closure` line
+naming its own output letter; `THREAT_MODEL.md` and `GATE_MANIFEST_INTEGRITY.md` exist. The closure
+report turned out to agree with all of it — but agreement was measured, not assumed.
+
+**Two rows deliberately say less than the closure report.** M is ADOPTED with **R9 still open** (the
+probe configured a push consumer, so it closed R8 and never touched R9). O is a **design**, and the
+mechanism it designs was only first observed refusing on 2026-09-11; two of its branches have still
+never run.
+
+**Evidence:** `git show` for this commit; the ADR status lines and `EXTERNAL_ASSUMPTIONS.md` section
+headings quoted above were read directly.
+
+**How to apply:** when a ledger and a report disagree, check the artifact. Neither document is
+evidence about the other.
+
+---
+
 ## 2026-09-11 — Negative control at the scope step, run on a real out-of-scope edit
 
 **Decision:** demonstrate the scope refusal with a change that is genuinely needed and genuinely
