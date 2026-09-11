@@ -5,6 +5,96 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — G1's own test-deletion guard was blind to `.test.mjs`, on both halves at once
+
+**Decision:** `scripts/verify/check-test-deletion.mjs` is rewritten so the rule "what counts as a
+test file" exists exactly once, and `tests/policy/test-deletion.test.mjs` is added to hold it there.
+
+**The defect, measured rather than described.** Two independent encodings of the same rule, both
+narrower than the corpus:
+
+- line 32, the file-status filter: `/(^|\/)tests\/.*\.test\.ts$|\.test\.ts$/` — `.test.ts` only
+  (and the first alternative was dead: the second subsumes it);
+- line 52, the skip-detection diff: `git(['diff', '-U0', range, '--', '*.test.ts'])` — the same
+  narrowing again, in a different syntax.
+
+Against the actual corpus that meant **three of five test files were invisible to the guard**:
+`tests/policy/gate-scope.test.mjs`, `floor-scope.test.mjs`, `codeowners.test.mjs`. Those are not an
+arbitrary three — they are **every governance suite**, the ones that police the gate mechanism
+itself. Any PR could have deleted or `.skip`-ed all three, and the guard would have printed
+`Test-deletion guard: no tests removed or skipped.` and exited 0. G1's deliverable was a guard that
+did not guard the part of the repository G1 exists to protect.
+
+**The root cause is not the extension.** It is that one rule was written twice with nothing tying
+the two copies together, so correcting either one alone would leave the other silently narrower.
+`TEST_EXTENSIONS` is now the single source; `TEST_FILE` and `TEST_PATHSPECS` are both derived from
+it. Same class as the workspace lesson "identical regex text is not one rule", arrived at from the
+opposite direction: there, two texts that looked identical behaved differently; here, two texts that
+had to stay in step had nothing keeping them there.
+
+**Structure changed to match `check-gate-scope.mjs` rather than inventing a second shape:** pure
+exported functions plus `run()` returning an exit code, with a `import.meta.url === argv[1]` main
+guard. The previous file executed at import time and called `process.exit`, so no test could reach
+it at all — which is why the defect survived to be found by reading rather than by testing.
+
+**Three real behaviours were fixed alongside, not just the extension list:**
+
+1. `--name-status` now uses `-z`. Without it git quotes and backslash-escapes unusual filenames, and
+   an escaped path is matched against a pattern written in terms of the real one. `check-gate-scope.mjs`
+   already documented this reasoning for itself; this file had not adopted it.
+2. A rename is parsed correctly. Under `-z` a rename carries **two** path fields, so reading fields
+   in pairs desyncs every record after the first rename — a deletion following a rename would have
+   been read as a status string.
+3. A rename that carries a file **out** of the test corpus (`x.test.mjs` → `x.mjs`) is now a
+   problem, not a note. Previously only the destination was tested, so that rename — a complete
+   loss of coverage with no deletion in the diff — passed unremarked.
+
+**Evidence, both directions.** `npx vitest run`: 117 passed, 6 files. Then the defect was
+deliberately reintroduced (`TEST_EXTENSIONS = ['ts']`) and the suite re-run: **6 failures**,
+including the corpus assertion and the `run()` exit-code path. Eight mutations were added to
+`scripts/verify/mutation-check.mjs` covering both encodings separately, the rename-source check, the
+`-z` flag, the rename field-count, the skip marker, and both `return 1` exit paths.
+
+**The mutation harness then found a guard I had not actually tested, which is what it is for.** The
+first full run reported `1 SURVIVOR: check-test-deletion.mjs: drop -z`. Real, not a harness
+artifact: every assertion in the new suite fed `findProblems` NUL-joined fixtures, so the flag at
+the call site was never exercised. Fixed the way the sibling suite already does it rather than by
+inventing a second shape — `gate-scope.test.mjs` tests `changedPathsFrom` against a REAL temporary
+git repository with `core.quotepath true` and awkward filenames, so this suite now does the same:
+a scratch repo where `документ.test.mjs` and `has space.test.mjs` are deleted, run through the real
+`run()`. Measured both ways: green with `-z`, and **both new cases fail** with `-z` removed.
+
+Dropping `-z` breaks the check twice over, and the second reason was found by measurement rather
+than assumed: the record parser is NUL-based, so the whole output arrives as a single field and
+nothing is recognised at all — before the quoting problem is even reached. The code comment was
+corrected to say both, because the first draft claimed only the quoting mechanism.
+
+**Final measurement: `npm run verify:mutation` — 42 of 42 killed, no survivors**, and the suite is
+119 passed across 6 files. (An interim status message in this session said "22 of 23 killed"; that
+was read off a `tail`-truncated listing and is wrong. The first run was 42 mutations with exactly
+one survivor. Corrected here rather than left standing, because a truncated command output that
+looks like a complete result is the same evidence failure this entry is about.)
+
+**A vacuous assertion caught in my own test, recorded because it is the failure mode I look for in
+others.** The case asserting that git is asked for every extension originally only looped over
+`TEST_EXTENSIONS` — so under the `['ts']` mutation it **stayed green**, because it asserted the
+guard was consistent with itself and nothing more. Found by running the mutation, not by reading.
+Fixed by asserting a named floor (`*.test.mjs` and `*.test.ts` literally) **before** the derived
+loop. Re-measured: that case now fails under the same mutation.
+
+**The assertion that would have caught the original defect**, and the reason it is written the way
+it is: `tests/policy/test-deletion.test.mjs` enumerates every tracked file whose basename contains
+`.test.` — a deliberately _different_ rule from the one under test — and requires `TEST_FILE` to
+match each. A per-case unit test could not have caught this, because each case would have been
+written with a `.test.ts` fixture by the same person who wrote the rule, passed, and proved nothing
+about the corpus the guard actually faces.
+
+**How to apply:** adding a test file in a new extension is now a one-line change in
+`TEST_EXTENSIONS`, and the corpus assertion fails loudly if someone forgets. Do not re-encode the
+extension rule anywhere else — the second copy is the defect, not the wrong value in it.
+
+---
+
 ## 2026-09-11 — The floor for "Gate: NONE" PRs is code under scripts/verify/, not a YAML manifest
 
 **Decision:** `governance/gate-manifests/_floor.yaml` (the fixed allow-list for an ungated PR,

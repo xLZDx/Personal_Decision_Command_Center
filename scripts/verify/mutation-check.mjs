@@ -253,6 +253,70 @@ const MUTATIONS = [
     to: 'checkScope({ changedPaths, allowed: ALLOWED_PATHS, forbidden: [] });',
   },
 
+  // The test-deletion guard. It shipped blind to `.test.mjs` on BOTH of its halves at once, which
+  // left every governance suite in this repository deletable in silence while the check printed
+  // "no tests removed or skipped". The first two mutations below reintroduce exactly that defect,
+  // once through the extension list and once through the pathspec alone -- separately, because a
+  // single mutation covering both would not prove the two encodings are independently anchored.
+  {
+    label: 'check-test-deletion.mjs: narrow the extension list back to .test.ts only',
+    file: 'scripts/verify/check-test-deletion.mjs',
+    from: "export const TEST_EXTENSIONS = ['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs'];",
+    to: "export const TEST_EXTENSIONS = ['ts'];",
+  },
+  {
+    label:
+      'check-test-deletion.mjs: ask git only for *.test.ts, so skip detection goes blind again',
+    file: 'scripts/verify/check-test-deletion.mjs',
+    from: "runGit(['diff', '-U0', range, '--', ...TEST_PATHSPECS]);",
+    to: "runGit(['diff', '-U0', range, '--', '*.test.ts']);",
+  },
+  {
+    label:
+      'check-test-deletion.mjs: stop testing the rename SOURCE, so a rename out of the corpus passes',
+    file: 'scripts/verify/check-test-deletion.mjs',
+    from: 'const touchesTest = TEST_FILE.test(path) || (source !== undefined && TEST_FILE.test(source));',
+    to: 'const touchesTest = TEST_FILE.test(path);',
+  },
+  {
+    label: 'check-test-deletion.mjs: read a rename as one path field, desyncing every later record',
+    file: 'scripts/verify/check-test-deletion.mjs',
+    from: '      i += 2;\n      if (destination === undefined) break;',
+    to: '      i += 1;\n      if (destination === undefined) break;',
+  },
+  {
+    label: 'check-test-deletion.mjs: drop the xit/xdescribe half of the skip marker',
+    file: 'scripts/verify/check-test-deletion.mjs',
+    from: 'const SKIP_MARKER = /\\b(?:it|test|describe)\\.(?:skip|todo)\\b|\\bxit\\b|\\bxdescribe\\b/;',
+    to: 'const SKIP_MARKER = /\\b(?:it|test|describe)\\.(?:skip|todo)\\b/;',
+  },
+  {
+    label: 'check-test-deletion.mjs: run() exits 0 despite deleted or skipped tests',
+    file: 'scripts/verify/check-test-deletion.mjs',
+    from:
+      "        'and record the decision in core/DECISION_LOG.md. Do not silently drop coverage.',\n" +
+      '    );\n' +
+      '    return 1;',
+    to:
+      "        'and record the decision in core/DECISION_LOG.md. Do not silently drop coverage.',\n" +
+      '    );\n' +
+      '    return 0;',
+  },
+  {
+    label: 'check-test-deletion.mjs: run() exits 0 when the pull_request context is missing',
+    file: 'scripts/verify/check-test-deletion.mjs',
+    from:
+      "    error('BASE_SHA and HEAD_SHA must be set (pull_request context).');\n" + '    return 1;',
+    to:
+      "    error('BASE_SHA and HEAD_SHA must be set (pull_request context).');\n" + '    return 0;',
+  },
+  {
+    label: 'check-test-deletion.mjs: drop -z, so git quotes and escapes unusual filenames',
+    file: 'scripts/verify/check-test-deletion.mjs',
+    from: "runGit(['diff', '--name-status', '-z', range]);",
+    to: "runGit(['diff', '--name-status', range]);",
+  },
+
   // CODEOWNERS is the only control that actually enforces anything here (merge authority; CI is
   // detection), so dropping a path from it is the highest-consequence silent edit in the repo.
   // These mutate the data rather than code, which is exactly right: the guard IS the assertion.
