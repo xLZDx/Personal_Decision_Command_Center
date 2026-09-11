@@ -2,10 +2,9 @@
 
 **Plan ID:** `pdos-g1-remediation-2026-09-10`
 **Gate:** G1 — Repository + governance enforcement + CI + contracts
-**Status:** OPEN. Steps 1-8 done (2026-09-11); R13 closed as an accepted risk (operator decision,
-2026-09-11) and the scope-step negative control run (run `34640409639`). Remaining: the
-`forbidden_paths` refusal, the hash-mismatch control (operator-only), the test-deletion control's
-deletion half, the fresh-context review, and the closure report. See "Blocked on the operator".
+**Status:** Steps 1-9 done (2026-09-12) — all four negative controls now have real CI evidence in
+both directions where applicable; R13 closed as an accepted risk (operator decision, 2026-09-11).
+Remaining: the fresh-context review and the closure report (steps 10-11).
 **Supersedes:** nothing. Commit `b784265` is **bootstrap implementation, not gate-approved work**.
 
 ## Why this plan exists
@@ -73,8 +72,7 @@ procedural and no document in this repository may claim otherwise.
 6. Create branch gate/g1-remediation                            AUTHORIZED by GPT-PM APPROVE
 7. Fix G1-M2: one governance workflow, hash-check -> scope-check DONE (see below)
 8. Confirm CI actually runs and is green on that branch          DONE (run 34544309071, steps 4-6 green)
-9. Negative-control PR tests (see below)                         2 of 4 done; the other two
-                                                                are operator-owned
+9. Negative-control PR tests (see below)                         DONE, 4 of 4 (2026-09-12)
 10. Fresh-context G1 review                                      pending
 11. G1 closure report                                            pending
 ```
@@ -88,9 +86,12 @@ distinguish implementer from operator, so any separation described in these docu
 not mechanical. The operator declined the second-identity branch of the mitigation on 2026-09-11,
 which makes the other branch binding: no document here may assert mechanical separation.
 
-**Status of step 9 — stated narrowly, because the obvious wider claim is not supported.** Two of the
-four bullets are done: branch protection is now evidenced by `gh api` output rather than by this
-document's word for it, and the scope-step refusal has now actually been run.
+**Status of step 9 — all four done, 2026-09-12.** Branch protection is evidenced by `gh api` output;
+all three remaining negative controls were executed on temporary branches, authorized by the
+operator directly plus a GPT-PM `VERDICT: APPROVE` naming all three branches (§14 via §20, branch
+creation is reversible), and by `~/.claude/CLAUDE.md` §25 (added the same day: recoverability, not
+the word "delete"/"forbidden", is what made these controls the implementer's to run instead of the
+operator's). Full record: `G1_PREADOPTION_EVIDENCE.md` §12.
 
 The **scope-step control has now been observed in BOTH directions.** It passed on run
 `34544309071` (step 6, 28 paths, all in scope) and **refused** on run `34640409639`, job
@@ -106,13 +107,24 @@ The instrument was a real change, not a synthetic one — `.dev.vars` is genuine
 `.gitignore` and genuinely out of G1's scope, and the follow-up commit reverts it, leaving the gap
 open for the gate that may legitimately close it.
 
-The **hash-mismatch control** has not been run either; it requires a branch that deliberately edits
-`g1.yaml`, which is operator-only territory.
+The **hash-mismatch control ran on branch `gate/g1-hash-control`, PR #10.** With
+`GATE_MANIFEST_APPROVED_HASH_G1` set to a deliberately wrong value, run `34654217044` failed at the
+hash step with `Manifest hash mismatch for G1`, step 6 never ran; rerun after restoring the correct
+value, both steps passed. PR #10 merged for its decision-log evidence only. Full record:
+`G1_PREADOPTION_EVIDENCE.md` §12.1.
 
-The **test-deletion control has partial evidence and stays open.** On PR #5 the guard refused a real
-PR in real CI (run `34632358953`), reaching `.mjs` files for the first time — but what it caught was
-a **false positive** (string fixtures describing skip syntax), not a genuinely skipped test, and the
-deletion half has still never fired on a real PR. Partial evidence is not the control.
+The **forbidden_paths control ran on branch `gate/g1-forbidden-control`, PR #11 (closed unmerged).**
+Editing `governance/operator-approvals/README.md` produced `forbidden by the G1 manifest (pattern:
+governance/operator-approvals/**)` on run `34654474743` — textually distinct from the ordinary
+out-of-scope message, confirming forbidden paths get their own refusal. Reverted in the same PR;
+restored-green confirmed; `main` untouched. Full record: `G1_PREADOPTION_EVIDENCE.md` §12.2.
+
+The **test-deletion control's deletion half ran on branch `gate/g1-deletion-control`, PR #12
+(closed unmerged).** Deleting `tests/policy/codeowners.test.mjs` produced `Test-deletion guard
+tripped: - deleted test file: tests/policy/codeowners.test.mjs` on run `34654709448` — the first
+time this half has fired on a real PR; the earlier PR #5 evidence (run `34632358953`) was only the
+newly-skipped-test half, and a false positive at that. `main`'s copy of the file was never touched.
+Full record: `G1_PREADOPTION_EVIDENCE.md` §12.3.
 
 The **test-deletion control was not demonstrable
 as written until 2026-09-11**: the guard was blind to `.test.mjs`, so a PR deleting a `.mjs` test
