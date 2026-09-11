@@ -1,0 +1,1185 @@
+<title>G1 Pre-Adoption Boundary</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Gate G1 · Pre-adoption</p>
+    <h1>The G1 Manifest: A Proposal, Not An Authority</h1>
+    <p class="standfirst">
+      The manifest is written, validated by the same code CI executes, and deliberately left
+      non-binding. Along the way, the mechanism it serves turned out to rest on a premise that no
+      longer holds on this machine.
+    </p>
+    <div class="masthead-meta">
+      <span>10 September 2026</span>
+      <span>branch gate/g1-remediation</span>
+      <span>24 paths · 17 negative controls</span>
+      <span>G1 NOT closed</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 091718b</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+
+
+
+
+
+
+
+
+
+
+  <div class="verdict">
+    <span class="stamp">VERDICT: APPROVE</span>
+    <p>
+      Five GPT-PM verdicts, three of them <strong>REJECT</strong>, and all three were right. The
+      first plan performed real G1 document remediation before a binding manifest existed. The
+      second asked for the APPROVE that would authorize steps already taken. The third was
+      approved — but its <em>closure</em> was rejected: the proposal file was edited after the GO,
+      outside the authorized steps. The fifth verdict approved the narrow reconciliation plan that
+      fixes it.
+    </p>
+    <p class="who">
+      GPT-PM · plan …-cd44c5 (hash 0305b98…, reply ffa0eaa8…) → closure REJECT → plan …-f95cda
+      (hash 5eefefa…, reply 92d7ff52…)
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">01</span>
+      <div><h2>What was actually built</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        <code>governance/plans/G1_MANIFEST_PROPOSAL.yaml</code> — an implementer-authored draft of
+        the gate manifest. It lives in <code>plans/</code> rather than <code>gate-manifests/</code>,
+        and that is not a filing convention: a manifest an implementer can freely edit in their own
+        branch has no authority at all (INV-28). The file carries the markers
+        <code>NON_BINDING_PROPOSAL</code>, <code>IMPLEMENTER_AUTHORED</code>,
+        <code>HAS_NO_AUTHORITY</code> and the header comment GPT-PM dictated.
+      </p>
+      <p>
+        <strong>24 <code>allowed_paths</code>, 4 <code>forbidden_paths</code>, no bare
+        <code>**</code> anywhere.</strong> Every entry is tagged with where it comes from:
+        <code>[CUMULATIVE]</code> — already in the branch's diff, <code>[REMAINING]</code> — needed
+        by a named remaining closure action, <code>[BOTH]</code> — both.
+      </p>
+      <div class="note">
+        <strong>Why cumulative rather than "only what is left".</strong> The guard evaluates
+        <code>git diff BASE_SHA...HEAD_SHA</code>, so it checks the whole PR merge range, not the
+        last commit. A manifest listing only future actions would fail on paths the branch already
+        carries — at the exact moment it was adopted. This is GPT-PM correcting its own earlier
+        instruction, and the correction is right.
+      </div>
+      <p class="kicker">Validated by the same code CI executes</p>
+      <p>
+        The check imports <code>parsePathList</code>, <code>compilePattern</code> and
+        <code>checkScope</code> directly from <code>scripts/verify/check-gate-scope.mjs</code>
+        rather than restating them in a more forgiving copy written for the occasion. A defect in
+        the real guard has to surface here instead of hiding.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>The proposal run through the production parser and matcher.</caption>
+          <thead>
+            <tr><th>Check</th><th class="num-col">Result</th><th>What it proves</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Branch paths against the scope</td>
+              <td class="num-col">28 / 28</td>
+              <td>No existing path falls outside the proposed merge range. It was 24 before
+                <code>a33140e</code> added four files — every one of them already anticipated by
+                the manifest</td>
+            </tr>
+            <tr>
+              <td>Patterns in the manifest</td>
+              <td class="num-col">28</td>
+              <td>24 <code>allowed_paths</code> + 4 <code>forbidden_paths</code>. A <em>different</em>
+                28 from the row above — a coincidence, not the same number. An earlier version of
+                this evidence said "27 (23 + 4)", which was simply a miscount, caught in review</td>
+            </tr>
+            <tr>
+              <td>Negative controls</td>
+              <td class="num-col">17 refused</td>
+              <td>The scope <em>actually refuses</em>: the binding manifest itself, the operator's
+                approval records, the frozen TDD, the contracts, the ADRs, G0 artifacts — and the
+                cases where <code>*</code> must not cross <code>/</code></td>
+            </tr>
+            <tr>
+              <td>Positive controls</td>
+              <td class="num-col">11 accepted</td>
+              <td>Every path a remaining G1 closure action needs gets through</td>
+            </tr>
+            <tr>
+              <td><code>npm run verify</code></td>
+              <td class="num-col">88 tests</td>
+              <td>Green; prettier, eslint and tsc clean</td>
+            </tr>
+            <tr>
+              <td><code>npm run verify:mutation</code></td>
+              <td class="num-col">30 / 30</td>
+              <td>All mutations killed — the guards bite</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>proposal_sha256</code> =
+        <code>26a5a9135c9e9bcfb2ea75ac825416b7a0a34ac5185f0d67aca52cc6d6a8c764</code> (18012 bytes).
+        This is <strong>evidence of what was reviewed, and not the approval hash</strong>. The
+        approval hash must be computed from the file actually adopted, and this file cannot be it
+        byte-for-byte: copied verbatim, it would assert <code>HAS_NO_AUTHORITY</code> about itself.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02</span>
+      <div><h2>The finding that matters more than the manifest</h2></div>
+    </div>
+    <div class="flow">
+      <div class="alarm">
+        <h3>The approval hash is not out of the implementer's reach</h3>
+        <p>
+          The entire manifest-integrity mechanism is built on the approved hash living
+          <em>outside</em> the implementer's reach. <code>GATE_MANIFEST_INTEGRITY.md</code> says so;
+          so did the proposal. <strong>It does not.</strong>
+        </p>
+        <p>
+          Measured after the operator authenticated <code>gh</code>: a classic PAT for the
+          <code>xLZDx</code> account with <code>repo</code>, <code>workflow</code>,
+          <code>admin:org</code>, <code>admin:repo_hook</code>, <code>admin:enterprise</code> and
+          more; <code>.permissions</code> on this repository is <code>{"admin":true,…}</code>. The
+          same session that authors a manifest can:
+        </p>
+        <ul>
+          <li>set <code>GATE_MANIFEST_APPROVED_HASH_G1</code>;</li>
+          <li>adopt a manifest and then set the hash to match it — precisely the self-authorizing
+            loop NM3 identified and this mechanism exists to prevent;</li>
+          <li>remove or weaken branch protection;</li>
+          <li>edit the <code>Governance</code> workflow that polices it;</li>
+          <li>merge its own pull request.</li>
+        </ul>
+        <p>
+          None of that will be done. The point is that none of it is
+          <strong>prevented</strong>. Every control described here as operator-held is, as of now,
+          <strong>procedural</strong> — it rests on the implementer not doing what it is fully able
+          to do.
+        </p>
+      </div>
+      <p>
+        The token is classic rather than fine-grained, so it has no per-repository boundary: the
+        same holds for every other repository the account can reach. That is beyond G1's scope, but
+        it is the operator's to know.
+      </p>
+      <p class="kicker">Three ways to restore the mechanical property — the choice is the operator's</p>
+      <div class="table-scroll">
+        <table>
+          <caption>None of these is the implementer's to pick.</caption>
+          <thead>
+            <tr><th>Option</th><th>What it gives</th><th>What it costs</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Fine-grained token scoped to this repository</td>
+              <td>No <code>administration</code>, no <code>variables</code>/<code>secrets</code>
+                write. The hash is unreachable again; <code>contents</code> and
+                <code>pull_requests</code> remain</td>
+              <td>Administrative operations become manual</td>
+            </tr>
+            <tr>
+              <td>Keep the broad token out of the agent's environment</td>
+              <td>The same guarantee without reissuing anything</td>
+              <td>Every admin step is done by hand</td>
+            </tr>
+            <tr>
+              <td>Accept the procedural model explicitly</td>
+              <td>No access changes at all</td>
+              <td>The documents must stop calling these controls mechanical</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The third option is what the repository's documents are effectively doing today without
+        admitting it. The first two are what they <em>describe</em>.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">03</span>
+      <div><h2>Measured facts on R11 / R12 / R13</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>All from primary sources in this session, not from a summary.</caption>
+          <thead>
+            <tr><th>Risk</th><th>State</th><th>Evidence</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>R11</strong><br>Actions billing</td>
+              <td><span class="chip part">open</span></td>
+              <td><strong>Two</strong> runs exist in the repository's entire history, both
+                <code>steps: 0</code>, 3-4 seconds, both <em>predating</em> publication. Not one
+                step has ever executed. Publication <em>should</em> have removed the block, but that
+                is <strong>unverified</strong>: no triggering event has occurred since. One pull
+                request closes it — that is the whole test</td>
+            </tr>
+            <tr>
+              <td><strong>R12</strong><br>branch protection</td>
+              <td><span class="chip part">available, not enabled</span></td>
+              <td><code>private: false</code>, <code>visibility: public</code> — the success of an
+                <em>unauthenticated</em> read is itself the proof. <code>/branches</code> reports
+                <code>protected: false</code> for both <code>main</code> and the gate branch. R12's
+                original premise (a paid plan is required) no longer holds</td>
+            </tr>
+            <tr>
+              <td><strong>R13</strong><br>implementer identity</td>
+              <td><span class="chip block">confirmed</span></td>
+              <td>All eight commits — five on <code>main</code>, three on the branch — are authored
+                by the single identity
+                <code>xLZDx &lt;25364989+xLZDx@users.noreply.github.com&gt;</code>, and
+                <code>main</code> took five direct pushes</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <strong>R13 is stated narrowly, and that matters.</strong> True: CODEOWNERS cannot
+        mechanically prove operator-vs-implementer separation when both act as <code>xLZDx</code>;
+        GitHub forbids a PR's author from approving it, so "require Code Owner review" plus one
+        account is a deadlock, not a control. It does <strong>not</strong> follow that GitHub can
+        enforce nothing: requiring a PR, requiring green checks, forbidding force-push and deletion,
+        and applying all of it to the administrator are all things it does, and none of them depends
+        on telling two humans apart.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">04</span>
+      <div><h2>Three defects admitted</h2></div>
+    </div>
+    <div class="defects">
+      <div class="defect">
+        <span class="idx">1</span>
+        <div>
+          <h3>A GPT-PM claim rejected on evidence</h3>
+          <p>
+            The second REJECT stated that <code>G1_PREADOPTION_EVIDENCE.md</code> had already been
+            created and must be classified as historical. It had not been.
+            <code>git status --short</code> showed exactly one untracked path, and it was not that
+            one.
+          </p>
+          <p class="why">
+            Recording a mutation that never happened corrupts an audit trail as reliably as omitting
+            one that did. The file was classified as future work, the correction was put to GPT-PM,
+            and it accepted it.
+          </p>
+        </div>
+      </div>
+      <div class="defect">
+        <span class="idx">2</span>
+        <div>
+          <h3>An edit made after the GO, outside the authorized steps</h3>
+          <p>
+            The approved plan classified the proposal file under its <em>historical</em> items and
+            authorized only F8-F12. During F8, the §02 finding showed that a statement inside the
+            proposal had become false — so it was corrected. The trigger was genuine. The
+            authorization was not there. GPT-PM rejected the closure with a BLOCKER, and was right
+            to.
+          </p>
+          <p class="why">
+            "The edit was sensible" is not "the edit was in scope". Dissolving it into a
+            successfully closed plan would have been precisely the audit-trail corruption this
+            repository has already corrected three times. <code>a33140e</code> is not reverted:
+            rewriting history for a tidier record destroys evidence to buy appearances. The edit is
+            recorded as <code>governed=false</code>, permanently.
+          </p>
+        </div>
+      </div>
+      <div class="defect">
+        <span class="idx">3</span>
+        <div>
+          <h3>A withdrawal of this session's own, itself withdrawn</h3>
+          <p>
+            An earlier session had recorded that <code>/branches/main/protection</code> answers
+            <code>Branch not protected</code>. An unauthenticated probe returned
+            <strong>HTTP 401</strong>, so it was written up as unreproducible and withdrawn. Once
+            the operator authenticated <code>gh</code>, the same endpoint returned
+            <strong>HTTP 404 <code>{"message":"Branch not protected"}</code></strong> — verbatim the
+            original claim. <strong>The earlier claim was right and the withdrawal was wrong.</strong>
+          </p>
+          <p class="why">
+            The error was letting "I could not reproduce it" stand for "it is not true", when the two
+            differ by exactly the credential the probe lacked. A failed measurement is evidence about
+            the measurement first. The conclusion never moved, only the reason under it — which is
+            what made the mistake comfortable enough to write down.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">05</span>
+      <div><h2>The plan, and what came of it</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        Steps H1-H7 were performed <em>before</em> approval and remain <code>governed=false</code>
+        permanently: the APPROVE does not legalize them retroactively. That is the point of the
+        AS-OF cutoff at <code>2026-09-10T20:40:35Z</code>.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>The Definition of Done in each row is GPT-PM's criterion, not the implementer's.</caption>
+          <thead>
+            <tr><th>Step</th><th>Definition of Done</th><th>Status</th><th>Tail</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>H1 · re-verify GitHub facts</td>
+              <td>Primary sources, not a retelling</td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">done</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>H2-H3 · the manifest proposal</td>
+              <td>Markers present, GPT-PM's header, cumulative scope, no bare <code>**</code></td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">done</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>H4-H5 · validation and sha256</td>
+              <td>Production parser, controls, hash as evidence only</td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">done</span></td>
+              <td>Hash recomputed after limitation 5 was added</td>
+            </tr>
+            <tr>
+              <td>H6 · close the superseded plan</td>
+              <td>Status <code>rejected</code>, no evidence required</td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">done</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>H7 · install <code>gh</code></td>
+              <td>Direct operator instruction</td>
+              <td><span class="chip hist">governed=false</span> <span class="chip done">done</span></td>
+              <td>The operator then logged in; that is what exposed §02</td>
+            </tr>
+            <tr>
+              <td>F8 · the evidence artifact</td>
+              <td>A primary source under every fact; stale claims recorded, not fixed</td>
+              <td><span class="chip done">done</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>F9 · decision log</td>
+              <td>Both REJECTs, the boundary, the corrections</td>
+              <td><span class="chip done">done</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>F10 · report</td>
+              <td>Both files, conformed, Russian published</td>
+              <td><span class="chip done">done</span></td>
+              <td>This is it</td>
+            </tr>
+            <tr>
+              <td>F11 · commit and push</td>
+              <td>Remote branch matches local</td>
+              <td><span class="chip done">done</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>X1 · post-GO edit of the proposal</td>
+              <td>—<br><em>nothing authorized it</em></td>
+              <td><span class="chip hist">governed=false</span> <span class="chip block">violation</span></td>
+              <td>Recorded permanently; <code>a33140e</code> not reverted</td>
+            </tr>
+            <tr>
+              <td>Y1-Y2 · fix the wording and the count</td>
+              <td>"only the operator can set" absent; 24/4 untouched</td>
+              <td><span class="chip done">done</span></td>
+              <td>Digest recomputed: <code>26a5a91…</code></td>
+            </tr>
+            <tr>
+              <td>Y3-Y5 · log, reports, push</td>
+              <td>One digest across every document</td>
+              <td><span class="chip done">done</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>Y6 · re-submit the closure</td>
+              <td>GPT-PM checks the three findings and direct regressions only</td>
+              <td><span class="chip part">submitted</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>F12 / Y7 · stop</td>
+              <td>Do not continue G1 unilaterally</td>
+              <td><span class="chip block">boundary</span></td>
+              <td>Everything in §06</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">Stale claims — recorded, deliberately NOT fixed</p>
+      <p>
+        Correcting the documents is real G1 remediation, and that waits for a binding manifest.
+        This is GPT-PM's BLOCKER and it stands. Found to the line:
+        <code>GATE_MANIFEST_INTEGRITY.md:31</code> ("<code>main</code> is a protected branch. The
+        implementer has no direct-push and no merge permission" — disproved by five direct pushes),
+        line 34 of the same file, and <code>.github/CODEOWNERS:3-5</code> ("the control that
+        actually enforces").
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">06</span>
+      <div><h2>What is now the operator's</h2></div>
+    </div>
+    <div class="ask">
+      <h3>Six decisions, none of them the implementer's</h3>
+      <ol>
+        <li>
+          Read and <strong>edit</strong> the proposal. Narrowing it is always safe; widening it is
+          the thing to be suspicious of.
+        </li>
+        <li>
+          Write the result to <code>governance/gate-manifests/g1.yaml</code>, replacing the header
+          and the <code>status</code> block with adoption markers. <strong>As its own commit on
+          <code>main</code></strong>, not inside the gate PR: that path is in
+          <code>forbidden_paths</code>, so a PR carrying it must fail — correctly.
+        </li>
+        <li>
+          Compute the sha256 of the <em>adopted file</em>:
+          <code>Get-FileHash -Algorithm SHA256 governance\gate-manifests\g1.yaml</code>.
+        </li>
+        <li>Set that value as the repository variable <code>GATE_MANIFEST_APPROVED_HASH_G1</code>.</li>
+        <li>Decide and apply branch protection — the single-account configuration is in §6 of the
+          evidence artifact: PR required, both checks required, approving reviews
+          <strong>0</strong>, Code Owner review <strong>off</strong> (otherwise the self-approval
+          deadlock), applied to administrators, force-push and deletion disabled.</li>
+        <li>
+          <strong>Decide the credential model from §02.</strong> A fine-grained token, a
+          hand-operated admin path, or an explicit acceptance of the procedural model. Whichever is
+          chosen, the documents must end up saying exactly what the token actually permits.
+        </li>
+      </ol>
+      <p>
+        <strong>The PR can now technically be opened from here</strong> — <code>gh</code> is
+        installed and authenticated. It has not been: the approved plan ends at a stop, and opening
+        the PR is step 6 of GPT-PM's sequence and needs its own GO. Say the word and it will be
+        requested.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">07</span>
+      <div><h2>The prediction held: the guard caught refusing</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The prediction was written down <em>before</em> the pull request existed, so a miss would
+        have been as visible as a hit. <strong>It held in full.</strong> PR <strong>#1</strong>,
+        <code>gate/g1-remediation</code> &rarr; <code>main</code>, head <code>3c43d06</code>.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>The step count is the headline here, not a detail.</caption>
+          <thead>
+            <tr><th>Run</th><th>Workflow</th><th>Conclusion</th><th class="num-col">Steps</th><th>Duration</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="num-col">34533959619</td><td><code>CI</code></td><td><span class="chip done">success</span></td><td class="num-col">15</td><td class="num-col">33 s</td></tr>
+            <tr><td class="num-col">34533959777</td><td><code>Governance</code></td><td><span class="chip block">failure</span></td><td class="num-col">9</td><td class="num-col">10 s</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Every previous run in the repository's history reported <code>steps: 0</code> and died in
+        3-4 seconds — the billing block, nothing executing. <strong>Fifteen executed steps is the
+        first proof that CI runs here at all.</strong> The 88 tests that were only ever local
+        evidence have now run on a clean machine from a clean checkout.
+      </p>
+      <p class="kicker">Governance: nine steps, and both claims tested</p>
+      <pre><code>4. Resolve the gate this PR belongs to                      success
+5. Verify manifest hash against operator-controlled state   FAILURE
+6. Check changed paths against the verified manifest        SKIPPED</code></pre>
+      <p>Verbatim from the failing step's annotations:</p>
+      <pre><code>No manifest at governance/gate-manifests/g1.yaml and no approved hash for G1.
+The operator must author and adopt the manifest, and set the repository
+variable GATE_MANIFEST_APPROVED_HASH_G1, before this gate can merge.
+An implementer-authored manifest has no authority (INV-28).</code></pre>
+      <ul>
+        <li><strong>The guard refuses.</strong> First time in this project's life that a control has
+          been observed saying no. Everything before it was a description of a control.</li>
+        <li><strong>The scope check is unreachable behind the hash check</strong> — step 6
+          <code>SKIPPED</code>, not merely failed. Exactly what G1-M2 was about: validating a diff
+          against a manifest whose integrity was never established is circular, because that same
+          diff could have rewritten the manifest authorizing it (NM3).</li>
+      </ul>
+      <p>
+        <strong>R11 is factually resolved</strong> — non-zero step counts are the one thing that
+        closes it. But <code>core/RISK_REGISTER.md</code> is deliberately untouched: changing a
+        risk's status is G1 document remediation and waits for the binding manifest. GPT-PM raised
+        this as a BLOCKER against the plan's first revision and was right to.
+      </p>
+      <p>
+        Backlog, not blocking: both jobs warn that <code>actions/checkout@v4</code> and
+        <code>actions/setup-node@v4</code> target the deprecated Node.js 20.
+      </p>
+    </div>
+  </section>
+
+
+  <section>
+    <div class="section-head">
+      <span class="num">08</span>
+      <div><h2>The manifest is written. One operator action remains</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The operator delegated authoring: <em>"go, create the manifest for me and everything you
+        can do yourself"</em>. Authoring, yes. <strong>Approving, no</strong> &mdash; and that
+        difference is the entire mechanism. This was not decided unilaterally: the question went to
+        GPT-PM as a decision with options, and it ruled &mdash; <em>"implementer may author and
+        push the candidate manifest at the operator's explicit direction, but must not set
+        GATE_MANIFEST_APPROVED_HASH_G1"</em>.
+      </p>
+      <p>
+        The reason, recorded in the file itself: if one party writes a manifest <em>and</em>
+        installs the hash that makes it binding, the check proves nothing &mdash; the loop is closed
+        with no external party in it. That is NM3 from the v0.2 adversarial review, and G1's whole
+        closure argument rests on NM3 being closed.
+      </p>
+
+      <p class="kicker">What now exists in the repository</p>
+      <p>
+        <code>governance/gate-manifests/g1.yaml</code>, commit <code>34b9d2d</code>, directly on
+        <code>main</code> &mdash; <strong>outside PR #1</strong>. Not a stylistic choice:
+        <code>governance/gate-manifests/**/*.yaml</code> is in the manifest's own
+        <em>forbidden_paths</em>, so a PR carrying its own authorizing manifest would fail the very
+        check it was trying to satisfy. Asserted, not reasoned:
+        <code>git diff --name-only main...gate/g1-remediation</code> does not list it &mdash; zero
+        occurrences.
+      </p>
+
+      <p class="kicker">The changed refusal message is the evidence</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Runs A and B failed for a missing file. C fails for a different reason.</caption>
+          <thead>
+            <tr><th>Generation</th><th>Head</th><th>CI</th><th>Governance</th><th>Step 5 message</th><th>Step 6</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>A</td><td><code>3c43d06</code></td><td>success, 15</td><td>failure, 9</td><td>no manifest, no hash</td><td><span class="chip block">SKIPPED</span></td></tr>
+            <tr><td>B</td><td><code>5bbf783</code></td><td>success, 15</td><td>failure, 9</td><td>no manifest, no hash</td><td><span class="chip block">SKIPPED</span></td></tr>
+            <tr><td>C</td><td><code>7ad63fa</code></td><td>success, 15</td><td>failure, 9</td><td><strong>variable is not set</strong></td><td><span class="chip block">SKIPPED</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>manifest: governance/gate-manifests/g1.yaml
+actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
+##[error]Repository variable GATE_MANIFEST_APPROVED_HASH_G1 is not set.</code></pre>
+      <p>
+        The runner <strong>found the file, read it and hashed it</strong>. What is missing now is
+        the operator's approval and nothing else. Step 6 is still <code>SKIPPED</code>, so the
+        ordering holds with a manifest present &mdash; which runs A and B could not demonstrate,
+        because there was no manifest to get past.
+      </p>
+
+      <p class="kicker">The hash, cross-checked two independent ways</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Source</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Local, <code>git cat-file -p</code> on blob <code>ad19d7df</code></td><td><code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code></td></tr>
+            <tr><td>CI, the <code>actual:</code> line of run <code>34543242198</code></td><td><code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Identical. 21257 bytes. Both computed from the <strong>LF</strong> bytes git stores and the
+        runner checks out &mdash; a hash taken from a Windows working copy with CRLF endings will
+        <em>not</em> match. That is why the value is supplied at all.
+      </p>
+      <p>
+        <strong>It removes a line-ending trap, not the reading.</strong> The workflow's own error
+        text says that pasting the value CI just printed, without reading the manifest, reduces the
+        control to a rubber stamp. The candidate repeats that warning in its own header.
+      </p>
+
+      <p class="kicker">Exactly one operator action</p>
+      <p>
+        Read <code>governance/gate-manifests/g1.yaml</code> (24 allowed paths, 4 forbidden), and if
+        adopting it, set <code>GATE_MANIFEST_APPROVED_HASH_G1</code> = <code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code> under
+        Settings &rarr; Secrets and variables &rarr; Actions &rarr; Variables. Step 6 will then be
+        reached for the first time in this repository's life &mdash; and pass: it was verified
+        locally that all 28 of the PR's paths fall inside the scope.
+      </p>
+      <p>
+        <strong>An honest limitation, recorded inside the manifest too.</strong> The party bound by
+        this scope is the party that drafted it. GPT-PM reviewed it, but the only thing standing
+        between that and a self-authorized scope is the operator actually reading the bytes before
+        setting the hash. That is not a formality; it is the entire remaining control.
+      </p>
+      <p class="kicker">A side finding: local verification lied, CI did not</p>
+      <p>
+        <code>core.autocrlf = true</code> on this machine. Switching branches to commit the manifest
+        rewrote the working tree to CRLF, and two things broke locally while CI stayed green:
+        <code>prettier --check</code> flagged 18 files, and <code>vitest</code> reported a
+        <code>SyntaxError</code> in a test that <code>node --check</code> parses without complaint.
+        Byte counts settled it: <code>AGENTS.md</code> is 4129 bytes in git against 4201 in the
+        tree, exactly +72 = its line count. The project's own <code>prettier --write .</code>
+        restored 88/88 and 30/30, and <code>git diff --numstat</code> showed real changes in three
+        files only. <strong>Nothing in the repository was ever wrong.</strong> It is the same
+        line-ending trap that is the reason to take the hash above from CI rather than compute it
+        locally.
+      </p>
+      <p>
+        Measured at handover: <code>gh variable list</code> is empty. The variable was not set by
+        the implementer, though it technically could have been &mdash; which is what makes it mean
+        anything.
+      </p>
+    </div>
+  </section>
+
+
+  <section>
+    <div class="section-head">
+      <span class="num">09</span>
+      <div><h2>The manifest was adopted, and the scope check finally ran</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        <em>"I read g1.yaml, I agree with the document, GO, set the variable
+        GATE_MANIFEST_APPROVED_HASH_G1."</em> The variable was set and the run re-triggered. The
+        result is the first <strong>successful</strong> <code>Governance</code> job in this
+        repository's history: run <code>34544309071</code>, job <code>103206087659</code>.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Step 6 had never executed. Not once, in any run, under any head.</caption>
+          <thead>
+            <tr><th>Step</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>4. Resolve the gate</td><td>success</td><td>success</td><td>success</td><td>success</td><td><span class="chip done">success</span></td></tr>
+            <tr><td>5. Verify manifest hash</td><td>failure</td><td>failure</td><td>failure</td><td>failure</td><td><span class="chip done">success</span></td></tr>
+            <tr><td>6. Check paths against the manifest</td><td>SKIPPED</td><td>SKIPPED</td><td>SKIPPED</td><td>SKIPPED</td><td><span class="chip done">success</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>Manifest hash matches the operator-approved value.
+Changed paths (28):
+All 28 changed path(s) are within G1's approved scope.</code></pre>
+      <p>
+        <strong>Why this is the section that matters.</strong> Step 6 was unreachable throughout: A
+        and B had no manifest, C and D had no approved hash. The ordering had only ever been
+        observed doing half its job — refusing. <strong>A control seen only refusing is exactly as
+        unproven as one seen only passing</strong>: from outside, "always says no" and "works" are
+        indistinguishable. Both answers have now been observed on the same mechanism, and the only
+        thing that changed between them was the operator's own act.
+      </p>
+
+      <p class="kicker">The authority caveat, recorded rather than smoothed over</p>
+      <p>
+        The hash was written with the implementer's own credential, at the operator's explicit
+        instruction, after the operator read the bytes. GPT-PM's ruling required exactly that
+        reading, and it happened. But <strong>the GitHub audit trail cannot distinguish the
+        operator's judgement from the implementer's keystroke</strong>: one account, one
+        admin-scoped token. The evidence of whose decision this was lives in the decision log and
+        the session transcript, not in a separable actor. One more reason the R13 credential
+        decision is worth making.
+      </p>
+
+      <p class="kicker">The mechanism bit its own author within the hour</p>
+      <p>
+        <code>.gitignore</code> covers <code>.env</code> but <strong>not</strong>
+        <code>.dev.vars</code>, which is where <code>wrangler</code> keeps local secrets — a real
+        gap, found while writing the operator's credential instructions. <strong>Not fixed:</strong>
+        <code>.gitignore</code> is not in the approved <code>allowed_paths</code>, so it goes to G2
+        where secrets first appear. A finding that could have been quietly folded into an unrelated
+        commit an hour ago now cannot be.
+      </p>
+      <p>
+        Left to the operator: merging PR #1 (INV-20 — the checks are green, so what blocks it is
+        authority, not evidence), branch protection, and the credential decision.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      G1 is not closed. G2 does not begin. The manifest proposal stays a proposal until the operator
+      adopts it and sets the hash; every piece of evidence this project has as of now is local.
+    </p>
+  </footer>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->

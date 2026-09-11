@@ -1,0 +1,353 @@
+# NON-BINDING IMPLEMENTER PROPOSAL.
+# This file does not authorize any mutation.
+# Only an operator-adopted copy under
+# governance/gate-manifests/g1.yaml plus the
+# operator-controlled approved hash has authority.
+#
+# READ "operator-controlled" AS GOVERNANCE AUTHORITY, NOT AS TECHNICAL
+# EXCLUSIVITY. The current authenticated implementation session is technically
+# capable of changing that repository variable and the repository's admin
+# settings; therefore this separation is procedural until the credential model
+# in limitation 5 is resolved.
+#
+#   operator-authorized  !=  technically operator-exclusive
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS FILE IS, AND WHAT IT IS NOT
+#
+# It is a draft the implementer wrote for the operator to read, reject, edit or
+# adopt. It sits in governance/plans/ deliberately, NOT in
+# governance/gate-manifests/, because a manifest an implementer can freely edit
+# in their own branch has no authority at all (INV-28). Copying this file into
+# the binding directory is an operator action; the implementer must never do it,
+# and doing it would not create authority anyway -- the CI check compares the
+# adopted file's sha256 against a repository variable that only the operator is
+# AUTHORIZED to set. Whether the implementer is technically PREVENTED from
+# setting it is a separate question, and today the answer is no: limitation 5.
+#
+# The name is G1_MANIFEST_PROPOSAL.yaml rather than g1.yaml so that an
+# implementer draft can never be mistaken for the authoritative manifest, even
+# at a glance in a file listing.
+#
+# Nothing here has been approved. The scope below is an argument, not a ruling.
+# ---------------------------------------------------------------------------
+
+status:
+  - NON_BINDING_PROPOSAL
+  - IMPLEMENTER_AUTHORED
+  - HAS_NO_AUTHORITY
+
+authored_by: Claude (implementer)
+authored_on: 2026-09-10
+authored_at_commit: 60c2aeb4dbdb5c7de3c4c059cd5a094ecbf50f9c
+branch: gate/g1-remediation
+
+plan_id: pdos-g1-remediation-2026-09-10
+
+# sha256 of governance/plans/G1_REMEDIATION_PLAN.md as of the commit named
+# above (13678 bytes). Two things must be said plainly about this field:
+#
+#   1. Nothing verifies it. .github/workflows/governance.yml verifies the
+#      MANIFEST's own hash against the operator-held repository variable; it
+#      never reads plan_hash and never compares it to the plan file. This is
+#      limitation 7 in ../GATE_MANIFEST_INTEGRITY.md, recorded there rather
+#      than papered over here.
+#   2. It goes stale. Steps 4-7 of the remediation plan edit
+#      G1_REMEDIATION_PLAN.md, so this value describes the plan as it stood
+#      when the proposal was written. Recompute it at adoption time.
+plan_hash: 91b4dd9a242a1241d94e3f4bbdb7fb0328be890e3f004b16b71a9e66a87bbb1d
+
+approved_scope: >-
+  NOT APPROVED. Proposed scope: close G1 (repository, governance enforcement,
+  CI, contracts) on branch gate/g1-remediation -- the G1-M2 remediation already
+  built, plus the remaining closure work (first genuine CI evidence, negative
+  controls, R11/R12/R13 record correction, fresh review, closure report).
+
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# WHAT THIS LIST IS SCOPED TO: the permissible MERGE SCOPE of the G1 pull
+# request, not "the work still to be done". The check runs
+# `git diff BASE_SHA...HEAD_SHA` and evaluates the CUMULATIVE range from the
+# main base to the PR head -- so a manifest listing only future actions would
+# fail the scope check on paths this branch already carries, the moment it was
+# adopted. This is not retroactive authorization of the branch's individual
+# mutations: those were authorized, or not, when they happened, and
+# ../../core/DECISION_LOG.md records which. A manifest authorizes what may
+# legitimately arrive on main through this gate's PR.
+#
+# Derived from three sources, as directed: the existing G1 remediation plan,
+# the G1 findings and their DoD, and the actual current state of
+# gate/g1-remediation. Every entry is justified in the comment above it and
+# tagged with which half of the merge scope it comes from:
+#
+#   [CUMULATIVE]  already in the branch's diff against main, because an
+#                 approved G1 remediation finding required it
+#   [REMAINING]   not in the diff yet; a named remaining G1 closure action
+#                 needs it
+#   [BOTH]        already present AND needed again before closure
+#
+# An entry needed only by a future gate is not here; see "deliberately
+# excluded" at the bottom.
+#
+# Grammar is the segment-bounded one scripts/verify/check-gate-scope.mjs
+# enforces, NOT shell globbing: `*` matches within one path segment and never
+# crosses `/`, `**` is a whole segment. There is no bare `**` anywhere in this
+# file -- a manifest containing one cannot refuse anything, and the checker
+# warns about it on every run for exactly that reason.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # [BOTH] G1-M2/G1-M3. The entries for /scripts/verify/ and /docs/architecture/
+  # were added on this branch. Still remaining: this file's own header currently
+  # asserts that it "is the control that actually enforces" the separation
+  # invariant, which R13 narrows -- with one GitHub account, CODEOWNERS cannot
+  # mechanically prove operator-vs-implementer identity separation.
+  - .github/CODEOWNERS
+
+  # [BOTH] G1-M2 itself: policy-integrity.yml and gate-scope.yml were replaced by
+  # the single governance.yml. All three paths are in this branch's diff, two of
+  # them as deletions. ci.yml is covered by the same segment-bounded pattern
+  # because the PR will be the first time CI on this repository ever executes a
+  # step (R11), and a workflow that has never run once is likely to need a
+  # correction when it does. `*` does not cross `/`, so this reaches the workflow
+  # files and nothing below them.
+  - .github/workflows/*.yml
+
+  # [CUMULATIVE] Reports are conformed by a tool that injects a provenance block
+  # by matching its own markup, and prettier was rewriting it. Landed with the
+  # G1-M2 commit.
+  - .prettierignore
+
+  # [BOTH] Governance instructions for the two agent surfaces and the
+  # repository's front page. All three were updated for the one-workflow layout.
+  # Still remaining: each must be checked for the same overclaim as CODEOWNERS
+  # above, and narrowed where it appears -- narrowed, not replaced by the
+  # opposite overclaim that every GitHub control is procedural.
+  - AGENTS.md
+  - CLAUDE.md
+  - README.md
+
+  # [CUMULATIVE] Toolchain: @eslint/js declared explicitly, tests/**/*.ts added
+  # to the TypeScript project, tests/**/*.test.mjs added to the vitest include.
+  # Part of G1's "toolchain + CI" deliverable.
+  - package.json
+  - package-lock.json
+  - tsconfig.json
+  - vitest.config.ts
+
+  # [BOTH] Durable decisions: the one-workflow deviation, the CODEOWNERS
+  # widening, the governance-debt reconciliation -- and the pre-adoption CI
+  # evidence still to be recorded.
+  - core/DECISION_LOG.md
+
+  # [REMAINING] R11 (Actions billing), R12 (branch protection) and R13
+  # (implementer identity) all need their status corrected now that the operator
+  # has settled them and the repository is public.
+  - core/RISK_REGISTER.md
+
+  # [REMAINING] The G0 output table still reads PENDING/DRAFT while
+  # ../G0_CLOSURE_REPORT.md reads DONE/ADOPTED. One of the two is wrong and the
+  # contradiction sits in G1's own gate ledger.
+  - core/PLAN_MASTER_GATES.md
+
+  # [BOTH] E-001 records the one-workflow layout against the frozen TDD. Further
+  # errata entries are expected before closure. TDD.md itself is NOT in scope --
+  # that is the point of having an errata file, and it is forbidden below.
+  - docs/architecture/TDD_ERRATA.md
+
+  # [BOTH] The design document for this whole mechanism: rewritten sections, the
+  # pattern-grammar table, the silent-truncation defect record, the limitations
+  # list. Still remaining: it carries stale claims -- that main is a protected
+  # branch, and that the implementer has neither direct-push nor merge
+  # permission -- which were never true and must be corrected.
+  - governance/GATE_MANIFEST_INTEGRITY.md
+
+  # [REMAINING] The closure report. Does not exist yet.
+  - governance/G1_CLOSURE_REPORT.md
+
+  # [CUMULATIVE] The accepted-file-format section was written on this branch,
+  # alongside the reader it documents. Note that the *.yaml files in this
+  # directory are forbidden below: the README is documentation, the manifests
+  # are authority.
+  - governance/gate-manifests/README.md
+
+  # [REMAINING] This proposal, and [BOTH] for the remediation plan it derives
+  # from. G0_PLAN.md is deliberately not in scope: G0 is closed.
+  - governance/plans/G1_MANIFEST_PROPOSAL.yaml
+  - governance/plans/G1_REMEDIATION_PLAN.md
+
+  # [REMAINING] The non-binding artifact that records what the first genuine CI
+  # run actually did -- whether any step executed at all, and whether the
+  # Governance check failed closed at the hash step as predicted. It is a
+  # separate named file rather than a wider governance/plans/*.md pattern so
+  # that G0_PLAN.md stays out of scope.
+  - governance/plans/G1_PREADOPTION_EVIDENCE.md
+
+  # [REMAINING] The fresh-context G1 review lands a new file here. `**` as the
+  # last segment covers the subtree and, because the separator is part of the
+  # pattern, never the bare directory name.
+  - governance/reviews/**
+
+  # [BOTH] The mandated report pair (Russian and English) for each closed piece
+  # of work. Segment-bounded, so it reaches reports/ and no subdirectory.
+  - reports/*.html
+
+  # [BOTH] The gate-scope check, the test-deletion guard, the secret scan, the
+  # test-count assertion and the mutation harness -- G1's executable governance.
+  - scripts/verify/*.mjs
+
+  # [BOTH] The tests that prove those guards actually bite. 51 of the 88 tests
+  # live here (39 gate-scope, 12 CODEOWNERS).
+  - tests/policy/*.mjs
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# These are not merely "out of scope" -- everything not in allowed_paths is
+# already out of scope and the checker reports it as such. These four are a
+# different class: touching one would be the implementer granting itself
+# authority, so they get their own refusal with its own message.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # INV-28. The binding manifest is the operator's document. An implementer
+  # branch that could write it would be validating its own diff against a file
+  # that same diff had just rewritten -- NM3 from the v0.2 adversarial review,
+  # and the reason the hash check runs before the scope check at all.
+  # Both extensions, at any depth: `**` here is a middle segment, so this
+  # matches governance/gate-manifests/g1.yaml and any nested variant.
+  - governance/gate-manifests/**/*.yaml
+  - governance/gate-manifests/**/*.yml
+
+  # The operator's own record of what they approved. An implementer that can
+  # write approvals can manufacture the evidence that it was approved.
+  - governance/operator-approvals/**
+
+  # The frozen architecture baseline, INV-01..INV-31 included. TDD_ERRATA.md
+  # exists precisely so that concrete details can be corrected without amending
+  # this file, and E-001 states that the errata never amends an invariant.
+  - docs/architecture/TDD.md
+
+# ---------------------------------------------------------------------------
+# The fields below are part of the manifest shape described in
+# ../gate-manifests/README.md. State them honestly: the checker reads
+# allowed_paths and forbidden_paths and NOTHING ELSE. These four are
+# documentation for a human reviewer today, not enforcement.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+  - npm run verify:mutation
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+
+policy_sensitive_files:
+  - .github/CODEOWNERS
+  - .github/workflows/governance.yml
+  - scripts/verify/check-gate-scope.mjs
+  - governance/GATE_MANIFEST_INTEGRITY.md
+  - docs/architecture/TDD_ERRATA.md
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why
+#
+#   packages/contracts/**    The contracts landed in b784265, which is already
+#                            on main and therefore not in this branch's diff.
+#                            No remaining G1 action touches them. If closure
+#                            turns out to need a contract change, that is a
+#                            scope change: it needs a new plan and a new GO, not
+#                            a wider manifest. Widening a manifest to fit a diff
+#                            is the failure mode this whole mechanism exists to
+#                            prevent.
+#
+#   core/adr/**              The ADRs are adopted. G1 does not amend them.
+#
+#   docs/product/**,         Not touched by G1 and not required by any remaining
+#   docs/runbooks/**         G1 action.
+#
+#   scripts/probes/**        G0 evidence. G0 is closed.
+#
+#   .claude/**               Agent configuration, not gate deliverables.
+#
+#   CONTRIBUTING.md,         Present in the repository, untouched by G1.
+#   SECURITY.md,
+#   .gitignore,
+#   .prettierrc.json,
+#   eslint.config.js
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST STILL CANNOT DO, if adopted as written
+#
+#   1. It cannot tell a tightening of .github/CODEOWNERS from a loosening of
+#      it. The scope check sees a changed path, not the direction of the change.
+#      Only branch protection requiring code-owner review covers that, and that
+#      is R12 -- available now that the repository is public, but not yet
+#      applied.
+#   2. The `Gate: G1` label that selects this manifest is written in the PR body
+#      by the implementer. An implementer who chose a different gate's label
+#      would be checked against a different manifest (limitation 6 in
+#      ../GATE_MANIFEST_INTEGRITY.md).
+#   3. Nothing checks plan_hash, as stated above.
+#   4. The check runs on pull_request only. A direct push to main is not
+#      examined by it at all; that gap is closed by branch protection, not by
+#      this file.
+#   5. THE APPROVAL HASH IS NOT OUT OF THE IMPLEMENTER'S REACH. Measured
+#      2026-09-10, after the operator authenticated the GitHub CLI on this
+#      machine: the credential available to the implementer's session is a
+#      classic PAT with `repo`, `workflow` and `admin:org`, and
+#      `.permissions.admin` is true on this repository. It can set
+#      GATE_MANIFEST_APPROVED_HASH_G1, adopt a manifest and then set the hash to
+#      match it, remove branch protection, and edit the Governance workflow
+#      itself. So the separation this whole mechanism describes is PROCEDURAL --
+#      it rests on the implementer not doing what it is able to do, not on being
+#      unable to. Full measurement, and the three ways to restore the mechanical
+#      property, in G1_PREADOPTION_EVIDENCE.md section 3.1. Adopting this
+#      manifest does not fix it; that is a credential decision, not a manifest
+#      decision, and it is the operator's.
+# ---------------------------------------------------------------------------
+#
+# ---------------------------------------------------------------------------
+# HOW TO ADOPT THIS, AND WHY THE HASH IS NOT PRINTED HERE
+#
+# Do NOT copy this file byte-for-byte into governance/gate-manifests/g1.yaml.
+# The copy would still carry the header above and `status: NON_BINDING_PROPOSAL
+# / HAS_NO_AUTHORITY`, so the binding manifest would be asserting, about itself,
+# that it has no authority. Adoption therefore means editing at least the header
+# and the status block -- and the moment anything is edited, the sha256 changes.
+#
+# That is why no "approved hash" appears in this file. Any hash printed here
+# would be the hash of the PROPOSAL, and setting it as
+# GATE_MANIFEST_APPROVED_HASH_G1 would either be wrong (if the file was edited,
+# as it must be) or would pin a manifest that declares itself non-binding. The
+# implementer computing the operator's approval hash in advance is also the
+# wrong shape: the value exists to prove the operator saw the exact bytes.
+#
+# The sequence, with each step's owner:
+#
+#   1. operator   Review and edit this proposal. It is an argument, not a
+#                 ruling; narrowing it is always safe, widening it is the thing
+#                 to be suspicious of.
+#   2. operator   Write the result to governance/gate-manifests/g1.yaml, with
+#                 the header and status block replaced by adoption markers.
+#                 This must be its own commit on main, NOT part of the gate PR:
+#                 that path is in forbidden_paths above, so a gate PR carrying
+#                 it fails the Governance check -- correctly.
+#   3. operator   sha256sum governance/gate-manifests/g1.yaml
+#                 (PowerShell: Get-FileHash -Algorithm SHA256 <path>)
+#   4. operator   Set that value as the repository variable
+#                 GATE_MANIFEST_APPROVED_HASH_G1. The design intent is that it
+#                 lives outside the implementer's reach, because a variable an
+#                 implementer could set would authorize its own manifest.
+#                 THAT INTENT IS NOT CURRENTLY MET -- see limitation 5 below.
+#                 This step is the operator's by authority, not by capability.
+#   5. anyone     Re-open the gate PR. The Governance check now reaches the
+#                 scope step instead of stopping at the hash step.
+#
+# Step 4 is what makes any of this real. Until it is done, the Governance check
+# fails at the hash step and G1 has no enforced scope at all -- which is the
+# expected, correct result, and is the negative-control evidence step 3 of the
+# remediation plan exists to record.
+# ---------------------------------------------------------------------------

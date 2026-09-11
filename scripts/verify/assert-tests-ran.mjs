@@ -16,7 +16,10 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
-const MIN_TESTS = 30;
+// 30 at G1 bootstrap; raised when the gate-scope guard added 20 tests (actual count 57). The
+// floor tracks the suite rather than sitting far below it, or a collapse from 57 to 31 would
+// still read as green.
+const MIN_TESTS = 50;
 
 // Run vitest's own JS entry with `node` rather than going through `npx`/`node_modules/.bin`:
 // on Windows both are `.cmd` shims that Node refuses to spawn without `shell: true` (since the

@@ -80,6 +80,165 @@ const MUTATIONS = [
     from: '    provenance: z.array(z.string().min(1)).min(1),',
     to: '    provenance: z.array(z.string().min(1)),',
   },
+
+  // The gate-scope guard. Its whole value is refusing things, so every mutation below makes it
+  // refuse less -- which is exactly the direction a broken governance check fails in.
+  {
+    label: 'check-gate-scope.mjs: "*" crosses "/" again (packages/* would re-authorize subtrees)',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: "(ch) => (ch === '*' ? '[^/]*' : `\\\\${ch}`)",
+    to: "(ch) => (ch === '*' ? '.*' : `\\\\${ch}`)",
+  },
+  {
+    label: 'check-gate-scope.mjs: stop escaping regex metacharacters in a literal segment',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: "(ch) => (ch === '*' ? '[^/]*' : `\\\\${ch}`)",
+    to: "(ch) => (ch === '*' ? '[^/]*' : ch)",
+  },
+  {
+    label: 'check-gate-scope.mjs: drop the end anchor (a prefix match would authorize a suffix)',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: 'return new RegExp(`^${source}$`);',
+    to: 'return new RegExp(`^${source}`);',
+  },
+  {
+    label: 'check-gate-scope.mjs: drop the start anchor (any parent directory would authorize)',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: 'return new RegExp(`^${source}$`);',
+    to: 'return new RegExp(`${source}$`);',
+  },
+  {
+    label: 'check-gate-scope.mjs: ignore forbidden_paths entirely',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: '    const hit = forbiddenRe.find((f) => f.re.test(path));',
+    to: '    const hit = forbiddenRe.slice(0, 0).find((f) => f.re.test(path));',
+  },
+  {
+    label: 'check-gate-scope.mjs: accept an empty allowed_paths instead of refusing to evaluate',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: '  if (!Array.isArray(allowed) || allowed.length === 0) {',
+    to: '  if (false) {',
+  },
+  {
+    label: 'check-gate-scope.mjs: stop reporting an allow-everything manifest entry',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: "  const vacuous = allowed.filter((p) => p === '**');",
+    to: '  const vacuous = [];',
+  },
+  {
+    label: 'check-gate-scope.mjs: accept a duplicated allowed_paths key',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: '  if (headerIndexes.length > 1) {',
+    to: '  if (false) {',
+  },
+  {
+    label: 'check-gate-scope.mjs: accept flow style, which reads as an empty list',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: "  if (rest !== '' && !rest.startsWith('#')) {",
+    to: '  if (false) {',
+  },
+  {
+    // The real hazard, and the defect this guard was added to fix: any non-indented line ending
+    // the block means a list item that lost its indent truncates the list silently. For
+    // `forbidden_paths` that is zero enforcement, indistinguishable from "nothing is forbidden".
+    label: 'check-gate-scope.mjs: end the block at ANY unindented line (silent list truncation)',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: '      if (/^[A-Za-z_][A-Za-z0-9_.-]*:/.test(line)) break;',
+    to: '      if (true) break;',
+  },
+  {
+    label: 'check-gate-scope.mjs: never end the block, so any multi-key manifest fails to parse',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: '      if (/^[A-Za-z_][A-Za-z0-9_.-]*:/.test(line)) break;',
+    to: '      if (false) break;',
+  },
+  {
+    label: 'check-gate-scope.mjs: return a present-but-empty list instead of rejecting it',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: '  if (items.length === 0) {',
+    to: '  if (false) {',
+  },
+  {
+    label: 'check-gate-scope.mjs: read an unquoted leading "*" as a pattern, not a YAML alias',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: "    if (value.startsWith('*')) {",
+    to: '    if (false) {',
+  },
+  {
+    label: 'check-gate-scope.mjs: drop the "&" half of the alias/anchor rejection',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: "    if (value.startsWith('&')) {",
+    to: '    if (false) {',
+  },
+  {
+    label: 'check-gate-scope.mjs: accept a block scalar as a pattern',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: '    if (/^[|>]/.test(value)) {',
+    to: '    if (false) {',
+  },
+
+  // run(): the only part of this file CI executes. Its exit code IS the control -- a guard that
+  // computes violations correctly and then exits 0 provides nothing at all.
+  {
+    label: 'check-gate-scope.mjs: run() exits 0 despite scope violations',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: '        `and a new GO.`,\n    );\n    return 1;',
+    to: '        `and a new GO.`,\n    );\n    return 0;',
+  },
+  {
+    label: 'check-gate-scope.mjs: run() proceeds with a missing required environment variable',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from:
+      '      logError(`::error::${name} is not set; refusing to run a check that cannot be complete.`);\n' +
+      '      return 1;',
+    to:
+      '      logError(`::error::${name} is not set; refusing to run a check that cannot be complete.`);\n' +
+      '      return 0;',
+  },
+  {
+    label: 'check-gate-scope.mjs: run() treats a failed git diff as a clean, empty diff',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from:
+      '    logError(`::error::could not list the changed paths: ${error.message}`);\n' +
+      '    return 1;',
+    to:
+      '    logError(`::error::could not list the changed paths: ${error.message}`);\n' +
+      '    return 0;',
+  },
+  {
+    label: 'check-gate-scope.mjs: drop -z, so git quotes and escapes unusual filenames',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: "['diff', '--name-only', '-z', `${baseSha}...${headSha}`]",
+    to: "['diff', '--name-only', `${baseSha}...${headSha}`]",
+  },
+  {
+    label: 'check-gate-scope.mjs: stop filtering empty entries out of the NUL-split path list',
+    file: 'scripts/verify/check-gate-scope.mjs',
+    from: "return out.split('\\0').filter((p) => p !== '');",
+    to: "return out.split('\\0');",
+  },
+
+  // CODEOWNERS is the only control that actually enforces anything here (merge authority; CI is
+  // detection), so dropping a path from it is the highest-consequence silent edit in the repo.
+  // These mutate the data rather than code, which is exactly right: the guard IS the assertion.
+  {
+    label: 'CODEOWNERS: comment out /docs/architecture/, unprotecting the TDD and its errata',
+    file: '.github/CODEOWNERS',
+    from: '/docs/architecture/             @xLZDx',
+    to: '# /docs/architecture/           @xLZDx',
+  },
+  {
+    label: 'CODEOWNERS: drop /scripts/verify/, unprotecting the governance checks themselves',
+    file: '.github/CODEOWNERS',
+    from: '/scripts/verify/                @xLZDx',
+    to: '',
+  },
+  {
+    label: 'CODEOWNERS: leave an entry with no owner, which requires no review',
+    file: '.github/CODEOWNERS',
+    from: '/core/adr/                      @xLZDx',
+    to: '/core/adr/',
+  },
 ];
 
 function suitePasses() {

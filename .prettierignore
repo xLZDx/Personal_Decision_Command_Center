@@ -4,3 +4,7 @@ package-lock.json
 docs/architecture/TDD.md
 governance/reviews/
 Personal_Decision_OS_v0.3_Implementation_Pack/
+
+# Reports are generated and then conformed by tools/report_conform.py, which injects and refreshes
+# a provenance block by matching its own markup. Reformatting them here would fight that tool.
+reports/
