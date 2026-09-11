@@ -23,18 +23,56 @@ caught.
 
 ## What actually enforces, and in what order
 
-Ranked by how hard each is to circumvent from an implementer branch. **Only the first is real
-enforcement**; the rest are detection and friction.
+Ranked by how hard each is to circumvent from an implementer branch.
 
-### 1. Merge authority (the actual control)
+**Corrected 2026-09-11:** this used to say "**Only the first is real enforcement**; the rest are
+detection and friction", on the belief that merge authority was mechanically held by the operator.
+Measurement says otherwise (see §1), and the ranking inverts:
 
-- `main` is a protected branch. The implementer has no direct-push and no merge permission.
-- A PR touching `governance/gate-manifests/**`, `governance/operator-approvals/**`,
-  `.github/workflows/**`, or `core/SOURCE_POLICY.md` / `core/DATA_RETENTION_POLICY.md` requires
-  review from `CODEOWNERS` — i.e. the operator — before it can merge.
-- Consequence: even if every automated check below were disabled in the implementer's branch,
-  nothing reaches `main` without the operator looking at it. This is the backstop that does not
-  depend on CI behaving.
+- **Mechanically enforced by the platform:** a pull request is required, `governance` and `verify`
+  must be green on the head being merged (strict), and deletion and non-fast-forward pushes are
+  blocked. That is controls (2) and (3) below, plus the ruleset itself.
+- **Procedural, resting on compliance and the audit trail:** who decides that a merge may happen —
+  control (1). There is no mechanically enforced human separation.
+
+So the first item is the one that is NOT mechanical, and the checks below it are. The order is kept
+because it still ranks by consequence — a wrong merge decision is worse than a missed check — but it
+no longer claims the first is enforcement.
+
+### 1. Merge authority — procedural, NOT mechanical
+
+**Corrected 2026-09-11 after R13 was closed as an accepted risk.** This section previously claimed
+that the implementer has no direct-push and no merge permission, that a PR touching the protected
+paths requires `CODEOWNERS` review before it can merge, and that "nothing reaches `main` without the
+operator looking at it". **All three were false**, and they were the most load-bearing sentences in
+this document. Measured on 2026-09-11 against ruleset `PDCC` (`22899342`), not recalled:
+
+| Rule actually configured on `main`             | Value                           |
+| ---------------------------------------------- | ------------------------------- |
+| `required_status_checks`                       | `governance` + `verify`, strict |
+| `pull_request.required_approving_review_count` | **0**                           |
+| `pull_request.require_code_owner_review`       | **false**                       |
+| `deletion`, `non_fast_forward`                 | blocked                         |
+
+So: a PR is required and two checks must be green, deletion and force-push are blocked — those are
+real. But **no human approval is required by the platform at all**, `CODEOWNERS` review is not
+enforced, and the implementer's credential carries `admin` on this repository, so it _can_ merge.
+
+**Approvals are 0 deliberately, and cannot simply be raised.** There is one GitHub identity
+(`xLZDx`) behind both roles — R13, closed as an accepted risk by operator decision on 2026-09-11.
+GitHub forbids approving one's own PR, so requiring even a single approval would deadlock every PR
+the implementer opens. Raising this number is not a fix while one identity does both jobs.
+
+**What the real control is, then.** Not the platform. The merge decision comes from an independent
+review — GPT-PM reasoning over the exact final head, per `~/.claude/CLAUDE.md` §24 — and the
+implementer performs the mechanical click as that decision's executor. The evidence that this
+happened lives in `core/DECISION_LOG.md` and the PR's own review record, **not** in anything GitHub
+enforces. Separation here is **procedural**: it rests on the implementer's compliance plus the audit
+trail, and an auditor should read it that way.
+
+**Binding consequence of R13's closure:** no document in this repository may assert that
+`CODEOWNERS`, branch protection, or any procedure _mechanically_ separates implementer from
+operator. Wording that implies it is a defect to correct on sight.
 
 `.github/CODEOWNERS` (G1 deliverable):
 
@@ -116,9 +154,13 @@ The current matcher is segment-bounded:
 
 Note what the vacuity warning does and does not catch: it fires on the literal entry `**` only.
 A near-universal pattern written another way — `**/*`, for instance — is not flagged. Since the
-manifest's content is fixed by CODEOWNERS review plus the hash check before any diff is evaluated
-against it, an implementer cannot introduce one; this is a gap in the operator-facing warning, not
-a bypass.
+manifest's content is fixed by the hash check before any diff is evaluated against it, an
+implementer cannot introduce one **without the operator re-approving the changed bytes and updating
+the variable**; this is a gap in the operator-facing warning, not a bypass. **Corrected
+2026-09-11:** this previously credited "CODEOWNERS review plus the hash check". CODEOWNERS review
+contributes nothing mechanical — `require_code_owner_review` is `false` on the live ruleset (§1).
+The hash check alone is what closes this, and it closes it only because the approved hash lives
+outside the tree.
 
 Patterns are anchored at both ends, are repository-relative, and may not contain `\`, `//`, `.`
 or `..` segments. `**` glued to other characters in a segment (`a**b`) is rejected as ambiguous
@@ -176,8 +218,11 @@ function CI actually executes, and the one whose exit code IS the control — ha
 kind. A guard that computes violations correctly and then exits 0 provides nothing, and no test
 would have noticed.
 
-This matters more than usual here: remote CI on this repository currently executes nothing (R11),
-so local test and mutation evidence is the only evidence this control has.
+This used to matter more than usual, because remote CI on this repository executed nothing (R11).
+**No longer true as of 2026-09-11:** R11 is resolved — the repository is public, so Actions are free
+and unmetered, and `governance` and `verify` both run and pass on every PR head (measured on PR #6,
+head `fa2917b`). Local test and mutation evidence is now corroboration rather than the only evidence
+this control has.
 
 ## What this mechanism explicitly does NOT protect against — stated, not glossed
 
@@ -187,12 +232,15 @@ An honest design says where its own guarantees stop.
    the workflow definition as it exists in the PR's merge commit — so a PR that edits
    `.github/workflows/governance.yml` changes the very check that is supposed to police it. The
    same applies to `scripts/verify/check-gate-scope.mjs`, which that workflow executes. This is
-   why control (1) is listed first and control (2) second: `.github/**` is CODEOWNERS-protected
+   why control (1) is listed first and control (2) second: `.github/**` is listed in `CODEOWNERS`
    precisely because CI cannot police its own definition. Anyone reviewing a PR that touches
    `.github/**` or `scripts/verify/**` must read that diff as a governance change, not as a build
-   tweak. Both paths are CODEOWNERS-protected for exactly this reason — `scripts/verify/` was
-   added when the scope check moved into it, since protecting a check's definition while leaving
-   its implementation unprotected protects nothing.
+   tweak. Both paths are listed for exactly this reason — `scripts/verify/` was added when the
+   scope check moved into it, since protecting a check's definition while leaving its
+   implementation unprotected protects nothing. **Corrected 2026-09-11:** this used to say both
+   paths are "CODEOWNERS-protected". They are not protected by the platform — ruleset `PDCC` has
+   `require_code_owner_review: false` (see control 1). `CODEOWNERS` here is a **map of what must be
+   read as a governance change**, not an enforced gate.
 2. **Anything before a push.** These controls govern what reaches `main`. They say nothing about
    the local working tree, and nothing about a session that edits files without ever pushing.
 3. **The operator's own machine-level hooks** (`~/.claude/hooks/*`) are outside this repository
@@ -211,8 +259,12 @@ An honest design says where its own guarantees stop.
    therefore _"this diff fits **some** manifest the operator approved"_, not _"this diff fits the
    manifest for the gate genuinely in progress."_ Closing it needs the gate binding to come from
    operator-controlled state too — a per-gate repository variable naming the currently open gate,
-   or the approval record in `operator-approvals/`. Not implemented; the operator reading the gate
-   label on the PR they are approving is the only thing covering it today.
+   or the approval record in `operator-approvals/`. Not implemented, and **nothing mechanical
+   covers it today**: this used to say "the operator reading the gate label on the PR they are
+   approving" covers it, but the platform requires no approval at all
+   (`required_approving_review_count: 0`), so no one is obliged to read anything. What covers it in
+   practice is the independent review under `~/.claude/CLAUDE.md` §24 naming the exact head — which
+   is a procedure, not an enforcement.
 7. **The manifest's own `plan_id` / `plan_hash` are not verified against anything.** The hash
    check proves the manifest file is byte-identical to what the operator approved. It does not
    check that `plan_hash` matches the plan file in `plans/`, so an approved manifest can point at
@@ -224,18 +276,32 @@ An honest design says where its own guarantees stop.
   variable **must** fail the `Governance` check, demonstrated on a real PR, not asserted.
 - A negative test: a PR touching a path outside `allowed_paths` must fail the same check — and it
   must fail at the scope step, having reached it only because the hash step passed.
-- Evidence that branch protection and CODEOWNERS review are actually enabled in repository
-  settings (a screenshot or `gh api` output), not merely described in this file — a CODEOWNERS
-  file with branch protection switched off is decoration.
+- Evidence from `gh api` — not a screenshot and not this file's word — of what the ruleset on
+  `main` actually enforces. **DONE 2026-09-11**, and the answer is the one §1 now records: ruleset
+  `PDCC` (`22899342`) is active with strict `governance` + `verify`, deletion and non-fast-forward
+  blocked, `required_approving_review_count: 0`, `require_code_owner_review: false`. This bullet
+  used to ask for evidence that "CODEOWNERS review is enabled"; it is **not** enabled, and asking
+  for evidence of a control that does not exist is how a document ends up asserting one. `CODEOWNERS`
+  here is a map of governance-bearing paths, not a gate.
 
-**None of the three can be produced yet, and the reason is not a code defect.** GitHub Actions on
-this repository currently starts no jobs at all: run `34513131209` for `b784265` finished in four
-seconds with zero steps executed, annotated _"The job was not started because recent account
-payments have failed or your spending limit needs to be increased."_ And branch protection on a
-**private** repository requires a paid GitHub plan; `/branches/main/protection` returns 404 here.
-So controls (1) and (2) above are, at this moment, described rather than operating. Tracked as R11
-and R12 in `../core/RISK_REGISTER.md`; both are operator decisions, not implementer work.
+**Status, rewritten 2026-09-11 — the blocker described here is gone.** This section used to say none
+of the three could be produced: GitHub Actions started no jobs at all (run `34513131209` for
+`b784265` finished in four seconds with zero steps, annotated _"The job was not started because
+recent account payments have failed or your spending limit needs to be increased."_), and branch
+protection on a **private** repository needs a paid plan (`/branches/main/protection` returned 404).
 
-Until they are settled, the honest statement of this mechanism's status is: **the matcher and the
-manifest reader are verified (unit tests + mutation testing, locally); the enforcement around them
-is not verified at all.**
+Both were operator decisions, and the operator settled them with one move: **the repository is now
+public.** Actions are free and unmetered for public repositories, and rulesets are available on Free
+— so **R11 and R12 are both resolved**, and `governance` and `verify` genuinely run and pass on every
+PR head. What remains is narrower than "the enforcement is unverified":
+
+| Owed                                                                  | Status                                                                                                                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Ruleset evidence from `gh api`                                        | **DONE** — see the bullet above                                                                                                |
+| Negative test: manifest edited without the variable updated must fail | **NOT DONE** — needs a branch that deliberately edits `g1.yaml`; operator territory                                            |
+| Negative test: out-of-scope path must fail, at the scope step         | **NOT DONE** — the scope step has only ever been observed PASSING; earlier refusals were at the hash step, a different control |
+
+So the honest statement of this mechanism's status is now: **the matcher and the manifest reader are
+verified (unit tests + mutation testing); the hash step has been observed both refusing and passing;
+the scope step has been observed only passing, and a guard never seen refusing is not known to
+refuse.**
