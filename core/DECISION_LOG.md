@@ -1431,3 +1431,52 @@ TDD's semantic content; the diagram/prose mojibake is not blocking.
 **Evidence:**
 **How to apply:**
 ```
+
+## 2026-09-12 — Branch creation for the three negative controls: operator authorization + GPT-PM APPROVE
+
+**Operator authorization, verbatim:** _"Даю авторизацию тебе все это сделать после моего ревью,
+апрув"_ — given after reviewing the plan (the exact three branches, base, purpose, lifetime and
+merge/delete plan already stated in the prior turn) and after reviewing `~/.claude/CLAUDE.md` §25.
+
+**Why this went to GPT-PM rather than a literal BRANCH GO 1/2 exchange.** §14 requires the
+operator's own two-step phrase for branch creation; §20 narrows this — a genuine GPT-PM
+`VERDICT: APPROVE` satisfies both approvals, because branch creation is reversible. The operator's
+message is a clear authorization but not the literal phrase, and a mid-turn "ГО" that followed it
+is explicitly excluded by §14's own text ("Generic phrases such as GO, ГО... do NOT count"). Rather
+than send the operator back for a formality, the request went to GPT-PM with the three branches
+individually named, based, purposed, and given a lifetime — the same content the BRANCH GO 1
+template would have required.
+
+**GPT-PM's reply, verified by content** (the send reported `CHATGPT_SEND_UNCONFIRMED` twice;
+`gpt_session_peek` showed the assistant-turn count had grown from 2 to 3 and the new turn answers
+the specific request rather than repeating the prior round's verdict, so it is treated as the real
+reply rather than re-sent):**
+
+> "VERDICT: APPROVE — create exactly gate/g1-hash-control, gate/g1-forbidden-control, and
+> gate/g1-deletion-control from origin/main at 63a5425f4ea2fefca03c73954a5f620b3d68473f, for the
+> stated purposes and lifetimes. This approval covers the reversible branch creation and the
+> specified negative-control execution. gate/g1-forbidden-control and gate/g1-deletion-control are
+> close-unmerged only; gate/g1-hash-control may merge only its durable
+> core/DECISION_LOG.md evidence after both the deliberate hash-mismatch failure and
+> restored-positive Governance run are captured."
+
+Correlated: the reply names the exact base sha and repeats the branch names, purposes and lifetime
+constraints from the request — not a generic acknowledgement.
+
+**Scope of this authorization, stated narrowly.** It covers exactly the three branches named, from
+the named base, for the named purposes, with the named merge/delete plan (two closed unmerged, one
+merged for its decision-log evidence only). It does not authorize any other branch, any widening of
+scope, or merging `gate/g1-forbidden-control` / `gate/g1-deletion-control`.
+
+## 2026-09-12 -- Operator-run negative control: hash mismatch (in progress)
+
+Branch `gate/g1-hash-control`, base `origin/main` @ 63a5425. Authorized: operator
+verbatim "Даю авторизацию тебе все это сделать после моего ревью, апрув", branch
+creation confirmed by GPT-PM VERDICT: APPROVE (see the entry above this one).
+
+Procedure, exactly as specified in the PR #9 report after GPT-PM's round-1
+MAJOR corrected it: (1) set GATE_MANIFEST_APPROVED_HASH_G1 to a deliberately
+wrong value, (2) re-run Governance on THIS PR (branch resolves to G1 via the
+`^gate/([gG][0-9]+)` regex), (3) confirm failure at the hash step naming G1,
+(4) restore the correct value, (5) re-run once more and require green through
+both the hash and scope steps. Both runs are the evidence.
