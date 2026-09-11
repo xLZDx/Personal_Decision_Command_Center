@@ -4,7 +4,12 @@
 **Gate:** G1 — Repository + governance enforcement + CI + contracts
 **Status:** Steps 1-9 done (2026-09-12) — all four negative controls now have real CI evidence in
 both directions where applicable; R13 closed as an accepted risk (operator decision, 2026-09-11).
-Remaining: the fresh-context review and the closure report (steps 10-11).
+The step-10 fresh-context review returned `VERDICT: BLOCKER` (1 BLOCKER, 3 MAJOR) on 2026-09-12 —
+see `G1_PREADOPTION_EVIDENCE.md` §15 for the findings and their fixes, in progress on branch
+`gate/g1-closure-blockers`. Remaining: land that remediation (operator merge required — the branch
+touches `.github/CODEOWNERS`, an authority-surface path, so `~/.claude/CLAUDE.md` §24's
+implementer-merge carve-out does not apply), the `control/g1-none-rejection` real-CI negative
+control (§16), a second fresh-context review, then the closure report (step 11).
 **Supersedes:** nothing. Commit `b784265` is **bootstrap implementation, not gate-approved work**.
 
 ## Why this plan exists

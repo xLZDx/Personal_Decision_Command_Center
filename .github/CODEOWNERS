@@ -1,12 +1,19 @@
-# Operator-owned protected paths.
+# Operator-declared protected paths.
 #
-# See governance/GATE_MANIFEST_INTEGRITY.md. This file is the control that actually enforces the
-# governance invariant "the actor being constrained cannot modify the authoritative object that
-# defines the constraint" -- CI checks are detection, merge authority is enforcement.
+# See governance/GATE_MANIFEST_INTEGRITY.md. This file DECLARES the paths whose authoritative
+# owner is the operator -- it does not by itself enforce that. CODEOWNERS only has teeth when
+# branch protection on `main` has "Require review from Code Owners" enabled.
 #
-# CODEOWNERS only has teeth when branch protection on `main` has "Require review from Code Owners"
-# enabled. A CODEOWNERS file with that setting off is decoration; G1's DoD requires evidence that
-# it is actually on.
+# core/RISK_REGISTER.md R12/R13 (measured 2026-09-11, still current): the live ruleset on `main`
+# has `require_code_owner_review: false` and `required_approving_review_count: 0` -- deliberately,
+# because a single GitHub identity plus GitHub's own self-approval ban would deadlock every PR
+# otherwise. So this file is currently DECORATION in the sense that no platform control reads it to
+# block a merge: separation between implementer and operator is procedural (the implementer's own
+# compliance plus the audit trail in core/DECISION_LOG.md), not mechanical. No document in this
+# repository may claim otherwise -- R13's own binding resolution. This file still has real value:
+# it is the authoritative RECORD of which paths are operator-owned, read by
+# tests/policy/codeowners.test.mjs and by CLAUDE.md §14/§24's authority-surface carve-out, and it
+# would start mechanically enforcing the moment code-owner review is turned back on.
 
 # Governance state: manifests and approvals define what a gate may do.
 /governance/gate-manifests/     @xLZDx
