@@ -480,7 +480,70 @@ fixed: `.gitignore` is not in the now-binding `allowed_paths`, so the change bel
 secrets first appear. The workaround until then is `.env`, which is already ignored. A finding that
 could have been quietly folded into an unrelated commit an hour ago now cannot be.
 
-## 11. Operator boundary — nothing below is the implementer's
+## 11. The scope step observed REFUSING — the other half of §10
+
+§10 recorded the scope step passing for the first time. That closed one gap and opened its mirror
+image: **the scope step had then been observed only in the direction that lets work through.** The
+refusals already on record — sections 8.3 and 9.1, and the four failed runs in §10's table — all
+happened at the **hash** step, which fails closed _before_ scope is ever evaluated. Those prove the
+ordering, not the scope rule. Until this section, nothing in this repository demonstrated that the
+scope check can say no.
+
+**The instrument was chosen to be a real change, not a synthetic one.** §10.2 above recorded the
+`.dev.vars` gap and the fact that the now-binding manifest refuses to let G1 close it. PR #7 made
+that change anyway, on purpose: `.gitignore` gained `.dev.vars`, `.dev.vars.*` and
+`!.dev.vars.example` (commit `98716b3`), alongside the report pair and decision-log wording fix that
+are legitimately in scope.
+
+**Why `.gitignore` specifically.** `governance/gate-manifests/g1.yaml` names it in its own
+"DELIBERATELY EXCLUDED" block — _"Present in the repository, untouched by G1"_ — so the path is out
+of scope by the manifest's explicit reasoning, not by an omission that could be argued as accidental.
+It is also deliberately **not** one of the four `forbidden_paths`: those carry their own refusal
+message, and the control being exercised here is the ordinary out-of-scope one.
+
+**FACT.** Run `34640409639`, job `103398420489`, head `98716b3`, base `c0e4a08`. Step 5 (hash)
+**succeeded**, so step 6 genuinely ran rather than being skipped; step 6 then **failed**. Verbatim
+from the job log:
+
+```
+Manifest hash matches the operator-approved value.
+...
+Changed paths (4):
+  .gitignore
+  core/DECISION_LOG.md
+  reports/G1_governance_document_corrections.html
+  reports/G1_governance_document_corrections.ru.html
+::error file=.gitignore::outside G1's approved scope
+::error::1 path(s) outside the approved scope for G1. Widening the manifest to fit the diff is not
+the fix -- a scope change needs a new plan and a new GO.
+```
+
+**The path is machine-attributable, not only prose.** The check-run annotation carries it as
+structured data — `GET /repos/xLZDx/Personal_Decision_Command_Center/check-runs/103398420489/annotations`
+returns `{"annotation_level":"failure","path":".gitignore","message":"outside G1's approved scope"}`.
+So the refusal names the offending path in a form a reviewer can verify without reading a log.
+
+**What this establishes, stated at its real width.** Three of the four changed paths matched
+`allowed_paths` and were not reported; exactly one did not and was. The check therefore discriminates
+between in-scope and out-of-scope paths within a single diff — it is not failing the whole run on any
+change, and it is not passing everything. Together with §10 the same mechanism has now been observed
+answering both ways, with nothing changing between the two observations except the content of the
+diff.
+
+**What it does NOT establish.** The `forbidden_paths` branch is still unexercised — no run has ever
+touched one of the four authority paths, so its distinct refusal message has never been produced by
+CI. Nor is the hash-mismatch control exercised here: that needs a branch that deliberately edits
+`g1.yaml`, which is operator-only work under INV-28. Both remain open, and neither is claimed as
+evidence anywhere in this repository.
+
+**The revert is part of the control, not a retraction of it.** The commit immediately following
+`98716b3` on `gate/g1-remediation` — the one carrying this section — removes the three
+`.gitignore` lines again, restoring the PR to green so it can be reviewed and merged on its
+legitimate content. The refusal is the deliverable; the file change was the instrument. `.dev.vars`
+stays uncovered until a gate whose manifest allows that path lands the same three lines — which is
+exactly the outcome §10.2 predicted, now demonstrated rather than asserted.
+
+## 12. Operator boundary — nothing below is the implementer's
 
 Note the change §3.1 makes to this list. These are not operator-only because the implementer
 _cannot_ do them; the credential now can. They are operator-only because they are the authority the

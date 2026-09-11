@@ -2,8 +2,10 @@
 
 **Plan ID:** `pdos-g1-remediation-2026-09-10`
 **Gate:** G1 — Repository + governance enforcement + CI + contracts
-**Status:** OPEN. Steps 1-8 done (2026-09-11); remaining: R13, three of the four negative controls,
-the fresh-context review, and the closure report. See "Blocked on the operator".
+**Status:** OPEN. Steps 1-8 done (2026-09-11); R13 closed as an accepted risk (operator decision,
+2026-09-11) and the scope-step negative control run (run `34640409639`). Remaining: the
+`forbidden_paths` refusal, the hash-mismatch control (operator-only), the test-deletion control's
+deletion half, the fresh-context review, and the closure report. See "Blocked on the operator".
 **Supersedes:** nothing. Commit `b784265` is **bootstrap implementation, not gate-approved work**.
 
 ## Why this plan exists
@@ -81,16 +83,23 @@ implementation can settle: one GitHub identity behind both roles means the audit
 distinguish implementer from operator, so any separation described in these documents is procedural,
 not mechanical.
 
-**Status of step 9 — stated narrowly, because the obvious wider claim is not supported.** Only the
-fourth bullet is actually done: branch protection is now evidenced by `gh api` output rather than by
-this document's word for it.
+**Status of step 9 — stated narrowly, because the obvious wider claim is not supported.** Two of the
+four bullets are done: branch protection is now evidenced by `gh api` output rather than by this
+document's word for it, and the scope-step refusal has now actually been run.
 
-The **scope-step control has only ever been observed PASSING** (run `34544309071`, step 6). It has
-never been observed refusing. Earlier runs did refuse — but at the **hash** step, because no
-approved hash existed yet, which is a different control. Saying "the scope check has been shown to
-refuse" would be exactly the substitution this section exists to prevent: a guard that has never
-been seen saying no is not known to say no. It needs a PR that touches a path outside
-`allowed_paths`.
+The **scope-step control has now been observed in BOTH directions.** It passed on run
+`34544309071` (step 6, 28 paths, all in scope) and **refused** on run `34640409639`, job
+`103398420489`, head `98716b3` — a PR carrying four changed paths of which exactly one,
+`.gitignore`, is outside `allowed_paths`. The other three were not reported, so the check
+discriminates within a single diff rather than failing wholesale. The hash step **succeeded** on
+that run, which is what makes it evidence about scope at all: step 6 genuinely executed instead of
+being skipped behind an earlier failure. The refusal also names the path as structured data in the
+check-run annotation (`path: ".gitignore"`), not only in prose. Full record, including what it does
+and does not establish: `G1_PREADOPTION_EVIDENCE.md` §11.
+
+The instrument was a real change, not a synthetic one — `.dev.vars` is genuinely missing from
+`.gitignore` and genuinely out of G1's scope, and the follow-up commit reverts it, leaving the gap
+open for the gate that may legitimately close it.
 
 The **hash-mismatch control** has not been run either; it requires a branch that deliberately edits
 `g1.yaml`, which is operator-only territory.

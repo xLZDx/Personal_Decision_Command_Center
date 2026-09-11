@@ -5,6 +5,62 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — Negative control at the scope step, run on a real out-of-scope edit
+
+**Decision:** demonstrate the scope refusal with a change that is genuinely needed and genuinely
+out of G1's approved scope, rather than with a synthetic file created to be refused. The change:
+`.gitignore` gains `.dev.vars`, `.dev.vars.*` and a `!.dev.vars.example` negation.
+
+**Why this path and not another.** `governance/gate-manifests/g1.yaml` names `.gitignore` in its own
+"DELIBERATELY EXCLUDED" list — "Present in the repository, untouched by G1" — so it is out of scope
+by the manifest's own explicit reasoning, not by an omission someone could argue was accidental. It
+is also not in `forbidden_paths`, which matters: the four forbidden entries have their own refusal
+message, and the control being exercised here is the ordinary out-of-scope one.
+
+**Why the edit is real.** `.gitignore` covers `.env` and `.env.*` but not `.dev.vars`, which is the
+filename Wrangler reads local secrets from. The gap was found while writing the operator's setup
+steps and deferred there with an explicit note (_"Дыру закрою в гейте G2 — в G1 не могу, `.gitignore`
+не входит в утверждённый вами манифест"_). So the commit is a fix that was owed, timed to also serve
+as the control.
+
+**What is being proved, stated narrowly.** Until now the scope step had only ever been observed
+PASSING. The earlier refusals recorded in this log were at the **hash** step — a different control,
+which fails closed before scope is ever evaluated. A control observed only in the direction that
+lets work through has not been shown to refuse anything.
+
+**Expected result:** the `Governance` check FAILS, naming `.gitignore` as outside `allowed_paths`.
+A PASS here would be the finding, not the failure.
+
+**Evidence — the run happened and it refused.** PR #7, head `98716b3`, run `34640409639`, job
+`103398420489`. Step 5 (hash) **succeeded**, so step 6 genuinely executed rather than being skipped
+behind an earlier failure; step 6 then **failed** with `::error file=.gitignore::outside G1's
+approved scope` and `1 path(s) outside the approved scope for G1`. Four paths changed; the three in
+`allowed_paths` were not reported. The check-run annotation carries the path as structured data
+(`{"path":".gitignore","message":"outside G1's approved scope"}`), so the refusal is verifiable
+without reading a log. Full record in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §11.
+
+**Still unproven, and not claimed anywhere:** the `forbidden_paths` branch has never fired (no run
+has touched one of the four authority paths, so its distinct message has never been produced), and
+the hash-mismatch control still needs a branch that deliberately edits `g1.yaml` — operator-only
+under INV-28. This commit reverts the `.gitignore` change so the PR returns to green: the refusal is
+the deliverable, the file change was the instrument.
+
+**How to apply:** `.dev.vars` stays uncovered by `.gitignore` until a gate whose manifest allows
+that path lands the same three lines. Until then use `.env`, as the operator's setup steps already
+say.
+
+**The same defect class, caught in this PR's own deliverable.** GPT-PM's round-1 review of PR #7
+returned a MAJOR: the report pair committed earlier in this same PR still said the scope step had
+been observed _"passing only"_, and that both checks _"run and pass on every commit"_ — while this
+PR was in the act of disproving the first and the second erases deliberate policy failures. Two
+incompatible statements of G1's state, shipped together. Both languages were corrected: the
+"passing only" sentence is bounded to the block it describes rather than deleted, with a dated
+update beneath it naming the run, and the remaining-items row moves to DONE. A report is a durable
+artifact; a claim in it that was true when written and false by the time it merges is still a false
+claim on `main`.
+
+---
+
 ## 2026-09-11 — R13 CLOSED as an accepted risk: one identity, separation stays procedural
 
 **Decision (operator's, final, not to be reopened before the production release):** no second GitHub
@@ -32,9 +88,11 @@ every control described here comes from the record, not from the platform.
 
 **R13 then demonstrated itself, mechanically, within the hour.** Reviewing PR #6, GPT-PM tried to
 submit a formal `REQUEST_CHANGES` review and **GitHub refused it**, because its connector
-authenticates as the same `xLZDx` identity that authored the PR — GitHub forbids reviewing your own
-pull request. It recorded the verdict as a plain review COMMENT instead and said explicitly that it
-did not work around the platform restriction. This is the clearest evidence R13 has ever had: not an
+authenticates as the same `xLZDx` identity that authored the PR — GitHub forbids **approving or
+requesting changes on** your own pull request. A plain COMMENT is allowed, and that is what it fell
+back to, saying explicitly that it did not work around the platform restriction. (The first draft of
+this sentence said GitHub "forbids reviewing your own pull request", which is wider than the actual
+rule; flagged in the same review and corrected here.) This is the clearest evidence R13 has ever had: not an
 argument that separation is procedural, but the platform itself refusing to treat two roles as two
 actors. Recorded here because an accepted risk should carry the sharpest example of what was
 accepted, not the mildest.

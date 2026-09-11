@@ -1,0 +1,837 @@
+<title>A Document Asserting a Missing Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Gate G1 · Three merges and three errors</p>
+    <h1>A Document Asserting a Control That Does Not Exist</h1>
+    <p class="standfirst">
+      The project's principal governance document described, in four places, a protection that is
+      not there. Checking through the API instead of from memory showed that the file's three most
+      load-bearing sentences were false. Along the way it turned out that two of my own reasons for
+      "I cannot" were wrong as well.
+    </p>
+    <div class="masthead-meta">
+      <span>11 September 2026</span>
+      <span>3 PRs merged</span>
+      <span>R8, R13 closed</span>
+      <span>3 GPT-PM rounds → APPROVE</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ ec30155</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+
+
+  <div class="verdict">
+    <span class="stamp">VERDICT: APPROVE · 0 BLOCKER / 0 MAJOR</span>
+    <p>
+      PR #2, #5 and #6 are merged. The last one <strong>without the operator</strong>: on GPT-PM's
+      verdict against the exact commit <code>1c556ef</code>, with two green checks on that same
+      commit. A path that until today existed only on paper has now been walked end to end for the
+      first time.
+    </p>
+    <p class="who">
+      GPT-PM · round 1 → BLOCKER + MAJOR · round 2 → BLOCKER · round 3 → APPROVE
+      (review 5182707264, head 1c556ef) · merge c0e4a08
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">01</span>
+      <div><h2>What was merged</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>The three PRs closed during this block of work.</caption>
+          <thead>
+            <tr><th>PR</th><th>What it carried</th><th class="num-col">Merge</th><th>Who clicked</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>#2</td>
+              <td>Results of the CPU probe on Cloudflare Free; NB1 settled by measurement</td>
+              <td class="num-col"><code>87fc880</code></td>
+              <td>operator</td>
+            </tr>
+            <tr>
+              <td>#5</td>
+              <td>The test-deletion guard, blind to <code>.test.mjs</code>, fixed</td>
+              <td class="num-col"><code>69cb6ef</code></td>
+              <td>operator</td>
+            </tr>
+            <tr>
+              <td>#6</td>
+              <td>R13 and R8 closed, R9 explicitly left open, the governance document brought into
+                line with the measured truth</td>
+              <td class="num-col"><code>c0e4a08</code></td>
+              <td><strong>me, on the APPROVE</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02</span>
+      <div><h2>The document described a control that does not exist</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        <code>governance/GATE_MANIFEST_INTEGRITY.md</code> is the description of the mechanism that
+        the whole of gate G1 exists for. Its section on "what actually provides the protection"
+        asserted three things:
+      </p>
+      <div class="block">
+        <p class="mono">"The implementer has no direct-push and no merge permission."</p>
+        <p class="mono">
+          "…requires review from <code>CODEOWNERS</code> — i.e. the operator — before it can merge."
+        </p>
+        <p class="mono">
+          "…nothing reaches <code>main</code> without the operator looking at it. This is the
+          backstop that does not depend on CI behaving."
+        </p>
+      </div>
+      <p>Instead of reasoning about it, I measured the ruleset through <code>gh api</code>:</p>
+      <div class="table-scroll">
+        <table>
+          <caption>Ruleset <code>PDCC</code> (<code>22899342</code>), as actually configured on <code>main</code>.</caption>
+          <thead>
+            <tr><th>Rule</th><th class="num-col">Value</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>required_status_checks</code></td><td class="num-col"><code>governance</code> + <code>verify</code>, strict</td></tr>
+            <tr><td><code>required_approving_review_count</code></td><td class="num-col"><strong>0</strong></td></tr>
+            <tr><td><code>require_code_owner_review</code></td><td class="num-col"><strong>false</strong></td></tr>
+            <tr><td><code>deletion</code>, <code>non_fast_forward</code></td><td class="num-col">blocked</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="alarm">
+        <h3>All three sentences are false</h3>
+        <p>
+          No approval is required <strong>at all</strong>. CODEOWNERS review is not enabled. The
+          implementer's credentials carry <code>admin</code> on this repository. That is to say: the
+          most load-bearing paragraph of the principal governance document described a protection
+          that does not exist — and did so in the very file reviewers use to check the gate itself.
+        </p>
+      </div>
+      <p class="kicker">Why approvals are zero, and why that cannot simply be raised</p>
+      <p>
+        There is one GitHub identity for both roles. GitHub forbids approving your own PR, so
+        requiring even a single approval would jam every implementer PR permanently. Raising the
+        number is not a fix while both roles sit under one account.
+      </p>
+      <p>
+        The section has been rewritten: what the platform really does provide (a PR is mandatory,
+        two green checks, deletion and force-push blocked), why approvals are zero, and that the
+        merge decision is <strong>procedural</strong>, resting on an independent review and the log
+        rather than on GitHub.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">03</span>
+      <div><h2>Four more remnants of the same class</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The first edit fixed the principal paragraph — and left the same assertion alive elsewhere
+        in the same file. GPT-PM found three; I found the fourth while fixing the third.
+      </p>
+      <div class="defects">
+        <div class="defect">
+          <span class="idx">1</span>
+          <div>
+            <h3>"Only the first is real enforcement"</h3>
+            <p>
+              The section heading ranked the controls and declared only the first one — the merge —
+              real. In fact the order inverts: what the platform mechanically enforces is precisely
+              the checks, while the merge decision is procedural.
+            </p>
+          </div>
+        </div>
+        <div class="defect">
+          <span class="idx">2</span>
+          <div>
+            <h3>"fixed by CODEOWNERS review plus the hash check"</h3>
+            <p>
+              CODEOWNERS provides nothing mechanical. What closes this is the hash <em>alone</em> —
+              and only because the approved value lives outside the repository tree.
+            </p>
+          </div>
+        </div>
+        <div class="defect">
+          <span class="idx">3</span>
+          <div>
+            <h3>A demand for evidence that CODEOWNERS review is enabled</h3>
+            <p>
+              The verification section demanded evidence of a control that does not exist. Asking
+              for evidence of a non-existent control is exactly the way a document starts asserting
+              it.
+            </p>
+          </div>
+        </div>
+        <div class="defect">
+          <span class="idx">4</span>
+          <div>
+            <h3>"remote CI currently executes nothing (R11)"</h3>
+            <p>
+              Found by me, not by the review. R11 is closed: the repository is public, Actions are
+              free, and both checks really do execute on every PR head. "Pass" is the wrong word:
+              a head that violates policy is supposed to fail, and one in this very PR deliberately
+              did.
+            </p>
+          </div>
+        </div>
+      </div>
+      <p>
+        The block claiming "none of the three pieces of evidence can be obtained yet" has been
+        replaced with a table of what actually is owed: the ruleset evidence — <strong>done</strong>;
+        both negative controls — <strong>no</strong>. And the honest closing sentence no longer says
+        "enforcement is not verified at all": the hash step has been observed both refusing and
+        passing, while the scope step had, as of that block, been observed <em>passing only</em>.
+      </p>
+      <p class="note">
+        <strong>Update, same day, after this block.</strong> The scope step has now been observed in
+        the other direction too: run <code>34640409639</code> (job <code>103398420489</code>, head
+        <code>98716b3</code>) refused with <code>::error file=.gitignore::outside G1's approved
+        scope</code>, and the hash step before it <strong>succeeded</strong> — so step 6 genuinely
+        executed rather than being skipped. Of four changed paths, exactly one was refused. The
+        section 07 row below is updated; the paragraph above is left as written so it stays visible
+        what changed and when.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">04</span>
+      <div><h2>Three errors of mine in one block of work</h2></div>
+    </div>
+    <div class="flow">
+      <div class="defect">
+        <h3>1 · I gave the operator a wrong reason, and they made a decision on it</h3>
+        <p>
+          Asked "why are you still waiting for me to merge", I quoted
+          <code>TDD.md:198</code> (INV-20) accurately — and then concluded that not even a direct
+          instruction would lift it. INV-20 <strong>had already been narrowed that same day</strong>,
+          and the record of it sits in the very file I append to every session.
+        </p>
+        <p class="why">
+          The real blocker was that I had not run a GPT-PM review on a single PR — a step that does
+          not need the operator at all. The cost: they authorized a change to the rule and delegated
+          to me a governance decision about which they themselves said "I do not understand what this
+          means." I did not accept the delegation.
+        </p>
+      </div>
+      <div class="defect">
+        <h3>2 · I declared the GPT-PM conversation dead without checking</h3>
+        <p>
+          <code>review.js</code> failed with "Cannot re-open exhausted conversation… to rotate it",
+          and I recorded that as exhaustion requiring the operator's intervention. The operator
+          objected: "you have everything you need to start a new chat." A retry a few minutes later,
+          once the orchestrator was free, went through fine.
+        </p>
+        <p class="why">
+          Reading the code of <code>prepareConversationReplacement</code> showed that rotation must
+          first <em>open</em> the old conversation, and throws that phrase when the page is
+          unreachable. The phrase names a cause it never measured. A busy shared browser produces it
+          in exactly the same way — and that is what it was, busy with another project.
+        </p>
+      </div>
+      <div class="defect">
+        <h3>3 · The wording was wider than the rule</h3>
+        <p>
+          I wrote that "GitHub forbids reviewing your own PR." More precisely: <code>APPROVE</code>
+          and <code>REQUEST_CHANGES</code> are forbidden, while <code>COMMENT</code> is allowed —
+          which is what happened. Caught in the same review, corrected.
+        </p>
+      </div>
+      <div class="note">
+        All three are one class: <strong>a claim wider than its basis</strong>. The same class the
+        previous PR was fixing. Recorded in the decision log by name, not smoothed over.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">05</span>
+      <div><h2>R13 demonstrated itself</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The operator decided: there will be no second GitHub identity, the subject is closed until
+        the production release. R13 moves from <strong>OPEN</strong> to <strong>ACCEPTED</strong> —
+        and that is a closure, not a hole: the risk had two mitigation branches, the first was
+        rejected, so the second becomes binding.
+      </p>
+      <div class="alarm">
+        <h3>And within the same hour the platform confirmed it</h3>
+        <p>
+          GPT-PM tried to file a formal <code>REQUEST_CHANGES</code> on PR #6.
+          <strong>GitHub refused</strong> — its connector operates under the same
+          <code>xLZDx</code> account as the PR's author. It recorded its verdict as an ordinary
+          comment and noted separately that it did not work around the restriction.
+        </p>
+        <p>
+          This is the best evidence R13 has ever had: not an argument about the separation being
+          procedural, but the platform itself refusing to treat the two roles as two actors.
+          Recorded inside the acceptance entry — an accepted risk should carry its own sharpest
+          example.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">06</span>
+      <div><h2>Risk state</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>What changed in the register, and on what basis.</caption>
+          <thead>
+            <tr><th>Risk</th><th class="num-col">Was → is</th><th>Basis</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>R8 — ambiguity of the queue's CPU limit</td>
+              <td class="num-col">OPEN → <strong>CLOSED</strong></td>
+              <td>Probe on the operator's account: the queue and ordinary HTTP break at the same
+                point. It confirms the conservative class, but is <em>not</em> a direct measurement
+                of 10.0 ms — that caveat was added on a review finding</td>
+            </tr>
+            <tr>
+              <td>R9 — whether a pull consumer is available on Free</td>
+              <td class="num-col">OPEN → <strong>OPEN</strong></td>
+              <td>The same probe configured a <em>push</em> consumer. It tested R8 and did not touch
+                R9. The register now says so explicitly</td>
+            </tr>
+            <tr>
+              <td>R11 — paying for GitHub Actions</td>
+              <td class="num-col">OPEN → <strong>CLOSED</strong></td>
+              <td>The repository is public, Actions are free and unmetered</td>
+            </tr>
+            <tr>
+              <td>R12 — the branch protection model</td>
+              <td class="num-col">OPEN → <strong>CLOSED</strong></td>
+              <td>Ruleset <code>PDCC</code> is active, verified through <code>gh api</code></td>
+            </tr>
+            <tr>
+              <td>R13 — the implementer's identity</td>
+              <td class="num-col">OPEN → <strong>ACCEPTED</strong></td>
+              <td>Operator's decision; the consequence was made binding and carried through every
+                document</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">07</span>
+      <div><h2>What remains before G1 can close</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>The remaining items. The operator is needed in exactly one.</caption>
+          <thead>
+            <tr><th>Item</th><th>Who</th><th>Why it is not closed</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Refusal control on the scope step</td>
+              <td>me</td>
+              <td><strong>DONE</strong> the same day, PR #7: run <code>34640409639</code> refused,
+                naming <code>.gitignore</code>; the hash step before it passed. Both directions of
+                the mechanism have now been observed</td>
+            </tr>
+            <tr>
+              <td>Hash-mismatch control</td>
+              <td><strong>operator</strong></td>
+              <td>Requires a branch that deliberately edits <code>g1.yaml</code></td>
+            </tr>
+            <tr>
+              <td>Test-deletion control on a real PR</td>
+              <td>me</td>
+              <td>There is partial evidence: the guard refused a real PR in real CI, but that was a
+                false positive, and the deletion half has never been tested at all</td>
+            </tr>
+            <tr>
+              <td>A fresh-context review and the closing report</td>
+              <td>me</td>
+              <td>After the controls</td>
+            </tr>
+            <tr>
+              <td>Stale lines in <code>PLAN_MASTER_GATES.md</code></td>
+              <td>me</td>
+              <td>The conflict with PR #2 is gone — it can be edited now</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">The main consequence of this block</p>
+      <p>
+        The path "independent review against an exact commit → merge by the implementer acting as
+        the executor of someone else's decision" has been walked end to end, for the first time.
+        Until today it existed only in the description. From here every PR can take that path, and
+        the operator is needed only where the decision genuinely is theirs.
+      </p>
+    </div>
+  </section>
+</div>
+
+
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
