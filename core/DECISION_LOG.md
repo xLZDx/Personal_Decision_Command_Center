@@ -1480,3 +1480,14 @@ wrong value, (2) re-run Governance on THIS PR (branch resolves to G1 via the
 `^gate/([gG][0-9]+)` regex), (3) confirm failure at the hash step naming G1,
 (4) restore the correct value, (5) re-run once more and require green through
 both the hash and scope steps. Both runs are the evidence.
+
+## 2026-09-12 -- Operator control 3/3: test-deletion guard, deletion half (in progress)
+
+Branch `gate/g1-deletion-control`, base `origin/main` @ 005b8e6. Authorized: operator
+verbatim "Даю авторизацию тебе все это сделать после моего ревью, апрув", branch
+creation confirmed by GPT-PM VERDICT: APPROVE (see the earlier entry in this log).
+
+Deletes `tests/policy/codeowners.test.mjs` on this branch only. main's copy is never
+touched -- this PR is opened purely to capture the "verify" job's Test-deletion guard
+step refusing with "deleted test file: tests/policy/codeowners.test.mjs", then closed
+UNMERGED.
