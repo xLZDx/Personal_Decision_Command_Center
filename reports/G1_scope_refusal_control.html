@@ -1,0 +1,800 @@
+<title>The Guard That Said No</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #f6f6f3;
+    --surface: #fffffe;
+    --surface-2: #eeeee9;
+    --ink: #191b1e;
+    --ink-2: #4c5157;
+    --ink-3: #767c83;
+    --rule: #d9d9d2;
+    --rule-2: #c3c3ba;
+    --accent: #2f5d63;
+    --accent-soft: #dfeaea;
+    --pass: #2c6444;
+    --pass-soft: #dcebe0;
+    --warn: #7d5710;
+    --warn-soft: #f2e8d2;
+    --fail: #8d2b2b;
+    --fail-soft: #f1dede;
+
+    --measure: 68ch;
+    --step-0: 1rem;
+    --step-1: 1.15rem;
+    --step-2: 1.4rem;
+    --step-3: 1.85rem;
+    --step-4: 2.6rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121417;
+      --surface: #191c20;
+      --surface-2: #21252a;
+      --ink: #e7e7e2;
+      --ink-2: #b0b5bb;
+      --ink-3: #858b92;
+      --rule: #2c3138;
+      --rule-2: #3b424a;
+      --accent: #7fb3b8;
+      --accent-soft: #1d2c2e;
+      --pass: #7fb894;
+      --pass-soft: #18291e;
+      --warn: #d3ab63;
+      --warn-soft: #2a2314;
+      --fail: #d99494;
+      --fail-soft: #2c1a1a;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121417;
+    --surface: #191c20;
+    --surface-2: #21252a;
+    --ink: #e7e7e2;
+    --ink-2: #b0b5bb;
+    --ink-3: #858b92;
+    --rule: #2c3138;
+    --rule-2: #3b424a;
+    --accent: #7fb3b8;
+    --accent-soft: #1d2c2e;
+    --pass: #7fb894;
+    --pass-soft: #18291e;
+    --warn: #d3ab63;
+    --warn-soft: #2a2314;
+    --fail: #d99494;
+    --fail-soft: #2c1a1a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px 96px; }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 20px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-4);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .masthead-meta span { white-space: nowrap; }
+  .masthead-meta span::after { content: '·'; margin-left: 10px; color: var(--rule-2); }
+  .masthead-meta span:last-child::after { content: ''; }
+
+  h2 {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-3);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.35;
+    margin: 0 0 6px;
+  }
+
+  section { padding: 44px 0 0; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+
+  .section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .section-head .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding-top: 6px;
+    white-space: nowrap;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code, .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pass);
+    padding: 20px 22px;
+    margin-top: 26px;
+  }
+  .verdict .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--pass);
+    background: var(--pass-soft);
+    border: 1px solid var(--pass);
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .verdict p { margin: 0; font-size: 0.95rem; }
+  .verdict .who {
+    grid-column: 2;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .alarm {
+    background: var(--fail-soft);
+    border: 1px solid var(--fail);
+    border-left: 4px solid var(--fail);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .alarm h3 { color: var(--fail); margin: 0; }
+  .alarm p { margin: 0; }
+  .alarm ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+  .alarm li { max-width: 62ch; font-size: 0.95rem; }
+
+  .ask {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ask h3 { color: var(--warn); margin: 0; }
+  .ask p { margin: 0; }
+  .ask ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+  .ask li { max-width: 62ch; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 640px; }
+  caption {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0 0 8px;
+    max-width: var(--measure);
+  }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num-col {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.done { color: var(--pass); background: var(--pass-soft); }
+  .chip.part { color: var(--warn); background: var(--warn-soft); }
+  .chip.block { color: var(--fail); background: var(--fail-soft); }
+  .chip.hist { color: var(--ink-3); background: var(--surface-2); }
+
+  .defects { display: flex; flex-direction: column; gap: 0; }
+  .defect {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect:first-child { border-top: 1px solid var(--rule); }
+  .defect .idx {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding-top: 3px;
+  }
+  .defect h3 { margin-bottom: 4px; }
+  .defect p { margin: 0 0 10px; font-size: 0.95rem; }
+  .defect p:last-child { margin-bottom: 0; }
+  .defect .why { color: var(--ink-2); border-left: 2px solid var(--rule-2); padding-left: 12px; }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-2);
+    padding: 16px 18px;
+    font-size: 0.95rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2rem; --step-3: 1.5rem; }
+    .wrap { padding: 0 18px 64px; }
+    .section-head { flex-direction: column; gap: 2px; }
+    .defect { grid-template-columns: 1fr; }
+    .defect .idx { padding-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Personal Decision OS · Gate G1 · Negative control</p>
+    <h1>The guard that finally said no</h1>
+    <p class="standfirst">
+      Until today the CI scope check had only ever been observed in one direction — letting work
+      through. It was made to refuse, by a real change rather than a synthetic one, and it refused,
+      naming exactly one path out of four. Along the way the risk register turned out to still be
+      holding two risks open that had been resolved the day before.
+    </p>
+    <div class="masthead-meta">
+      <span>11 September 2026</span>
+      <span>PR #7 and #8 merged</span>
+      <span>2 of 4 controls closed</span>
+      <span>3 questions for the operator</span>
+    </div>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ ccfea1b</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+  <div class="verdict">
+    <span class="stamp">VERDICT: APPROVE ×2</span>
+    <p>
+      Both PRs took two GPT-PM rounds: a MAJOR in round 1, an APPROVE on the exact head in round 2.
+      The merge was performed by me as the executor of someone else's decision, under §24.
+    </p>
+    <p class="who">
+      PR #7 → review 5182911229, head <code>8af59f0</code>, merge <code>bc54804</code> ·
+      PR #8 → review 5183007957, head <code>1eead11</code>, merge <code>ccfea1b</code>
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <span class="num">01</span>
+      <div><h2>The control that was missing</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The repository has a check whose job is to refuse a PR touching a path outside the manifest
+        the operator approved. Yesterday it passed for the first time in the project's history. That
+        closed one gap and opened its mirror image: the mechanism had been observed only in the
+        direction that lets work through.
+      </p>
+      <div class="note">
+        <strong>Every earlier refusal was at a different step.</strong> Until today, every recorded
+        refusal happened at the <em>hash</em> step — because no approved hash existed yet. The hash
+        step fails <em>before</em> scope is evaluated at all. That proves the ordering and says
+        nothing about the scope rule itself. A guard seen only saying yes is not known to say no.
+      </div>
+      <p class="kicker">The instrument was real, not synthetic</p>
+      <p>
+        <code>.gitignore</code> covers <code>.env</code> and <code>.env.*</code> but not
+        <code>.dev.vars</code> — the filename Wrangler reads local secrets from. The gap was found
+        earlier and deferred precisely because <code>.gitignore</code> is outside G1's scope: the
+        manifest <code>g1.yaml</code> names it in its own "DELIBERATELY EXCLUDED" list. So the path
+        is out of scope by the manifest's explicit reasoning, not by an accidental omission. And it
+        is deliberately <strong>not</strong> one of the four <code>forbidden_paths</code> — those
+        carry their own refusal, and what was being tested here was the ordinary one.
+      </p>
+      <p>
+        So commit <code>98716b3</code> genuinely closes the gap, and doubles as the instrument. The
+        next commit reverts it: the refusal is the deliverable, the file change is the apparatus.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">02</span>
+      <div><h2>What the run showed</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>Run <code>34640409639</code>, job <code>103398420489</code>, head <code>98716b3</code>.</caption>
+          <thead>
+            <tr><th>Step</th><th class="num-col">Result</th><th>Why it matters</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>4. Resolve the gate</td>
+              <td class="num-col">success</td>
+              <td>Branch name <code>gate/g1-remediation</code> resolved to <code>G1</code></td>
+            </tr>
+            <tr>
+              <td>5. Verify the manifest hash</td>
+              <td class="num-col">success</td>
+              <td><strong>The load-bearing line.</strong> Step 6 genuinely executed rather than
+                being skipped behind an earlier failure</td>
+            </tr>
+            <tr>
+              <td>6. Check paths against the scope</td>
+              <td class="num-col"><span class="chip block">failure</span></td>
+              <td>A refusal naming <code>.gitignore</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>Manifest hash matches the operator-approved value.
+...
+Changed paths (4):
+  .gitignore
+  core/DECISION_LOG.md
+  reports/G1_governance_document_corrections.html
+  reports/G1_governance_document_corrections.ru.html
+::error file=.gitignore::outside G1's approved scope
+::error::1 path(s) outside the approved scope for G1.</code></pre>
+      <p>
+        Three of the four paths were inside the scope and were not reported. The check
+        <strong>discriminates</strong> within a single diff rather than failing the run on any
+        change at all.
+      </p>
+      <p class="kicker">The path is machine-readable, not only prose</p>
+      <p>
+        The check-run annotation returns it as structured data:
+        <code>{"annotation_level":"failure","path":".gitignore","message":"outside G1's approved
+        scope"}</code>. A reviewer can verify the refusal without reading a log.
+      </p>
+      <div class="note">
+        <strong>What this does <em>not</em> prove.</strong> The <code>forbidden_paths</code> branch
+        has never fired — no run has touched any of the four authority paths, so CI has never
+        produced its distinct message. The hash-mismatch control has not run either. Both are
+        recorded as open and neither is passed off as evidence anywhere.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">03</span>
+      <div><h2>A report in the same PR claimed the opposite</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        GPT-PM's round-1 MAJOR was right. The same PR carried a report pair saying the scope step
+        had been observed "passing only" and that both checks "pass on every commit". The first was
+        being disproved by that very PR. The second erases deliberate failures: a head that violates
+        policy is <em>supposed</em> to fail.
+      </p>
+      <div class="alarm">
+        <h3>Two incompatible statements of G1's state, shipped together</h3>
+        <p>
+          A report is a durable artifact. A claim that was true when written and false by the time
+          it merges is still a false claim on <code>main</code>. This is exactly the defect class
+          the report itself is about.
+        </p>
+      </div>
+      <p>
+        Fixed in both languages, three edits each. The "passing only" sentence is not deleted — it
+        is bounded to the block it describes, with a dated paragraph beneath it naming the run.
+        History stays visible, current status is corrected. The row in the remaining-items table
+        moves to <span class="chip done">done</span>.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">04</span>
+      <div><h2>The gate ledger disagreed with the closure report of the gate it tracks</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        <code>core/PLAN_MASTER_GATES.md</code> held <code>PENDING</code> for outputs B, C, D, N, O
+        and <code>DRAFT</code> for F–M, while G0 has been closed since 10 September with those same
+        outputs recorded DONE/ADOPTED in the closure report. Two of the project's documents
+        contradicted each other about a gate's state, with no way to tell which was stale.
+      </p>
+      <p class="kicker">Why the closure report could not simply be copied</p>
+      <p>
+        That would make the ledger agree with a document rather than with reality — and the whole
+        defect class under examination is a document asserting a state nobody re-checked. Every row
+        was checked against the file it names: <code>EXTERNAL_ASSUMPTIONS.md</code> really does
+        carry sections B, C and D; each of the eight ADRs really does carry a
+        <code>**Status:** ADOPTED at G0 closure</code> line with its own letter;
+        <code>THREAT_MODEL.md</code> and <code>GATE_MANIFEST_INTEGRITY.md</code> exist. The closure
+        report agreed with all of it — but the agreement was measured, not taken on trust.
+      </p>
+      <p>
+        Two rows deliberately say <em>less</em> than the closure report. <strong>M</strong> is
+        ADOPTED but R9 is open: yesterday's probe configured a <em>push</em> consumer, so it closed
+        R8 and never touched R9. <strong>O</strong> is a design, and exactly one branch of the
+        mechanism it designs has fired.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">05</span>
+      <div><h2>And the same class inside the fix itself</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        GPT-PM's second MAJOR: the corrected ledger's own "still missing" list was incomplete.
+        <code>core/RISK_REGISTER.md</code> still held <strong>R11 OPEN</strong> and
+        <strong>R12 OPEN</strong> after the operator made the repository public and ruleset
+        <code>PDCC</code> went active. And the remediation plan said R13 was closed at the top and
+        still open in three places below.
+      </p>
+      <div class="alarm">
+        <h3>Fixing one stale ledger while two others stay stale is the same class inside the fix</h3>
+        <p>Accepted in full. All three records were reconciled in the same PR.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <caption>What changed in the risk register, and on what measurement.</caption>
+          <thead>
+            <tr><th>Risk</th><th class="num-col">Was → is</th><th>Basis</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>R11 — GitHub Actions billing</td>
+              <td class="num-col">OPEN → <strong>CLOSED</strong></td>
+              <td>The repository is public; Actions are free and unmetered. Written against run
+                ids, not against the reasoning that publication "should" have fixed it. A run that
+                refuses on purpose still counts as executing</td>
+            </tr>
+            <tr>
+              <td>R12 — branch-protection model</td>
+              <td class="num-col">OPEN → <strong>CLOSED</strong></td>
+              <td>Ruleset <code>PDCC</code> is active: a PR is required, two strict checks, deletion
+                and force-push blocked. And stated in the entry itself: approvals are
+                <strong>0</strong> and code-owner review is <strong>off</strong> — so CODEOWNERS is
+                not the control here, and no document may claim it is</td>
+            </tr>
+            <tr>
+              <td>R13 — implementer identity</td>
+              <td class="num-col">three places OPEN → <strong>ACCEPTED</strong></td>
+              <td>Yesterday's operator decision, carried through the remediation plan in full</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Plus a MINOR: the phrase "the mechanism was fully exercised" sat in the same paragraph as a
+        list of two unexercised branches. Narrowed to the fact — the ordinary scope-refusal path was
+        exercised.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">06</span>
+      <div><h2>Three questions that are yours to decide</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        The three remaining negative controls are blocked on authority, not on effort. I put both
+        contested questions to GPT-PM and record its answer as <em>an opinion I weighed</em>, not as
+        permission: under §23 a reviewer's prohibition is not a prohibition, and its permission is
+        not authority. So the questions are yours either way.
+      </p>
+      <div class="ask">
+        <h3>What is needed from you</h3>
+        <ol>
+          <li>
+            <strong>Hash-mismatch control.</strong> The cleanest route touches no file at all:
+            temporarily set the variable <code>GATE_MANIFEST_APPROVED_HASH_G1</code> to any wrong
+            value, re-run the <code>Governance</code> check on any open PR, confirm it fails at step
+            5 with <code>Manifest hash mismatch for G1</code>, and restore the previous value
+            <code>e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162</code>. The
+            manifest file is never modified, not even for a second.
+          </li>
+          <li>
+            <strong>Forbidden-paths control.</strong> This needs a branch that genuinely touches one
+            of the four authority paths. The safest is
+            <code>governance/operator-approvals/README.md</code>: the edit is additive, the
+            directory is yours anyway, and it is not a manifest — so the hash step passes and the
+            refusal comes from the scope step with its distinct <code>forbidden_paths</code>
+            message. The manifest itself will <em>not</em> do: editing it fails the hash step first
+            and masks the thing being tested.
+          </li>
+          <li>
+            <strong>The deletion half of the test guard.</strong> This needs a PR whose diff deletes
+            a <code>*.test.mjs</code> file that exists on <code>main</code> — for example
+            <code>tests/policy/codeowners.test.mjs</code>. The PR is opened purely to be refused and
+            then closed <em>unmerged</em>; <code>main</code> is never touched. I am not doing this
+            myself: deleting a file is yours under §20 with no exception, and reverting it later
+            does not create one.
+          </li>
+        </ol>
+      </div>
+      <p>
+        None of the three costs money or changes anything irreversibly. But each requires the action
+        to be taken by someone who is not the gate's implementer — otherwise the control is checking
+        itself.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="num">07</span>
+      <div><h2>Where G1 stands</h2></div>
+    </div>
+    <div class="flow">
+      <div class="table-scroll">
+        <table>
+          <caption>The four negative controls, and what else stands between here and closure.</caption>
+          <thead>
+            <tr><th>Item</th><th class="num-col">Status</th><th>Who</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Scope-step refusal</td>
+              <td class="num-col"><span class="chip done">done</span></td>
+              <td>me — run <code>34640409639</code></td>
+            </tr>
+            <tr>
+              <td>Ruleset evidence</td>
+              <td class="num-col"><span class="chip done">done</span></td>
+              <td>me — <code>gh api</code></td>
+            </tr>
+            <tr>
+              <td>Hash mismatch</td>
+              <td class="num-col"><span class="chip block">not started</span></td>
+              <td><strong>operator</strong></td>
+            </tr>
+            <tr>
+              <td>Forbidden paths</td>
+              <td class="num-col"><span class="chip block">not started</span></td>
+              <td><strong>operator</strong></td>
+            </tr>
+            <tr>
+              <td>Test deletion</td>
+              <td class="num-col"><span class="chip part">partial</span></td>
+              <td><strong>operator</strong> — the skip half fired, the deletion half never has</td>
+            </tr>
+            <tr>
+              <td>Fresh-context review</td>
+              <td class="num-col"><span class="chip part">after the controls</span></td>
+              <td>me</td>
+            </tr>
+            <tr>
+              <td><code>G1_CLOSURE_REPORT.md</code></td>
+              <td class="num-col"><span class="chip part">after the review</span></td>
+              <td>me</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="kicker">The point of today</p>
+      <p>
+        The scope mechanism has now been observed in both directions. Before this it was a
+        description: a document asserted that a path outside the manifest would be refused, and
+        nobody had seen it happen. The assertion now has a run id, an exact error line and a
+        machine-readable annotation naming the path — and, just as importantly, an explicit list of
+        what it does <em>not</em> prove.
+      </p>
+    </div>
+  </section>
+</div>
+
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
+</body></html>
