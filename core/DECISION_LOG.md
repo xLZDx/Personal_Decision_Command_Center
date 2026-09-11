@@ -5,6 +5,57 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — PR #2 declared `Gate: NONE`; it is operator-merge-only under §24's own carve-out
+
+**Decision:** PR #2 (`evidence/g0-cpu-probe-results`) now declares `Gate: NONE` in its body, and
+its merge stays with the operator rather than moving to Claude under the merge authority recorded
+in the entry below.
+
+**Why the declaration was needed:** PR #2's `governance` check was RED, and correctly so. Its body
+predated the ungated-path work and still asserted that the Governance workflow "will not trigger a
+manifest/scope check on it (it only evaluates PRs whose branch/body names a gate)". After PR #3
+that sentence is false, deliberately: `governance.yml` now refuses a PR that declares no gate at
+all. The workflow log is explicit -- `This PR declares no gate` -- so the mechanism this project
+just built was doing exactly its job against this project's own open PR. Verified before editing,
+by running the CI script locally over the real base/head pair
+(`BASE_SHA=1361c7d HEAD_SHA=e4330c8 node scripts/verify/check-floor-scope.mjs` -> exit 0, 4 changed
+paths, none forbidden): `core/DECISION_LOG.md`, both report files, and
+`scripts/probes/cloudflare-free-cpu/RESULTS.md`.
+
+**Why Claude does not merge it, despite §24:** global `~/.claude/CLAUDE.md` §24 lets Claude merge
+on a fresh GPT-PM APPROVE with required checks green -- _except_ where the diff is itself an
+authority surface, and it names "an approval/decision-log entry recording a past authorization" as
+exactly that class. This PR's diff contains the entry immediately below, which records the merge
+authorization itself. Merging it under that authorization would be the self-referential loop the
+carve-out exists to prevent. So it waits for the operator's own click, and no GPT-PM round was
+spent asking for an APPROVE that could not have authorized the merge anyway.
+
+**Also corrected, same commit:** `core/PLAN_MASTER_GATES.md` described G1 as `HOLD ... NOT
+gate-approved / GPT-PM: REJECT` and item E (the CPU probe) as `PENDING`. Both were stale against
+observable state: `GATE_MANIFEST_APPROVED_HASH_G1` is set (`gh variable list`), PR #1 merged
+2026-09-11T09:45Z, PR #3 merged, ruleset `PDCC` is active on `main`, and the probe was run. The
+row now says REMEDIATED, NOT YET CLOSED and names what is actually still missing -- a final verdict
+and a `G1_CLOSURE_REPORT.md` -- rather than either leaving a false REJECT standing or letting the
+implementer quietly promote its own gate to CLOSED (INV-20).
+
+**Verified NOT started, on the operator's direct question:** G3 (Gmail) and G4 (Telegram) have no
+implementation of any kind. `connectors/gmail/`, `connectors/telegram-tdlib/` and
+`connectors/common/` exist but are empty (`git ls-files connectors/` returns nothing); there is no
+`g3.yaml`/`g4.yaml`, no G3/G4 plan under `governance/plans/`, and the only source files mentioning
+Gmail or Telegram are the contract types (`packages/contracts/src/event.ts`, `provenance.ts`) and
+`scripts/verify/check-secrets.mjs`. The operator's credentials exist locally, which is a
+prerequisite, not a gate: each of G3 and G4 still needs its own manifest and its own GO.
+
+**Ruleset detail worth recording, because it narrows R13:** the `PDCC` ruleset reports
+`current_user_can_bypass: "never"`, requires `governance` + `verify`, allows 0 approving reviews,
+and blocks deletion and non-fast-forward on `main`. R13 (one admin-scoped identity behind
+everything) said such controls are procedural rather than mechanical. That is still true of the
+ruleset's _existence_ -- an admin token can edit or delete the ruleset itself -- but it is not true
+of bypassing it in place, which this field says cannot be done at all. State the distinction rather
+than repeating the broader claim.
+
+---
+
 ## 2026-09-11 — GPT-PM-authorized PR merge: INV-20 narrowed for this project, confirmed globally
 
 **Decision:** the operator asked, first for this project, then confirmed globally across every
