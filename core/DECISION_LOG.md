@@ -265,6 +265,19 @@ authorization itself. Merging it under that authorization would be the self-refe
 carve-out exists to prevent. So it waits for the operator's own click, and no GPT-PM round was
 spent asking for an APPROVE that could not have authorized the merge anyway.
 
+> **SUPERSEDED 2026-09-11, and the reasoning above is wrong for this repository.** GPT-PM was asked
+> directly (PR #6 review, head `5d61907`) and ruled: for THIS repository the governing definition of
+> the authority surface is the project-scoped four-path list in the entry
+> "GPT-PM-authorized PR merge: INV-20 narrowed for this project" --
+> `governance/gate-manifests/**`, `governance/operator-approvals/**`, `.github/CODEOWNERS`, and
+> branch-protection/ruleset settings. The generic global wording **does not create a fifth category
+> here**, so a diff touching `core/DECISION_LOG.md` is NOT an authority surface and is mergeable by
+> Claude on a fresh APPROVE. The paragraph above is implementer-authored reasoning that contradicted
+> an existing GPT-PM ruling without being a new one, and GPT-PM flagged leaving both versions
+> standing as a `MAJOR` -- "a direct source of repeating the same governance error". Kept rather
+> than deleted, with this correction attached, because silently rewriting the wrong reasoning would
+> hide that it was ever applied. **The four-path list governs.**
+
 **Also corrected, same commit:** `core/PLAN_MASTER_GATES.md` described G1 as `HOLD ... NOT
 gate-approved / GPT-PM: REJECT` and item E (the CPU probe) as `PENDING`. Both were stale against
 observable state: `GATE_MANIFEST_APPROVED_HASH_G1` is set (`gh variable list`), PR #1 merged
