@@ -10,7 +10,8 @@ Newest entries at the top.
 **Decision:** the operator ran the G0 empirical CPU probe on a fresh Cloudflare Free account. Both
 ladders — queue consumer (`GET /run`) and plain HTTP (`GET /http-ladder`) — broke at the identical
 point: complete at `1e5` (100,000 SHA-256 rounds), killed at `1e6`. Full run record, raw
-`wrangler tail` excerpt, and conclusion: `scripts/probes/cloudflare-free-cpu/RESULTS.md`.
+`wrangler tail` excerpt, and conclusion: `scripts/probes/cloudflare-free-cpu/RESULTS.md` (reran
+through prettier one commit later, after PR #2's `verify` job caught an un-formatted push).
 
 **Why this matters:** NB1, the sole BLOCKER of the v0.2 adversarial review, was a three-way
 contradiction across Cloudflare's own documentation about the Queue consumer's Free-plan CPU budget

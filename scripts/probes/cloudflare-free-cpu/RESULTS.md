@@ -27,14 +27,14 @@ Worker name / subdomain: pdos-cpu-probe / pdos-korostelev.workers.dev
 ### Queue-consumer ladder (`GET /run`)
 
 | target (SHA-256 rounds) | PROBE_START seen | PROBE_DONE seen | dashboard CPU ms | outcome                |
-| ------------------------ | ----------------- | ----------------- | ------------------ | ------------------------ |
-| 1e3                       | yes                | yes                | not yet captured    | completed                 |
-| 1e4                       | yes                | yes                | not yet captured    | completed                 |
-| 1e5                       | yes                | yes                | not yet captured    | completed                 |
-| 1e6                       | yes                | **no**             | n/a — killed        | **Exceeded CPU Limit**    |
-| 3e6                       | yes                | no                 | n/a — killed        | Exceeded CPU Limit        |
-| 1e7                       | yes                | no                 | n/a — killed        | Exceeded CPU Limit        |
-| 3e7                       | yes                | no                 | n/a — killed        | Exceeded CPU Limit        |
+| ----------------------- | ---------------- | --------------- | ---------------- | ---------------------- |
+| 1e3                     | yes              | yes             | not yet captured | completed              |
+| 1e4                     | yes              | yes             | not yet captured | completed              |
+| 1e5                     | yes              | yes             | not yet captured | completed              |
+| 1e6                     | yes              | **no**          | n/a — killed     | **Exceeded CPU Limit** |
+| 3e6                     | yes              | no              | n/a — killed     | Exceeded CPU Limit     |
+| 1e7                     | yes              | no              | n/a — killed     | Exceeded CPU Limit     |
+| 3e7                     | yes              | no              | n/a — killed     | Exceeded CPU Limit     |
 
 Each of the four failing messages ran as its own queue invocation (`max_retries = 0`, per the
 probe's design), so all seven rungs were actually attempted — the failures are four independent
@@ -42,15 +42,15 @@ data points, not one failure blocking the rest of the ladder.
 
 ### HTTP ladder (`GET /http-ladder`) — same account, for comparison
 
-| target (SHA-256 rounds) | PROBE_START seen | PROBE_DONE seen | dashboard CPU ms | outcome                          |
-| ------------------------ | ----------------- | ----------------- | ------------------ | ----------------------------------- |
-| 1e3                       | yes                | yes                | not yet captured    | completed                            |
-| 1e4                       | yes                | yes                | not yet captured    | completed                            |
-| 1e5                       | yes                | yes                | not yet captured    | completed                            |
-| 1e6                       | yes                | **no**             | n/a — killed        | **worker exceeded CPU time limit**   |
-| 3e6                       | not reached        | not reached        | —                   | not reached (invocation killed at 1e6) |
-| 1e7                       | not reached        | not reached        | —                   | not reached (invocation killed at 1e6) |
-| 3e7                       | not reached        | not reached        | —                   | not reached (invocation killed at 1e6) |
+| target (SHA-256 rounds) | PROBE_START seen | PROBE_DONE seen | dashboard CPU ms | outcome                                |
+| ----------------------- | ---------------- | --------------- | ---------------- | -------------------------------------- |
+| 1e3                     | yes              | yes             | not yet captured | completed                              |
+| 1e4                     | yes              | yes             | not yet captured | completed                              |
+| 1e5                     | yes              | yes             | not yet captured | completed                              |
+| 1e6                     | yes              | **no**          | n/a — killed     | **worker exceeded CPU time limit**     |
+| 3e6                     | not reached      | not reached     | —                | not reached (invocation killed at 1e6) |
+| 1e7                     | not reached      | not reached     | —                | not reached (invocation killed at 1e6) |
+| 3e7                     | not reached      | not reached     | —                | not reached (invocation killed at 1e6) |
 
 Unlike the queue ladder, the HTTP ladder runs all seven rungs **inside one HTTP invocation** — so
 once the worker was killed at `target=1000000`, the request itself terminated and rungs 3e6/1e7/3e7
