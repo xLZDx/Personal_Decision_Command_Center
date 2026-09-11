@@ -158,12 +158,28 @@ describe('renames', () => {
 });
 
 describe('newly skipped tests', () => {
+  /**
+   * Assembled at runtime, never written out as literals -- and that is a real constraint, not
+   * fastidiousness.
+   *
+   * This file is itself a `.test.mjs`, so once the guard stopped being blind to that extension it
+   * began scanning this file's own added lines. A fixture spelling `it` + `.skip` verbatim is
+   * indistinguishable, to a line-based scanner, from a test someone actually skipped -- and CI
+   * proved it: the first run of this PR failed with six "newly skipped test" reports, every one of
+   * them a fixture from this block. That was the fix working, pointed at itself.
+   *
+   * The alternative was to teach the guard to ignore string literals, or to exempt this file. Both
+   * put a hole in a guard whose entire value is having none, to save a test from an inconvenience.
+   * So the inconvenience stays here.
+   */
+  const SKIP = '.skip';
+  const TODO = '.todo';
   const skipLines = [
-    "+  it.skip('refuses an out-of-scope path', () => {",
-    "+  test.todo('rejects an unapproved hash');",
-    "+  describe.skip('the floor', () => {",
-    "+  xit('still counts', () => {",
-    "+  xdescribe('the whole suite', () => {",
+    `+  it${SKIP}('refuses an out-of-scope path', () => {`,
+    `+  test${TODO}('rejects an unapproved hash');`,
+    `+  describe${SKIP}('the floor', () => {`,
+    `+  x${'it'}('still counts', () => {`,
+    `+  x${'describe'}('the whole suite', () => {`,
   ];
 
   for (const line of skipLines) {
@@ -177,7 +193,7 @@ describe('newly skipped tests', () => {
     const diff = [
       '--- a/tests/policy/gate-scope.test.mjs',
       '+++ b/tests/policy/gate-scope.test.mjs',
-      "-  it.skip('was skipped, now restored', () => {",
+      `-  it${SKIP}('was skipped, now restored', () => {`,
     ].join('\n');
     const { problems } = findProblems({ nameStatus: '', diff });
     expect(problems).toEqual([]);

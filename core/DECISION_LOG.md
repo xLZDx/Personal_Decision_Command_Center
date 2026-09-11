@@ -69,6 +69,24 @@ than assumed: the record parser is NUL-based, so the whole output arrives as a s
 nothing is recognised at all — before the quoting problem is even reached. The code comment was
 corrected to say both, because the first draft claimed only the quoting mechanism.
 
+**The guard's first act, once it could see `.test.mjs`, was to refuse this very PR — and that is
+the negative control, arrived at by accident.** CI run `34632358953` failed with six
+`newly skipped test` reports, every one of them a **fixture from the new test file**: lines like
+`"+  it.skip('refuses an out-of-scope path', () => {"` are string literals describing skip syntax,
+and a line-based scanner cannot tell them from a test someone actually skipped. Before this fix the
+guard could not have seen them at all, because they live in a `.mjs` file. So the remediation plan's
+third negative control — "a PR that deletes or `.skip`s a test must fail the test-deletion guard" —
+is now demonstrated on a real PR against a real `.test.mjs`, rather than pending.
+
+**How that false positive was resolved, and the option deliberately refused.** The fixtures are now
+assembled at runtime (`` `+  it${SKIP}(...` ``) so the marker never appears verbatim in the source.
+The alternatives were to teach the guard to ignore string literals, or to exempt its own test file
+from scanning. Both put a hole in a guard whose entire value is having none, in order to spare a
+test an inconvenience — so the inconvenience stays in the test, and the constraint is documented at
+the fixture block rather than left for the next person to rediscover. This is a real limitation of
+a line-based scanner and is recorded as such: **any test file that documents skip syntax verbatim
+will trip this guard.**
+
 **Final measurement: `npm run verify:mutation` — 42 of 42 killed, no survivors**, and the suite is
 119 passed across 6 files. (An interim status message in this session said "22 of 23 killed"; that
 was read off a `tail`-truncated listing and is wrong. The first run was 42 mutations with exactly
