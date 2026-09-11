@@ -105,9 +105,17 @@ Does this confirm or refute ADR-011's conservative 10ms assumption? CONFIRMS. Th
   contradiction"). NB1 is resolved in favor of the conservative reading.
 Does the architecture need to change (i.e. must the HTTP pull consumer fallback be taken)? No
   forced change: the design was already built around the ~10ms assumption this measurement
-  confirms. The pull-consumer fallback (ADR-011) stays the answer for any future step that needs
-  MORE than ~10ms of consumer CPU on Free -- this measurement does not make that case, it removes
-  the uncertainty about which case applies today.
+  confirms. This measurement does not make the case for taking the fallback; it removes the
+  uncertainty about which case applies today.
+Is the pull-consumer fallback available to fall back TO? UNVERIFIED, and this run did not test it.
+  This probe configures a PUSH consumer ([[queues.consumers]] in wrangler.toml); its one msg.ack()
+  is the push-batch API, not an HTTP pull + ack. Whether Cloudflare offers HTTP pull consumers on
+  the Free plan at all is R9, still open, and is exactly what G2-PREFLIGHT-02 exists to settle --
+  "Attempt a real HTTP pull + ack on the same Free account"
+  (../../../governance/G0_CLOSURE_REPORT.md). Until that runs, calling the pull consumer a
+  fallback states an availability nobody has measured. If PREFLIGHT-02 shows it is unavailable on
+  Free, ADR-011 must stop describing one as a fallback -- that is the closure report's own wording,
+  not an inference drawn here.
 ```
 
 ### Still outstanding

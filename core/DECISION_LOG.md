@@ -5,6 +5,52 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — G2 preflight audited: 1 of 3 done (unmerged), 2 never attempted; RESULTS.md over-claimed
+
+**Why this was checked:** the operator asked what the state of G2 actually is. `PLAN_MASTER_GATES.md`
+said only `BLOCKED — needs G1 closure first, then G2-PREFLIGHT-01/02/03`, which names the gate but
+not which of the three are real. Audited each against the repository rather than against that line.
+
+**G2 is blocked by two independent things, not one.** First, `G0_CLOSURE_REPORT.md`: "G2 does not
+begin until G1 closes properly" — G1 is remediated but has no final verdict and no
+`G1_CLOSURE_REPORT.md`. Second, the three preflight items, whose real state is:
+
+- **G2-PREFLIGHT-01** (Free-account queue-consumer CPU probe) — **done, but not on `main`.** The
+  measurement is real: queue-consumer ladder completes at 1e5 and is killed at 1e6, with raw
+  `wrangler tail` output. Two caveats the file states about itself: the dashboard p50/p99 CPU-ms
+  reading was never captured (it calls that non-blocking), and the Free plan label comes from the
+  account's creation rather than a dashboard re-check. The evidence lives in PR #2, still open.
+- **G2-PREFLIGHT-02** (real HTTP pull + ack on the same Free account) — **never attempted.**
+  `scripts/probes/cloudflare-free-cpu/wrangler.toml` declares `[[queues.consumers]]`, a PUSH
+  consumer; the single `msg.ack()` in `src/probe.js` is the push-batch API. An HTTP pull consumer
+  is a different mechanism (REST pull/ack) and appears nowhere in the repository.
+- **G2-PREFLIGHT-03** (record the D1 <=50-queries-per-invocation budget in the quota harness) —
+  **not done.** The constraint itself is recorded in five prose places (`EXTERNAL_ASSUMPTIONS.md`
+  marks it VERIFIED, plus ADR-011, `TDD_ERRATA.md`, R10, the closure report), but the item says _in
+  the quota harness_, and R10's own mitigation says that harness "must count queries per
+  invocation, not just CPU". `scripts/quota/` exists as an empty placeholder — `git ls-files` finds
+  0 files in it. Note the circularity: the harness is itself part of G2's declared scope.
+
+**Defect found and corrected in the same pass.** `RESULTS.md`'s Conclusion asserted that "the
+pull-consumer fallback (ADR-011) stays the answer for any future step that needs MORE than ~10ms of
+consumer CPU on Free". That states an availability nobody has measured — R9 says Free-plan
+eligibility for pull consumers is unpublished, and PREFLIGHT-02 exists precisely to settle it. The
+measurement in that file is untouched; only the interpretive sentence was narrowed, and the file now
+says plainly that the fallback's availability is UNVERIFIED and that this run did not test it. Left
+unmerged, the original wording would have landed on `main` as a claim broader than its own evidence.
+
+**Implementation state of G2: zero, as expected for a blocked gate.** `apps/`, `services/`,
+`infra/`, `host/` and `connectors/` all contain 0 tracked files; there is no D1 schema, no
+migration and no `.sql` anywhere in the repository. The only tracked source is
+`packages/contracts/` (7 files).
+
+**How to apply:** PREFLIGHT-02 is the one with architectural consequence, not PREFLIGHT-01 — the
+closure report already states that if pull consumers turn out to be unavailable on Free, ADR-011
+must stop describing one as a fallback. Design G2 to need no more than ~10ms of consumer CPU and
+one batched D1 query, and treat the pull consumer as unavailable until measured.
+
+---
+
 ## 2026-09-11 — PR #2 declared `Gate: NONE`; it is operator-merge-only under §24's own carve-out
 
 **Decision:** PR #2 (`evidence/g0-cpu-probe-results`) now declares `Gate: NONE` in its body, and
