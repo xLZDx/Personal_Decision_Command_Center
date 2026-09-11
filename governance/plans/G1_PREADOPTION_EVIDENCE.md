@@ -647,11 +647,13 @@ noted in §12.3. This does not extend to every mechanical control the whole work
 principle produce, only to the ones these four PRs (§11's PR #7, §12.1's PR #10, §12.2's PR #11,
 §12.3's PR #12) were built to exercise.
 
-Of those four, three (PR #10, #11, #12) were closed **unmerged** and never touched `main` at all —
-each existed solely to produce the CI evidence quoted above; the only trace any of them left is
-PR #10's own merged decision-log entry (49 lines in `core/DECISION_LOG.md`, recording the
-hash-mismatch result). PR #7 is different and is not part of that "left no trace" claim: it was
-merged, and it legitimately carries real content beyond a decision-log line — the report-correction
+Of those four, **PR #11 and #12 were closed unmerged and never touched `main` at all** — each
+existed solely to produce the CI evidence quoted above. **PR #10 was merged** (base `63a5425`,
+merge commit `005b8e6`), and its only durable content is the 49-line `core/DECISION_LOG.md` entry
+recording the hash-mismatch result — it did not carry the `.gitignore`/`.dev.vars` kind of
+instrument the other controls used, so nothing beyond that entry reached `main` through it. PR #7
+is different again: it was also merged, and it legitimately carries real content beyond a
+decision-log line — the report-correction
 pair and a decision-log wording fix (§11 above). Its `.gitignore` scope-refusal instrument was
 reverted before merge, but the rest of its diff is intended, durable change, not a side effect to
 minimize. This paragraph is scoped to these four negative-control PRs; it is not a claim about the

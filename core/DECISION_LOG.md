@@ -30,8 +30,18 @@ unread):
    49-line entry while reading as a claim about the whole G1 history (which includes PR #7's larger
    merged diff). Narrowed to name the four specific negative-control PRs (§11's PR #7, §12.1's
    PR #10, §12.2's PR #11, §12.3's PR #12), state which job each refusal fired in, and separate
-   PR #7 (merged, real content) from PR #10/#11/#12 (three closed unmerged, one merged with only
-   its decision-log entry as durable content) rather than treating all four the same way.
+   PR #7 (merged, real content) from PR #11/#12 (closed unmerged, never touched `main`) and PR #10
+   (merged, but its only durable content is its decision-log entry) rather than treating all four
+   the same way.
+
+**Round-2 review caught a self-inflicted contradiction, fixed same day.** GPT-PM's round-2 pass on
+the round-1 fixes above (sent via `review.js --base 8655a64`, correlated `VERDICT: MAJOR`, receipt
+posted as PR #13 comment `5184117351`) found one real defect: the round-1 fix for finding 3 said
+PR #10/#11/#12 were "closed unmerged and never touched `main`" in one sentence and then said PR #10
+left a merged decision-log entry in the next — GitHub confirms PR #10 `merged=true`, base `63a5425`,
+merge commit `005b8e6`. Round-1 findings #1 and #2 were confirmed resolved in the same review. Fixed
+by separating PR #11/#12 (closed unmerged) from PR #10 (merged, decision-log-only content) instead
+of grouping all three as "unmerged." Sent for round 3.
 
 All three fixes applied to `governance/plans/G1_PREADOPTION_EVIDENCE.md` §12.2/§12.3/§12.4 and to
 `core/PLAN_MASTER_GATES.md`'s G1 row on `gate/g1-evidence-update`; prettier run over both files
