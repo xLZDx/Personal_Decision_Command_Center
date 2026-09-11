@@ -79,7 +79,23 @@ decision. It is not "rejected", and it is not "permitted". Three options were pu
 (A) treat §5.4(iv)'s "the user" as the business account owner and accept the ambiguity as a recorded
 risk; (B) the same, plus a first-contact disclosure message from the bot, which satisfies both
 readings of "the user" and §4.3 paragraph 2 at the cost of one automatic message per new chat;
-(C) keep AI_DENY as ruled. **B is the implementer's recommendation.** No option is adopted here.
+(C) keep AI_DENY as ruled. **B is the implementer's recommendation.**
+
+**OPERATOR DECISION, same day: option B.** Verbatim: *"Вариант В и го переключайся"* — Cyrillic "В"
+is Latin "B". So the direction for Telegram AI eligibility is: treat Bot Platform Developer Terms
+as the governing document, **and** have the bot send a first-contact disclosure to the counterparty
+stating that the conversation is processed by an assistant. That disclosure is what makes the choice
+defensible under BOTH readings of §5.4(iv)'s "the user" at once, and it is the "clearly inform them
+of the data's intended use" limb of §4.3 paragraph 2.
+
+**What this decision does and does not authorize.** It settles the DIRECTION. It does not by itself
+amend an invariant, and it does not start implementation: INV-14/INV-30 remain non-negotiable under
+`TDD.md:176` until an ADR plus independent review plus the operator's approval of the amended text
+exists, and the three adoption preconditions above (empirical account check, key-custody design with
+SEC/PRIV review, §B snapshot of the Bot API documents) are unchanged by it. The revocability limb of
+§4.3 paragraph 2 — "individual, explicit, active and **revocable** consent" — still needs a design:
+a disclosure the counterparty cannot act on is an announcement, not consent, so an opt-out path and
+its effect on already-retained content must be specified before G4 can claim this clause.
 
 **Two invariants the proposal deleted silently, and that the review restored:**
 
