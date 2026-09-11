@@ -32,9 +32,11 @@ every control described here comes from the record, not from the platform.
 
 **R13 then demonstrated itself, mechanically, within the hour.** Reviewing PR #6, GPT-PM tried to
 submit a formal `REQUEST_CHANGES` review and **GitHub refused it**, because its connector
-authenticates as the same `xLZDx` identity that authored the PR — GitHub forbids reviewing your own
-pull request. It recorded the verdict as a plain review COMMENT instead and said explicitly that it
-did not work around the platform restriction. This is the clearest evidence R13 has ever had: not an
+authenticates as the same `xLZDx` identity that authored the PR — GitHub forbids **approving or
+requesting changes on** your own pull request. A plain COMMENT is allowed, and that is what it fell
+back to, saying explicitly that it did not work around the platform restriction. (The first draft of
+this sentence said GitHub "forbids reviewing your own pull request", which is wider than the actual
+rule; flagged in the same review and corrected here.) This is the clearest evidence R13 has ever had: not an
 argument that separation is procedural, but the platform itself refusing to treat two roles as two
 actors. Recorded here because an accepted risk should carry the sharpest example of what was
 accepted, not the mildest.
