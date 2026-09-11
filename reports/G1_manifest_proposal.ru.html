@@ -395,13 +395,15 @@
   <dl>
     <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 7ad63fa</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 091718b</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Копировать страницу" data-done="Скопировано"
           data-fail="Выделите вручную">Копировать страницу</button>
 </div>
 <!-- report-conform:end -->
+
+
 
 
 
@@ -1039,6 +1041,70 @@ actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
     </div>
   </section>
 
+
+  <section>
+    <div class="section-head">
+      <span class="num">09</span>
+      <div><h2>Манифест принят, и проверка scope впервые исполнилась</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        <em>&laquo;Прочитал g1.yaml, и согласен с документом, ГО поставь Переменную
+        GATE_MANIFEST_APPROVED_HASH_G1&raquo;.</em> Переменная установлена, прогон перезапущен.
+        Результат — первый в истории репозитория <strong>успешный</strong> джоб
+        <code>Governance</code>: прогон <code>34544309071</code>, джоб <code>103206087659</code>.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Шаг 6 не исполнялся ни разу. Ни в одном прогоне, ни под одной головой.</caption>
+          <thead>
+            <tr><th>Шаг</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>4. Определить гейт</td><td>success</td><td>success</td><td>success</td><td>success</td><td><span class="chip done">success</span></td></tr>
+            <tr><td>5. Сверить хеш манифеста</td><td>failure</td><td>failure</td><td>failure</td><td>failure</td><td><span class="chip done">success</span></td></tr>
+            <tr><td>6. Проверить пути по манифесту</td><td>SKIPPED</td><td>SKIPPED</td><td>SKIPPED</td><td>SKIPPED</td><td><span class="chip done">success</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>Manifest hash matches the operator-approved value.
+Changed paths (28):
+All 28 changed path(s) are within G1's approved scope.</code></pre>
+      <p>
+        <strong>Почему это и есть главный раздел.</strong> Шаг 6 был недостижим всегда: у A и B не
+        было манифеста, у C и D не было утверждённого хеша. Порядок наблюдался выполняющим только
+        половину работы — отказ. <strong>Контроль, который видели только отказывающим, ровно так же
+        не доказан, как и тот, которого видели только пропускающим</strong>: снаружи «всегда
+        запрещает» и «работает» неразличимы. Теперь получены оба ответа на одном и том же
+        механизме, и единственное, что между ними изменилось, — ваше собственное действие.
+      </p>
+
+      <p class="kicker">Оговорка про полномочия, записанная, а не сглаженная</p>
+      <p>
+        Хеш записан моим же токеном, по вашему прямому указанию и после того, как вы прочли байты.
+        Правило GPT-PM требовало именно этого прочтения — и оно состоялось. Но
+        <strong>журнал аудита GitHub не отличает ваше решение от моего нажатия клавиши</strong>:
+        аккаунт один, токен с правами админа. Свидетельство того, чьё это было решение, живёт в
+        журнале решений и в транскрипте сессии, а не в отдельном акторе. Это ещё один довод за то,
+        чтобы решение по модели токена (R13) всё-таки принять.
+      </p>
+
+      <p class="kicker">Механизм связал собственного автора в тот же час</p>
+      <p>
+        <code>.gitignore</code> покрывает <code>.env</code>, но <strong>не</strong>
+        <code>.dev.vars</code> — а это штатное место секретов <code>wrangler</code>. Настоящая дыра,
+        найденная при написании инструкций для вас. <strong>Не исправлена:</strong>
+        <code>.gitignore</code> не входит в утверждённые <code>allowed_paths</code>, поэтому правка
+        уходит в G2, где секреты и появляются. Находка, которую час назад можно было тихо подмешать
+        в посторонний коммит, теперь этого не может.
+      </p>
+      <p>
+        Осталось за вами: мерж PR #1 (INV-20 — проверки зелёные, блокирует уже не доказательство, а
+        полномочие), branch protection и решение по токену.
+      </p>
+    </div>
+  </section>
+
   <footer>
     <p>
       G1 не закрыт. G2 не начинается. Предложение манифеста остаётся предложением до вашего
@@ -1047,6 +1113,8 @@ actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
     </p>
   </footer>
 </div>
+
+
 
 
 

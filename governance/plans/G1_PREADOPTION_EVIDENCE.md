@@ -5,7 +5,14 @@ policy, corrects no document, authorizes nothing.
 **Rosetta plan:** `personal-decision-os-2026-09-10T20-41-20-095Z-cd44c5`, hash
 `0305b9818d8042e26fbf6e567edff7494af889a037d1331bb4a12832aa3a32f9`, GPT-PM `VERDICT: APPROVE`
 (0 BLOCKER / 0 MAJOR).
-**Measured:** 2026-09-10, at branch `gate/g1-remediation` = `60c2aeb`, `main` = `5574681`.
+**Measured:** 2026-09-10, at branch `gate/g1-remediation` = `60c2aeb`, `main` = `5574681`. Sections
+9 and 10 were added later, on 2026-09-11, at `gate/g1-remediation` = `091718b`, `main` = `34b9d2d`;
+each states its own measurements and run ids rather than inheriting this line's.
+
+**The title is now half historical.** Pre-adoption is over: §10 records the operator adopting the
+manifest and the scope check passing. Sections 1-9 are kept as the record of what was known before
+that, including the inferences that later measurement overturned. The file is renamed by nothing —
+renaming it would break every reference to it in the decision log and the manifest for no gain.
 
 ## Why this file exists rather than a set of document corrections
 
@@ -418,7 +425,62 @@ The same push made `main`'s own CI execute for the first time: run `34543145719`
 success**. Worth recording because it was an open question — the toolchain fixes are on the gate
 branch, so `main` passing on its own was not certain.
 
-## 10. Operator boundary — nothing below is the implementer's
+## 10. Adoption, and the first time the scope check ever ran
+
+**2026-09-11.** The operator read the candidate, agreed with it, and adopted it:
+
+> "Прочитал g1.yaml, и согласен с документом, ГО поставь Переменную GATE_MANIFEST_APPROVED_HASH_G1"
+
+**FACT.** `gh variable list` now reports `GATE_MANIFEST_APPROVED_HASH_G1` =
+`e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162`, set 2026-09-11T08:55:08Z, and
+`git cat-file -p origin/main:governance/gate-manifests/g1.yaml | sha256sum` returns the identical
+value. The variable and the file agree; re-checked immediately before this section was written.
+
+**FACT.** Re-running the Governance workflow on PR #1's head `091718b` — run `34544309071`, job
+`103206087659` — produced the first **successful** Governance job in this repository's history:
+
+| Step                                                 | A       | B       | C       | D       | **E**       |
+| ---------------------------------------------------- | ------- | ------- | ------- | ------- | ----------- |
+| 4. Resolve the gate                                  | success | success | success | success | **success** |
+| 5. Verify manifest hash against operator state       | failure | failure | failure | failure | **success** |
+| 6. Check changed paths against the verified manifest | SKIPPED | SKIPPED | SKIPPED | SKIPPED | **success** |
+
+Verbatim from the job log:
+
+```
+Manifest hash matches the operator-approved value.
+Changed paths (28):
+All 28 changed path(s) are within G1's approved scope.
+```
+
+**Why this is the section that matters.** Step 6 had never executed. Not once, in any run, under any
+head. A and B could not reach it — no manifest. C and D could not reach it — no approved hash. The
+ordering had therefore only ever been observed doing half its job: refusing. A control that has only
+been seen saying no is exactly as unproven as one that has only been seen saying yes, because
+"always refuses" and "works" look identical from outside. Both answers have now been observed, on
+the same mechanism, with the only change between them being the operator's own act.
+
+### 10.1 The authority caveat this adoption carries
+
+The hash was written with the implementer's own credential, at the operator's explicit instruction,
+after the operator read the bytes. GPT-PM's ruling required exactly that review — _"The operator
+must review the exact committed bytes and set the verified hash only if adopting them"_ — and the
+review happened. But **the GitHub audit trail cannot distinguish the operator's judgement from the
+implementer's keystroke**, because of §3.1: one account, one admin-scoped token. The evidence of
+whose decision this was lives in `core/DECISION_LOG.md` and the session transcript, not in a
+separable actor. Recorded here so that a later auditor reading only GitHub does not mistake the
+state for something stronger than it is, and as one more reason the §3.1 credential decision is
+worth making.
+
+### 10.2 The mechanism bit its author within the hour
+
+`.gitignore` covers `.env` and `.env.*` but **not** `.dev.vars`, which is where `wrangler` keeps
+local secrets — a real gap, found while writing the operator's credential instructions. It was not
+fixed: `.gitignore` is not in the now-binding `allowed_paths`, so the change belongs to G2, where
+secrets first appear. The workaround until then is `.env`, which is already ignored. A finding that
+could have been quietly folded into an unrelated commit an hour ago now cannot be.
+
+## 11. Operator boundary — nothing below is the implementer's
 
 Note the change §3.1 makes to this list. These are not operator-only because the implementer
 _cannot_ do them; the credential now can. They are operator-only because they are the authority the
@@ -427,11 +489,11 @@ approval hash has authorized itself. The boundary is held by choice, and saying 
 
 1. ~~Adopt an authoritative `governance/gate-manifests/g1.yaml`~~ — **authoring delegated and
    done** (§9). What exists is a candidate; adopting it is step 2, not step 1.
-2. **Read the candidate**, then set `GATE_MANIFEST_APPROVED_HASH_G1` to
-   `e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162` if adopting it. This single
-   act is what converts the file from a draft into scope authority. Measured at the time of
-   writing: `gh variable list` returns empty — the implementer did not set it.
-3. Merge PR #1 (INV-20).
+2. ~~Read the candidate, then set `GATE_MANIFEST_APPROVED_HASH_G1`~~ — **done 2026-09-11** (§10).
+   The operator read the bytes, agreed, and adopted them; the variable is set and the scope check
+   passes. Read §10.1 before treating this as a fully mechanical separation: it is not one yet.
+3. Merge PR #1. **INV-20, and it is now the only thing left blocking the gate** — the checks are
+   green, so what remains is authority, not evidence.
 4. ~~`gh auth login`~~ — **done**, by the operator, during an earlier plan.
 5. Decide and apply branch protection (§6).
 6. **The one this document most wants an answer to:** decide the credential model of §3.1. A

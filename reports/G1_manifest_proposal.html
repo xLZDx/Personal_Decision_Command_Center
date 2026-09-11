@@ -395,13 +395,15 @@
   <dl>
     <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
     <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
-    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 7ad63fa</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; gate/g1-remediation @ 091718b</dd>
   </dl>
   <button id="rc-copy" class="rc-copy" type="button"
           data-idle="Copy page" data-done="Copied"
           data-fail="Select manually">Copy page</button>
 </div>
 <!-- report-conform:end -->
+
+
 
 
 
@@ -1042,6 +1044,71 @@ actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
     </div>
   </section>
 
+
+  <section>
+    <div class="section-head">
+      <span class="num">09</span>
+      <div><h2>The manifest was adopted, and the scope check finally ran</h2></div>
+    </div>
+    <div class="flow">
+      <p>
+        <em>"I read g1.yaml, I agree with the document, GO, set the variable
+        GATE_MANIFEST_APPROVED_HASH_G1."</em> The variable was set and the run re-triggered. The
+        result is the first <strong>successful</strong> <code>Governance</code> job in this
+        repository's history: run <code>34544309071</code>, job <code>103206087659</code>.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <caption>Step 6 had never executed. Not once, in any run, under any head.</caption>
+          <thead>
+            <tr><th>Step</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>4. Resolve the gate</td><td>success</td><td>success</td><td>success</td><td>success</td><td><span class="chip done">success</span></td></tr>
+            <tr><td>5. Verify manifest hash</td><td>failure</td><td>failure</td><td>failure</td><td>failure</td><td><span class="chip done">success</span></td></tr>
+            <tr><td>6. Check paths against the manifest</td><td>SKIPPED</td><td>SKIPPED</td><td>SKIPPED</td><td>SKIPPED</td><td><span class="chip done">success</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>Manifest hash matches the operator-approved value.
+Changed paths (28):
+All 28 changed path(s) are within G1's approved scope.</code></pre>
+      <p>
+        <strong>Why this is the section that matters.</strong> Step 6 was unreachable throughout: A
+        and B had no manifest, C and D had no approved hash. The ordering had only ever been
+        observed doing half its job — refusing. <strong>A control seen only refusing is exactly as
+        unproven as one seen only passing</strong>: from outside, "always says no" and "works" are
+        indistinguishable. Both answers have now been observed on the same mechanism, and the only
+        thing that changed between them was the operator's own act.
+      </p>
+
+      <p class="kicker">The authority caveat, recorded rather than smoothed over</p>
+      <p>
+        The hash was written with the implementer's own credential, at the operator's explicit
+        instruction, after the operator read the bytes. GPT-PM's ruling required exactly that
+        reading, and it happened. But <strong>the GitHub audit trail cannot distinguish the
+        operator's judgement from the implementer's keystroke</strong>: one account, one
+        admin-scoped token. The evidence of whose decision this was lives in the decision log and
+        the session transcript, not in a separable actor. One more reason the R13 credential
+        decision is worth making.
+      </p>
+
+      <p class="kicker">The mechanism bit its own author within the hour</p>
+      <p>
+        <code>.gitignore</code> covers <code>.env</code> but <strong>not</strong>
+        <code>.dev.vars</code>, which is where <code>wrangler</code> keeps local secrets — a real
+        gap, found while writing the operator's credential instructions. <strong>Not fixed:</strong>
+        <code>.gitignore</code> is not in the approved <code>allowed_paths</code>, so it goes to G2
+        where secrets first appear. A finding that could have been quietly folded into an unrelated
+        commit an hour ago now cannot be.
+      </p>
+      <p>
+        Left to the operator: merging PR #1 (INV-20 — the checks are green, so what blocks it is
+        authority, not evidence), branch protection, and the credential decision.
+      </p>
+    </div>
+  </section>
+
   <footer>
     <p>
       G1 is not closed. G2 does not begin. The manifest proposal stays a proposal until the operator
@@ -1049,6 +1116,8 @@ actual:   e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162
     </p>
   </footer>
 </div>
+
+
 
 
 

@@ -5,6 +5,62 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-11 — The manifest was adopted, and the scope check ran for the first time
+
+**Decision:** the operator read `governance/gate-manifests/g1.yaml`, agreed with it, and adopted it.
+`GATE_MANIFEST_APPROVED_HASH_G1` is set to
+`e95bfcf5e97580d1e9f076de47f6da4e4b7e31bd5e57b162c5c4cdfdf43ed162`. **G1 now has an enforced
+scope.** Instruction verbatim:
+
+> "Прочитал g1.yaml, и согласен с документом, ГО поставь Переменную GATE_MANIFEST_APPROVED_HASH_G1"
+
+**Evidence — run `34544309071`, job `103206087659`, PR #1 head `091718b`:**
+
+```
+4. Resolve the gate this PR belongs to                      success
+5. Verify manifest hash against operator-controlled state   success
+6. Check changed paths against the verified manifest        success
+```
+
+```
+Manifest hash matches the operator-approved value.
+Changed paths (28):
+All 28 changed path(s) are within G1's approved scope.
+```
+
+**Step 6 had never executed before, in any run, ever.** Runs A and B could not reach it because no
+manifest existed; C and D could not reach it because no approved hash existed. This is the first
+time the chain has been observed end to end: gate resolved → manifest integrity established against
+operator-controlled state → diff evaluated against the manifest whose integrity was just
+established. The NM3 ordering is now demonstrated in both directions — it refuses when it should,
+and it passes when it should.
+
+**The authority caveat, recorded rather than smoothed over.** GPT-PM's Option A ruling said the
+implementer must not set that variable, and attached a condition: _"The operator must review the
+exact committed bytes and set the verified hash only if adopting them."_ The operator did review and
+did adopt; what was delegated was the keystroke, not the judgement. But **the GitHub audit trail
+cannot tell those apart** — the variable was written with the same credential the implementer uses,
+because of the R13 finding in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §3.1. The evidence that
+this was the operator's decision lives in this log and in the session transcript, not in a
+mechanically separable actor. Anyone auditing this later should know that, and it is one more reason
+the R13 credential decision is still worth making.
+
+**What this changes immediately.** Every subsequent change on this branch is now checked against 24
+allowed paths and 4 forbidden ones, and the check has been seen to work. A concrete consequence
+arrived within the hour: `.gitignore` does not cover `.dev.vars`, which is where `wrangler` keeps
+secrets — a real gap. It was **not** fixed, because `.gitignore` is not in `allowed_paths`. It goes
+to G2, where secrets first appear. That is the mechanism working on its author.
+
+**Still not done, and still the operator's:** merging PR #1 (INV-20 — now unblocked on the checks,
+blocked only on authority), branch protection (R12), and the R13 credential model.
+
+**How to apply:** a control is proven by both of its answers. Until today this one had only ever
+been observed refusing; a guard that has never been seen passing is as unproven as one that has
+never been seen refusing, because "always says no" and "works" are indistinguishable from the
+outside.
+
+---
+
 ## 2026-09-11 — The operator delegated authoring the G1 manifest, and did not delegate approving it
 
 **Decision:** `governance/gate-manifests/g1.yaml` now exists on `main`, written by the implementer,
