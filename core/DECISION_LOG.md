@@ -5,6 +5,30 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #15 round 1: GPT-PM's 2 MAJOR + 1 MINOR on the remediation itself, fixed
+
+GPT-PM's round-1 review of PR #15 (`gate/g1-closure-blockers`, correlated, both required checks
+independently confirmed green on the exact head) returned `VERDICT: MAJOR` — the structural
+Gate:NONE fix itself was confirmed correct, but the write-up had three of its own defects:
+
+1. **MAJOR** — `CLAUDE.md`'s new §2 wording said "`.github/CODEOWNERS` and this file are both on
+   that list," accidentally adding CLAUDE.md itself as a fifth authority-surface category beyond the
+   four `~/.claude/CLAUDE.md` §24 actually names (gate manifests, operator-approvals,
+   branch-protection/ruleset config, CODEOWNERS). Fixed by removing the added clause; CODEOWNERS
+   stays the cited live example.
+2. **MAJOR** — `G1_PREADOPTION_EVIDENCE.md` §15 said "§16 below records the real CI negative-control
+   run ids" in the present tense, while §16 itself (correctly) says the run ids are filled in only
+   after `control/g1-none-rejection` actually executes post-merge. Fixed to future tense, explicit
+   that this is not yet part of this round's evidence.
+3. **MINOR** — `PLAN_MASTER_GATES.md`'s preserved historical note labeled itself "AS OF G0'S OWN
+   CLOSURE (2026-09-10)" while quoting a run "first observed on 2026-09-11" — a state dated one day
+   before the observation it describes could have existed. Relabeled as an early-G1 (2026-09-11)
+   snapshot instead of a G0-closure one.
+
+All three fixed on the same branch; no other scoped finding. Sent for round 2.
+
+---
+
 ## 2026-09-12 — Fresh-context G1 closure review: VERDICT BLOCKER, remediated on gate/g1-closure-blockers
 
 A fresh-context G1 closure request (asking GPT-PM to re-verify against live state, not any earlier

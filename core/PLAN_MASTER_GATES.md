@@ -68,13 +68,13 @@ exist. The closure report agrees with all of it, but agreement was checked, not 
 Two rows say less than the closure report does, deliberately. **M** is `ADOPTED`, but R9 — whether
 a pull consumer is available on the Free plan at all — is still open: the 2026-09-11 probe
 configured a _push_ consumer, so it closed R8 and never touched R9. **O** is a design; the
-paragraph below is the state AS OF G0'S OWN CLOSURE (2026-09-10) and is kept as history, not a live
-claim — by G1 remediation, all three mechanism branches it describes as unexercised had actually
-run; see the G1 row above and `../governance/plans/G1_PREADOPTION_EVIDENCE.md` §12 for the current,
-real evidence.
+paragraph below is an early-G1 snapshot (2026-09-11, the day the first mechanism branch was
+exercised) and is kept as history, not a live claim — by later G1 remediation, all three mechanism
+branches it describes as unexercised had actually run; see the G1 row above and
+`../governance/plans/G1_PREADOPTION_EVIDENCE.md` §12 for the current, real evidence.
 
-> As of G0 closure, only one branch of the mechanism O designs had been exercised: the ordinary
-> scope refusal, first observed 2026-09-11 (run `34640409639`). The `forbidden_paths` branch and
+> As of 2026-09-11, only one branch of the mechanism O designs had been exercised: the ordinary
+> scope refusal, first observed that day (run `34640409639`). The `forbidden_paths` branch and
 > the hash-mismatch control had still never run, and both were operator-owned — exercising either
 > meant an implementer mutating a gate manifest, an operator approval, or the frozen TDD, which is
 > exactly what INV-28 forbids, and a later CI refusal would not retroactively authorize the

@@ -36,7 +36,7 @@ Claude MUST NOT:
   check green, mergeable, and the diff is not an authority-surface change (gate manifests,
   operator-approvals, branch-protection/ruleset config, CODEOWNERS) — never for that
   authority-surface class, which stays operator-only regardless of any APPROVE (§24's own
-  carve-out; live example: `.github/CODEOWNERS` and this file are both on that list);
+  carve-out; live example: `.github/CODEOWNERS`);
 - silently expand MVP1 scope or add a source outside the fixed MVP1 list below;
 - weaken/delete tests to obtain green, or mark a reviewer finding closed without evidence;
 - change `SourcePolicy`/`RetentionPolicy`/security invariants without an ADR;

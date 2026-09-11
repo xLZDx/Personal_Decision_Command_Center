@@ -733,8 +733,10 @@ fails immediately, before any PR-controlled scope code executes at all.
 `scripts/verify/check-floor-scope.mjs` deleted; `tests/policy/floor-scope.test.mjs` rewritten (per
 GPT-PM's own remediation-approval instruction, not deleted) into a static regression suite proving
 the source no longer contains the removed path; the 4 corresponding entries in
-`scripts/verify/mutation-check.mjs` removed as dead weight. §16 below records the real CI
-negative-control run ids proving a no-gate PR is refused.
+`scripts/verify/mutation-check.mjs` removed as dead weight. §16 below will record the real CI
+negative-control run ids proving a no-gate PR is refused, once `control/g1-none-rejection`'s two
+attempts have actually run after this remediation merges — not yet, and not part of this round's
+evidence.
 
 **MAJOR — CODEOWNERS and its test still claimed mechanical enforcement R13 had already
 disclaimed.** `.github/CODEOWNERS`'s own header said "This file is the control that actually
