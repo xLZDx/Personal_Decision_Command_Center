@@ -49,6 +49,26 @@ or edited as part of this proposal round -- it is a design-review artifact only.
 is a first send, not a retry/resend. Do not implement any of the four agents' proposals until
 GPT-PM has ruled on the open decisions listed in that file.
 
+**Update, same day, after operator said "continue":** `pm_bridge_mode_on` succeeded (daemon pid
+`36900`, "the daemon is current"), but the send still failed -- `pm_bridge_mode_status` reported
+that **this session's own loaded code** (build `452d6ad04b990295`) is stale relative to disk
+(`0aa9228df9ad153c`), specifically in the project-resolution/routing-identity code (routing hash
+`0101f178d2c7bae9` vs current `91c9320ab647f429`), and warned explicitly: "letting it send could
+deliver one project's content into another project's chat." Restarting the daemon does not fix
+this -- only a fresh session does. Declined to send under `PM_BRIDGE_BREAK_GLASS_DIRECT=1` or any
+other workaround given that explicit cross-project-delivery warning.
+
+This likely explains an earlier anomaly in this same session: unrelated content from a different
+project's PM Bridge conversation (`ai-trading-assistance`, a systemd/exit-91 BLOCKER verdict)
+appeared inline once already this session. At the time it was treated as an accidental paste by
+the operator; in light of this routing-identity staleness, it may instead have been a real
+cross-project routing/delivery mix-up on PM Bridge's side. Not conclusively distinguished either
+way -- flagged here rather than silently assumed to be one or the other.
+
+**Still not delivered to GPT-PM as of this entry.** Next step needs a fresh Claude Code session
+(this one's routing code cannot be fixed by any in-session action) to send
+`governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md`'s content to GPT-PM.
+
 ---
 
 ## 2026-09-12 — G2 kickoff: D1 schema (migration 0001), ADR-004/006 adopted, `packages/provenance`
