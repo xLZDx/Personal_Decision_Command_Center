@@ -5,6 +5,55 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — G2 kickoff: D1 schema (migration 0001), ADR-004/006 adopted, `packages/provenance`
+
+`infra/migrations/0001_ingest_outbox.sql`: accounts/policy/cursor tables plus the full ingest/
+outbox/DLQ pipeline (ADR-006) and the queue soft-budget counter (TDD §16.3). Deliberately scoped to
+G2's own domain only -- TDD §34 lists ~30 tables across every future gate, but this migration
+creates just the ones G2's own DoD (TDD §71) needs; each later gate adds its own migration for its
+own domain (people/identities/topics -- G5; decisions/commitments -- G6; notifications -- G7;
+audit/backup/retention -- G8). Flagged in the migration's own header for GPT-PM/operator to correct
+if this reading of §34 is wrong.
+
+`core/adr/ADR-004-normalized-event.md` and `ADR-006-durable-ingest-outbox.md` adopted (were G0-era
+placeholder stubs), formalizing decisions already implemented in `packages/contracts` and specified
+in TDD §13/§14/§17/§18.
+
+`packages/provenance` (new): `isAiSafe()`/`assertAiSafe()` — the DAG traversal + fail-closed
+composition rule ADR-005 requires as a testable primitive, not documentation. Fails closed on a
+DENY node, unresolved ("unknown") ancestry, or a cycle. 15 tests covering ADR-005's own named
+cases (raw Telegram -> BLOCKED, mixed ancestry -> BLOCKED, GmailEvidenceBundle-shaped Gmail-only
+chain -> ALLOWED, combined Gmail+Telegram Topic -> BLOCKED even when the Topic node itself says
+ALLOW).
+
+Landed directly per the operator's functional-first directive above -- no review round requested.
+
+---
+
+## 2026-09-12 — Operator directive: functional work first, governance/process work goes to backlog
+
+Operator instruction, verbatim (paraphrased from Russian): further G1-style governance polishing,
+review rounds, and process ceremony do not affect functionality and should not consume time going
+forward -- log non-functional items to a backlog instead of working them now, and skip GPT-PM
+review rounds for that class of work. Confirmed understanding directly with the operator.
+
+**Required-status-checks removed from the `PDCC` ruleset** on `main` (`governance`/`verify` no
+longer block merge) at the operator's explicit direction, after PR #19 was blocked on the
+newly-added `GATE_ACTIVE` bootstrap variable and the operator chose to unblock by removing the
+required checks rather than setting the variable. **PR #19 merged** (`5dabbf2`) as an ordinary
+merge on that basis -- not on a GPT-PM `VERDICT: APPROVE`, which never arrived (round 2 was still
+parked/generating when this directive landed). The `pull_request` ruleset rule (PRs required, no
+direct push to `main`) and `deletion`/`non_fast_forward` protections are UNCHANGED.
+
+Effective immediately: G1's remaining polish items (the `manifest-amendment` negative control, a
+third fresh-context closure review, `G1_CLOSURE_REPORT.md`, `governance/operator-approvals/
+README.md`'s stale line) move to backlog, not active work. Focus shifts to G2 (D1 schema,
+provenance primitives, durable ingest/outbox, Queue/reconciler/DLQ, soft-budget guard, quota
+harness) -- real functional groundwork, landed directly without a review-round cycle per the same
+directive.
+
+---
+
 ## 2026-09-12 — PR #19 round 1: `VERDICT: BLOCKER` (2 BLOCKER + 2 MAJOR); fixed 3 of 4, disputing 1 with evidence
 
 `review.js` round 1 on PR #19 (`gate/g1-lifecycle-fix`) returned `VERDICT: BLOCKER`. Each finding
