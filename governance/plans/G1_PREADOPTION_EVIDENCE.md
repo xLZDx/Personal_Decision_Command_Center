@@ -790,8 +790,10 @@ branch name does not match `gate/g<N>-...` and the PR body carries no `Gate: G<N
 creation authorized the same way as §12's three controls — GPT-PM `VERDICT: APPROVE` under §20,
 naming this branch by name/base/purpose, since branch creation is reversible.
 
-**Attempt A — ordinary path.** Commit touched only `README.md` (a stale "G0 in progress" status
-line already due for correction, per §15's third MAJOR). Run `34679875903`, job on `governance`:
+**Attempt A — ordinary path.** The control instrument was `README.md` (a stale "G0 in progress"
+status line already due for correction, per §15's third MAJOR); the same commit (`7ec0f24`) also
+recorded the attempt in `core/DECISION_LOG.md` — the commit is not README-only, only the
+instrument is. Run `34679875903`, job on `governance`:
 step 4 ("Resolve the gate this PR belongs to") failed immediately, verbatim:
 
 ```

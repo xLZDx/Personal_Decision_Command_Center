@@ -5,6 +5,25 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #17 round 1: VERDICT MINOR, both findings fixed
+
+GPT-PM's round-1 review of PR #17 (correlated, exact head `52c0ada`) returned `VERDICT: MINOR`, no
+BLOCKER/MAJOR:
+
+1. **MINOR, verified against `git show --stat 7ec0f24`**: `G1_PREADOPTION_EVIDENCE.md` §16 said
+   attempt A's commit "touched only `README.md`" — false; the same commit also carries a
+   27-line `core/DECISION_LOG.md` addition. Fixed: reworded to distinguish the control
+   _instrument_ (`README.md`) from the commit's actual contents.
+2. **Out-of-scope note, verified against `git show origin/main:README.md`**: `main`'s own
+   `README.md` still reads "G0 in progress" — the correction existed only on PR #16
+   (`control/g1-none-rejection`), which was intentionally closed unmerged, so it never reached
+   `main`. Fixed on this branch too, since it is real, independently-true drift and GPT-PM flagged
+   it as worth resolving before the second closure review rather than carrying it forward known.
+
+Both fixes are on this same PR; a fresh exact-head review follows before merge.
+
+---
+
 ## 2026-09-12 — PR #17 (`gate/g1-doc-sync`) formatting fix, no content change
 
 `npm run verify`'s `Format` step flagged `core/PLAN_MASTER_GATES.md` and
