@@ -5,6 +5,45 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — Conversation re-registered; then this session's own routing code went stale — declined to send
+
+Continuation of the transport-blocker entry below, same session. Operator asked to retry ("попробуй
+щас" / "отправь новые request_id") twice more:
+
+1. **First re-diagnosis**: the old durable `request_id 3d8e1a2c-...` kept failing at "shutdown
+   drain deadline" even after the daemon settled (stable pid, idle, requests-handled counter not
+   incrementing) — looked like a genuinely broken registered conversation, not daemon load. A fresh
+   `request_id e2f6b9a4-...` surfaced the real error: `CONVERSATION_UNREACHABLE` for
+   `6aa55285-de40-83eb-8a59-341c5cbd4191` (the conversation registered earlier today, per the
+   handoff entry near the top of this log) — renamed/deleted/not in the sidebar.
+2. **Operator supplied a fresh conversation URL** (`https://chatgpt.com/c/6aa59064-c160-83eb-b803-
+   661df349ca22`); re-registered via `pm_project_register` (proper MCP tool, not a hand-edit of
+   pm-bridge's `config/projects.json`). Confirmed: `e2f6b9a4-...` retried and still hit the OLD
+   conversation id — its durable job record had already cached the stale `conversationId` at first
+   creation, before re-registration, and reusing the same `request_id` reuses that cached binding.
+   A fresh `request_id 7c4a83f1-...` correctly picked up the NEW conversation id but still returned
+   `CONVERSATION_UNREACHABLE` for it too — browser-side (search/sidebar couldn't locate a
+   just-created conversation), not a config problem; not re-diagnosed further, left for the operator
+   to confirm the chat is genuinely visible/unarchived.
+3. **On the next retry, `pm_bridge_mode_status` returned a different, more serious warning**: this
+   session's own loaded PM Bridge client build (`a4b739e9eb8da7a4`) is stale relative to the current
+   daemon/disk build (`c3860d465853fa90`), and — critically — **the change reaches the
+   project-resolution/routing-identity code** (`f5d982e186fbb8a0` vs `dcf7a33ffc0d2ba6`). The tool's
+   own text: "this session... still chooses which project it names, so letting it send could deliver
+   one project's content into another project's chat." Restarting the daemon does not fix this, only
+   a fresh session does — the identical failure mode and identical wording already recorded in this
+   same file under the 2026-09-12 "G2 pipeline architecture" entry from earlier in this session.
+
+**Declined to send** despite the operator's "try now" instruction, and did not attempt
+`PM_BRIDGE_BREAK_GLASS_DIRECT=1` or any other workaround — same call the earlier entry in this file
+already made for the same reason. This is a genuine cross-project data-isolation risk (this
+project's audit findings could route into a different project's ChatGPT conversation, or vice
+versa), not a routine retry-worthy transport hiccup, so operator consent to retry does not extend to
+bypassing it. **Both pending sends (Rosetta GO under `request_id 7c4a83f1-...`, G2 synthesis under
+whichever id is used next) need a fresh Claude Code session** before either can safely proceed.
+
+---
+
 ## 2026-09-12 — PM Bridge transport blocked both pending sends; Rosetta GO left pending, not forced
 
 Retrospective Rosetta plan recorded for the audit-verification work below (per global CLAUDE.md §19
