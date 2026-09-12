@@ -127,6 +127,35 @@ verified ruling) succeeded, and the ruling itself is a hard block on implementat
 until a revised proposal addresses the 3 BLOCKERs and 4 MAJORs above and gets a fresh GPT-PM round
 under a new plan/GO.
 
+**Retrospective Rosetta debt for the acts above, and why it stays open.** The session's Stop hook
+flagged (correctly) that steps 1/3/4/6/7/9/10 above ran with no plan of their own -- the only
+approved plan covering this session's work was the pre-existing one this section closes, whose own
+scope was authored (and GO'd) in the *prior* session, before any of today's routing/daemon/close work
+was known to be needed. Filed a retrospective plan for it
+(`personal-decision-os-2026-09-12T19-54-32-480Z-3d3a29`, hash
+`76b175a85ff8400dafe8c19f1e2e5b902bf2e6cb133085985e0b2a145cee92c5`) and attempted to send its GO
+review request. **`pm_bridge_mode_status` refused: this session's own loaded PM Bridge client build
+(`c3860d465853fa90`) is stale relative to disk (`fa4a88ef5dbc2895`) specifically in the
+project-resolution/routing-identity code (`dcf7a33ffc0d2ba6` vs `45ea9e415e428a84`), with the tool's
+own explicit warning that letting it send could deliver this project's content into a different
+project's chat.** This is the identical failure mode the prior session already hit and declined to
+work around (see the "Conversation re-registered; then this session's own routing code went stale"
+entry above) -- except this time it is not the shared daemon that is stale (a same-session restart
+fixed that transport-level issue earlier today), it is *this specific process's own* loaded routing
+code, which cannot be refreshed from inside the same running session. Declined
+`PM_BRIDGE_BREAK_GLASS_DIRECT` for the same reason as both prior occurrences: a real, mechanically
+detected cross-project-delivery risk, not a routine hiccup.
+
+**Left the retrospective plan `pending`** (not forced into `blocked`/`rejected`: per this repo's own
+established precedent two sections below, a `pending` plan can only be validly closed once it has
+received a GO or an explicit GPT-PM refusal at GO -- neither happened here, so closing it now would
+misrepresent what actually occurred, the same reasoning that kept the earlier transport-blocked plan
+in `pending` rather than `blocked`). **The ten acts named by the Stop hook remain recorded as
+`governed: false`** -- this is accurate, not a gap to paper over: today Rosetta is audit-mode only
+(records, does not deny), and the debt is real. A fresh Claude Code session (this process's own
+routing code cannot self-refresh) should retry sending this retrospective plan's GO request with the
+same plan_id/hash before closing it.
+
 ---
 
 ## 2026-09-12 — Conversation re-registered; then this session's own routing code went stale — declined to send
