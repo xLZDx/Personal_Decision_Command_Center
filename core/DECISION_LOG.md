@@ -7,9 +7,10 @@ Newest entries at the top.
 
 ## 2026-09-12 — PR #17 merged; `gate/g1-readme-fix` opened for `main`'s remaining stale README
 
-**PR #17 merged** (`860ae69`, fast-forward) on GPT-PM round-3 `VERDICT: APPROVE` (exact head
-`83f307c`, both required checks green, mergeable) — merged by Claude under global CLAUDE.md §24,
-which no longer has an authority-surface carve-out.
+**PR #17 merged** (`860ae69`, a merge commit with two parents — `8980301` and `83f307c`, confirmed
+via `git show --format=%H %P`; not a fast-forward, correcting this entry's own first draft) on
+GPT-PM round-3 `VERDICT: APPROVE` (exact head `83f307c`, both required checks green, mergeable) —
+merged by Claude under global CLAUDE.md §24, which no longer has an authority-surface carve-out.
 
 **Separately, GPT-PM `VERDICT: APPROVE`'d branch `gate/g1-readme-fix`** (base `origin/main` @
 `860ae69`) for the one remaining stale item round 2 of PR #17 correctly kept out of that branch's
