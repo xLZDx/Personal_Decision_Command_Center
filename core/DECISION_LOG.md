@@ -5,6 +5,47 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PM Bridge transport blocked both pending sends; Rosetta GO left pending, not forced
+
+Retrospective Rosetta plan recorded for the audit-verification work below (per global CLAUDE.md §19
+surfacing via this session's Stop hook mid-task): `personal-decision-os-2026-09-12T17-04-33-609Z-
+33a708`, hash `a5a9eedb0e1970dba5e0ea795499c08585e828bf9fb48897032039a27c3f98b0`, `base_head 25dc793`.
+
+**Three consecutive `gpt_send_and_await` attempts to deliver that plan's GO-review request** (same
+reused `request_id 3d8e1a2c-9f47-4b6e-8a12-5c3e7f0b9d61` each time, per the tool's own instruction
+on retry) **all failed identically before any send occurred**: "Cancelled before execution (shutdown
+drain deadline)." `pm_bridge_job_status` confirmed `sendPhase: not-started`, `attempts: 0` on every
+check — nothing reached ChatGPT, so no misdelivery risk, only non-delivery. Daemon pid changed once
+between attempts 1 and 2 (`27196` -> `34512`, consistent with another concurrent session editing
+`pm-bridge/src/` — the already-documented pattern in workspace memory
+`pm-bridge-src-edit-desyncs-every-session`); pid then stayed stable and idle for attempt 3, with
+`pm_bridge_mode_status`'s "requests handled" counter not incrementing across that attempt — which
+looks more like this session's own PM Bridge client connection being stale relative to the current
+server build than a live daemon outage, a failure mode this same file already documents elsewhere
+("restarting the daemon does not fix this — only a fresh session does").
+
+**The same underlying blocker also still affects the earlier, still-undelivered G2 synthesis send**
+(`request_id 7f3a9c1e-4b2d-4a6f-9e21-8c5d6f0a1b34`) two sections below — also not sent, also not
+misdelivered, per the same `pm_bridge_job_status` check.
+
+**Stopped retrying after the third identical failure**, matching this project's own established
+precedent for exactly this situation (see the pm-bridge conversation excerpt in `pm_bridge_status`
+around 2026-09-12T16:31-16:53: "if this attempt fails identically a third time... that is a genuine
+pm-bridge transport defect independent of this plan's own content, and I will stop retrying blindly
+and report it as a blocker rather than keep resending"). `pm_rosetta_close` was attempted with
+`result: "blocked"` but refused ("plan is not approved/in-progress (status pending)") — a pending
+plan can only be closed once it has a GO or is explicitly `rejected` by GPT-PM, and `rejected`
+would misrepresent this as a GPT-PM refusal it never was. **Left the plan in `pending`** (confirmed
+via `pm_rosetta_status`: governed=no, plan pending, 17 mutating acts recorded as ungoverned for this
+session) rather than force it into a terminal state that doesn't describe what happened.
+
+**Not an operator-only decision under §4/§14** — nothing irreversible, no secrets, no branch/
+force-push. What this needs is either the shared PM Bridge daemon to settle, or a fresh Claude Code
+session to pick up a current server build, then a retry of both pending sends reusing their existing
+`request_id`s (never mint new ones per the tool's own instruction).
+
+---
+
 ## 2026-09-12 — External audit verified against primary sources; 3 new defects folded into the G2 proposal
 
 Operator forwarded an independent external audit (BLOCK / NEEDS REVISION) covering governance,
