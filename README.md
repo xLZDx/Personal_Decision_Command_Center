@@ -14,10 +14,8 @@ Current status and gate plan: [`core/PLAN_MASTER_GATES.md`](core/PLAN_MASTER_GAT
 
 ## Status
 
-**G0 closed; G1 (toolchain, CI, governance enforcement) remediated.** See
-[`core/PLAN_MASTER_GATES.md`](core/PLAN_MASTER_GATES.md) for the authoritative per-gate status,
-which changes faster than this line does. No connector, service, or PWA code exists yet — that
-begins at G2+, each gate individually authorized. See
+**G0 in progress** (implementation-readiness verification + ADR freeze). No connector, service, or
+PWA code exists yet — that begins at G1+, each gate individually authorized. See
 [`core/DECISION_LOG.md`](core/DECISION_LOG.md) for what has actually been decided.
 
 ## Scope (MVP1)

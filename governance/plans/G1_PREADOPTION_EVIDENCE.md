@@ -812,6 +812,13 @@ failed with the **identical** error text quoted above, at the same timestamp off
 (`07:08:59`), before step 5 or step 6 ran. Confirmed via
 `gh run view 34679958587 --log`, filtered to the "Resolve the gate this PR belongs to" step.
 
+**Note on `main`'s own README.md.** The correction attempt A carried (fixing the stale "G0 in
+progress" line) existed only on PR #16, which was intentionally closed unmerged — so it never
+reached `main`. That correction is real and still due, but is **not** part of this branch's
+authorized scope (GPT-PM round 2, `VERDICT: MAJOR`, caught an earlier attempt to fold it in here as
+a scope excess and required a revert) — it belongs to whichever branch is actually authorized to
+carry it, separately.
+
 **What this establishes.** The removal of the "Gate: NONE" ungated path (§15's BLOCKER fix) refuses
 an undeclared PR at the very first workflow step, unconditionally — including when the diff being
 refused is a no-op edit to the enforcement script's own source. The refusal does not depend on

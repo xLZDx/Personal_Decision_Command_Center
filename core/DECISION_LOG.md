@@ -5,6 +5,27 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #17 round 2: VERDICT MAJOR — scope excess (README.md), reverted
+
+GPT-PM's round-2 review (correlated, exact head `8bafcdd`) returned `VERDICT: MAJOR`: the branch's
+GPT-PM-authorized scope named exactly eight files, and this session had added a ninth (`README.md`)
+during round-1 remediation — GPT-PM's own round-1 comment on the stale README was an out-of-scope
+_observation_, not authorization to fold the fix into this branch. Correctly caught: a bounded GO
+absorbing unrelated cleanup during review is exactly how exact-scope authorization erodes into
+open-ended authority.
+
+**Fix:** `git checkout origin/main -- README.md` — reverted to `main`'s exact current content.
+`G1_PREADOPTION_EVIDENCE.md` §16 updated to state plainly that the README correction is real, still
+due, but out of this branch's authorized scope and belongs to a separately authorized change.
+Round 1's actual MINOR fix (the attempt-A commit-description correction) is untouched and already
+confirmed correct by GPT-PM.
+
+**Lesson, worth keeping:** a reviewer naming something as "out of scope, worth fixing before X"
+is not consent to fix it on the branch in hand — that is a new action needing its own scope check,
+per global CLAUDE.md §21.
+
+---
+
 ## 2026-09-12 — PR #17 round 1: VERDICT MINOR, both findings fixed
 
 GPT-PM's round-1 review of PR #17 (correlated, exact head `52c0ada`) returned `VERDICT: MINOR`, no
