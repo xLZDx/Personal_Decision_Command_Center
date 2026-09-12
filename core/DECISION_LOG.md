@@ -16,7 +16,14 @@ merged by Claude under global CLAUDE.md §24, which no longer has an authority-s
 `860ae69`) for the one remaining stale item round 2 of PR #17 correctly kept out of that branch's
 scope: `README.md`'s own "**G0 in progress**" Status line. Fixed here to the current G0-closed/G1-
 remediated state, mirroring the wording already applied and approved elsewhere in this repository.
-No other file in this branch's authorized scope.
+
+**Scope amendment.** PR #18 round 1/2 review correctly flagged that this branch's authorized
+scope named only `README.md`, while every commit in this repository is mechanically required to
+carry a `core/DECISION_LOG.md` entry (`~/.claude/hooks/decision_log_gate.py` — verified: it blocked
+an unrelated commit earlier this same session). Asked directly, GPT-PM amended the branch's
+authorized scope to exactly these two files — `README.md` plus the minimal mandatory decision-log
+entry for this change, nothing else — rather than treating the mechanical requirement as an
+unauthorized scope excess.
 
 ---
 
