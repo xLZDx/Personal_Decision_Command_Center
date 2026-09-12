@@ -156,6 +156,70 @@ in `pending` rather than `blocked`). **The ten acts named by the Stop hook remai
 routing code cannot self-refresh) should retry sending this retrospective plan's GO request with the
 same plan_id/hash before closing it.
 
+## 2026-09-13 -- Retrospective GO correctly refused by GPT-PM; corrections to two claims above
+
+A later session (fresh process; this one's own PM Bridge client build was current) retried the
+retrospective plan's GO request with its existing `request_id f4d8e2a7-6b1c-4e93-8a5f-2c7d9e0b3f68`
+(reused per the tool's own instruction after two `not-started` transport failures -- a composer-paste
+timeout, then a daemon source-generation change from a concurrent session mid-send; both genuinely
+never started, confirmed via `pm_bridge_job_status` before each retry). **GPT-PM returned `VERDICT:
+BLOCKER` (2 BLOCKER, 1 MAJOR), correlated (`replyId c8dd7666-4a5a-4e1f-b08f-aceefec83ce9`), and it is
+right on all three points:**
+
+1. **BLOCKER -- a retrospective GO for already-completed work is a category error.** The retrospective
+   plan asked GPT-PM to `APPROVE` work whose every act (including committing `c64b6f2`) had already
+   happened before the plan was even filed. Rosetta's own contract is Plan -> GO -> Act; a verdict
+   issued now cannot retroactively authorize the past. GPT-PM's own words: *"A verdict now cannot
+   retroactively make already-completed work pre-authorized."* Correct outcome, applied: the plan was
+   closed via `pm_rosetta_close(result: "rejected")` -- the documented exit for a plan GPT-PM refuses
+   at GO, needing no evidence, terminal. This decision-log entry itself is the *"retrospective/
+   evidence/deviation record with zero execution authority"* GPT-PM asked for in its place.
+
+2. **BLOCKER -- the prior plan's `pm_rosetta_close(passed)` evidence overstated its own cleanliness.**
+   GPT-PM's point, verified against this repo's own git history and accepted as correct: at the
+   instant `pm_rosetta_close` was called for the prior plan
+   (`personal-decision-os-2026-09-12T17-04-33-609Z-33a708`), the two edits to `core/DECISION_LOG.md`
+   and `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md` recording the G2 `BLOCKER` ruling were
+   sitting **uncommitted** in the working tree -- they were committed only afterward, as `c64b6f2`,
+   which was chronologically part of *this* (the follow-up/retrospective) plan's own steps, not a
+   declared step of the *original* plan. The prior plan's own declared scope covered sending the
+   synthesis and reading/verifying the reply -- not writing the reply into the decision log. Calling
+   that close's evidence "the plan's own two files" therefore blurred which plan those specific edits
+   actually belonged to. **Correction, stated plainly: the prior plan's `passed` closure is not
+   reopened (Rosetta has no amend/reopen mechanism, and the plan is terminal) but its evidence should
+   be read as "mechanically recorded, working-tree state accurately captured by git status/diff at
+   that instant" rather than "a clean, plan-isolated snapshot."** The underlying substance --
+   obtaining GPT-PM's real ruling on G2 -- is unaffected; the defect is in how tightly the evidence
+   text scoped itself to that one plan, not in what was actually done.
+
+3. **MAJOR -- `git diff --shortstat` producing no output does not, by itself, prove "CRLF-only, zero
+   real content."** Correct: `--shortstat` reports aggregate line/file counts, and citing "it printed
+   nothing" without saying why that constitutes proof was underspecified. **Rigorous re-check, done
+   after this ruling, evidence below.** The stash used to isolate those 13 files
+   (`git stash push --keep-index`, dropped after `git stash pop` succeeded) was recovered from the
+   repository's own unreachable-object graph, still present (`git fsck --no-reflog --unreachable`
+   listed commit `9c8f9d6dd721b500b614639884f138d9ab750004` -- the exact hash the original `git stash
+   push` reported as dropped). That commit's tree holds the literal pre-close content of all 13
+   files. Comparing it directly against the current `HEAD` (`main` at `197d25b` by the time of this
+   entry) across exactly those 13 paths:
+
+   ```
+   git diff HEAD 9c8f9d6dd721b500b614639884f138d9ab750004 -- <13 paths>            -> 0 lines of output
+   git diff --ignore-all-space --ignore-blank-lines --ignore-cr-at-eol HEAD 9c8f9d6... -- <13 paths> -> 0 lines of output
+   ```
+
+   The **raw** diff between the two commits' blobs is already empty -- not merely the
+   whitespace-normalized one. This is stronger than "CRLF-only": it shows the committed blob content
+   was byte-for-byte identical the entire time, in both the stash and `HEAD`. What `git status` had
+   been flagging as `M` was a working-tree/checkout artifact of `core.autocrlf` (Git writing CRLF to
+   disk while storing LF in the object database, and periodically re-detecting the checked-out bytes
+   against the index) -- never a real content difference reaching any commit. The original claim's
+   conclusion (no real content changed) holds; the evidence backing it did not, until now.
+
+**Disposition:** retrospective plan closed `rejected`. No further Rosetta action needed for this
+correction -- it is exactly the non-authorizing documentation GPT-PM asked for, not a new
+execution-requiring gate.
+
 ---
 
 ## 2026-09-12 — Conversation re-registered; then this session's own routing code went stale — declined to send
