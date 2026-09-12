@@ -118,6 +118,140 @@ on the V2 document.** That send happens after this commit, under this same plan 
 per the approved scope), and the reply is captured but recording its *content* belongs to the next
 plan -- exactly the ambiguity the revised plan was built to avoid repeating.
 
+**Plan closed** (`pm_rosetta_close`, result `passed`, review class `LOCAL` -- 3 doc files, 1
+commit): every step executed as approved, reply captured and correlated
+(`replyId 32da2144-9a34-4326-b388-06bfc30fc3ce`). Sent via a fresh request_id
+(`4d7c9a2e-1f5b-4e83-9a6c-8b0d3e7f2c56`) after two more PM Bridge daemon restarts for the same
+concurrent-edit desync pattern as above (build hash changed under it again between the plan's GO
+and this send). Operator instruction mid-session ("ГО делай все без ПМ пока , потом отправишь все
+сразу как закончишь") -- confirmed as already the approved plan's own shape, not a scope change --
+and separately ("нетолько, все что можно из г2-6") -- read as: after this gate closes, continue
+autonomously into G3-G6 as far as genuinely possible, rather than stopping at G2. Recorded here as
+direction for what follows, not yet acted on.
+
+## 2026-09-13 — GPT-PM's Round-2 ruling on the G2 V2 proposal: `VERDICT: BLOCKER`, 2 BLOCKER/2 MAJOR
+
+Verbatim reply (`replyId 32da2144-9a34-4326-b388-06bfc30fc3ce`, correlated, `request_id
+4d7c9a2e-1f5b-4e83-9a6c-8b0d3e7f2c56`) preserved in full in this session's PM Bridge transcript;
+key findings below, verified against the reply text itself, not paraphrased from memory.
+
+**Opening assessment (not a finding, context for the four below):** "Revision 2 materially
+improves the original design: the joined reconciler query is now demonstrably indexed, processing
+and transport attempt counts are separated, structural source FKs are substantially better, and
+the proposal provides real executable evidence rather than citation-only reasoning." All 3
+Round-1 BLOCKERs and 3 of 5 Round-1 MAJORs (M1 devices, M2 provenance fail-open, M3 telegram+ALLOW)
+are implicitly confirmed closed by omission from this round's findings -- only B2/B3 (as one
+combined defect) and M4/M5 remain contested.
+
+1. **BLOCKER -- B2/B3 not actually closed: the processor outcome state machine is incomplete.**
+   §3.5's DLQ batch only fires when `processing_attempt_count >= MAX`; a `PERMANENT_FAILURE` on
+   attempt 1-4 was never given its own transition in V2, so it would sit `PROCESSING` until lease
+   expiry, at which point §3.4's below-cap reclaim path would incorrectly turn it into
+   `RETRYABLE_FAILED` and retry it -- contradicting the TDD's requirement that a permanent failure
+   is terminal, not retried. Required: the complete fenced transition protocol (SUCCESS ->
+   PROCESSED; retryable-below-cap -> RETRYABLE_FAILED; retryable-at-cap OR permanent-at-any-count
+   -> DLQ), each as its own atomic, self-fenced D1 batch.
+2. **BLOCKER -- the lease's ABA guard is not proven safe.** `processing_lease_owner` is never
+   required to be a fresh, single-use token per claim; if it can be a reusable worker/instance
+   identity, a stale claimant from a prior lease can pass the fence check on a later claim by the
+   same worker. Required: a fresh per-claim `lease_token` (UUID) in every CAS predicate, not a
+   worker identity. Separately: `PROCESSING_LEASE_TTL=120s` cannot be derived from a CPU-only
+   preflight measurement (network/D1/AI wait time is not active CPU per the TDD's own framing) --
+   needs either a lease-renewal/heartbeat mechanism or a measured end-to-end wall-time bound.
+3. **MAJOR -- M4 (idempotency) only partially fixed.** `source_version` is nullable with no stated
+   rule for *when* it must be non-null, so the original collision (reused `source_event_id`, no
+   version) still collapses onto one key for `MESSAGE_UPDATED`. Required: an executable rule (e.g.
+   non-empty `source_version` mandatory for `MESSAGE_UPDATED`) plus named behavioral proofs (same
+   revision retries to the same key; two revisions produce different keys; a required-but-absent
+   version is rejected, not silently accepted).
+4. **MAJOR -- M5 (generic `ProvenanceValue<T>`) still incomplete.** `sensitivity` was left optional
+   in the contract, but the durable `ingest_event_routing_hints` DDL was never given matching
+   `sensitivity`/`created_at`/`derivation_version` columns at all -- the persisted representation
+   loses exactly the metadata the contract now carries. Also flagged: `provenance.min(1)` on the
+   generic schema is inconsistent with V2's own `STATIC_CONFIG` DAG node, which is a genuine
+   zero-ancestor root.
+
+**One evidence overstatement to correct while remediating, not a new defect:** V2's §3.5 claimed a
+capped non-terminal event is "unrepresentable," citing NC6 -- but NC6 only proved DLQ-with-zero-
+attempts is rejected. The schema CAN represent `RETRYABLE_FAILED` at count 5, and necessarily
+represents the live fifth attempt as `PROCESSING` at count 5 while it runs. The actual required
+proof is a *transition* invariant (no capped non-terminal row survives past the fifth attempt's
+completion or lease expiry), not static unrepresentability -- this was an overreach in how strongly
+the DDL evidence was described, corrected here rather than repeated in the next round.
+
+**One item GPT-PM affirmatively closed rather than left open:** V2's own §7 had flagged D1's
+default `PRAGMA foreign_keys` behavior as unverified. GPT-PM's reply states Cloudflare's current
+documentation confirms D1 enforces foreign keys by default, equivalent to `PRAGMA foreign_keys=ON`
+for transactions and migrations -- this is no longer an open item for the next revision, though the
+citation itself should be independently verified against Cloudflare's docs before being repeated
+as settled fact in a future document, per this project's own evidence discipline.
+
+**Scope for the next round, per GPT-PM's own instruction:** "Keep the next revision limited to
+these four findings and their direct regression tests." No re-litigating the three closed BLOCKERs
+or the three closed MAJORs.
+
+## 2026-09-13 — G2 Round 3: remediated GPT-PM's remaining 2 BLOCKER + 2 MAJOR (V3), operator
+authorized autonomous completion of MVP1
+
+**Operator instruction, this session:** "план меняется ГО делать все до конца, пм теперь работает
+нормально" and "тоесть ГО закончить мвп 1 автономно автаризирую" -- explicit GO to finish MVP1
+autonomously, PM Bridge confirmed stable again. Read as: continue through every remaining G2-G6
+gate using this project's normal Rosetta plan -> GPT-PM GO -> act -> validate -> document cycle at
+each gate, without pausing for further operator confirmation between gates, escalating to the
+operator only for the genuinely operator-only class (deletion, real-money, force-push without an
+APPROVE, branch creation without an APPROVE) per global CLAUDE.md SS4/SS14/SS20.
+
+**Round 3 remediation, scoped exactly to GPT-PM's 4 remaining findings** (per its own instruction
+to keep the next revision limited to these four):
+
+1. **Complete fenced processor transition protocol** -- V2's DLQ batch fired only at
+   `processing_attempt_count >= MAX`; a `PERMANENT_FAILURE` below the cap had no transition at all
+   and would incorrectly retry after lease expiry. Fixed: four distinct fenced batches (SUCCESS,
+   retryable-below-cap, retryable-at-cap-or-permanent-at-any-count -> DLQ), chosen by outcome
+   classification, not attempt count alone.
+2. **Lease fencing moved from `processing_lease_owner` (reusable identity) to a fresh
+   `processing_lease_token` per claim** -- closes the ABA gap GPT-PM named (a stale claimant from
+   the SAME worker could otherwise pass an owner-only fence after a reclaim). Added a fenced
+   lease-renewal statement as the actual TTL safety net, since GPT-PM correctly noted CPU-only
+   measurement cannot establish a safe wall-clock lease duration.
+3. **`source_version` structurally mandatory for `MESSAGE_UPDATED`** -- DB CHECK
+   (`event_type <> 'MESSAGE_UPDATED' OR source_version IS NOT NULL`) plus a matching contract
+   `superRefine`, with all three of GPT-PM's named behavioral proofs executed (same-revision-retry
+   collides on the idempotency key; different revisions get distinct keys; a required-but-absent
+   version is rejected).
+4. **`sensitivity`/`created_at`/`derivation_version` added to the durable
+   `ingest_event_routing_hints` table**, and `provenance.min(1)` relaxed specifically for
+   `STATIC_CONFIG`-derived values to match `packages/provenance`'s own zero-ancestor
+   `StaticConfigNode`.
+
+**This round's own Rosetta plan was itself refused once at GO** (`VERDICT: BLOCKER`, 0 BLOCKER/2
+MAJOR on the plan's stated scope -- not the design): (a) `sensitivity` had been left `.optional()`,
+which GPT-PM correctly rejected as not the same as resolving the TDD's requirement that it be a
+normal field -- fixed by making it a REQUIRED non-empty opaque string (no invented
+`LOW`/`MEDIUM`/`HIGH` vocabulary, per GPT-PM's own explicit instruction not to invent one); (b) the
+lease-token fix lacked a named direct regression test -- fixed by executing the exact ABA sequence
+GPT-PM specified (claim with token-A -> lease expires -> Phase-1 reclaim assigns fresh token-B -> a
+stale mutation still carrying token-A affects 0 rows -> the same mutation with token-B succeeds),
+literal row-counts captured. Amended plan resubmitted, returned `VERDICT: APPROVE`, 0/0 --
+"closes both findings from the immediately preceding review."
+
+**Executed, evidence captured verbatim** in `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V3.md`:
+13 negative/positive DDL controls (schema_v3.sql, scratch DB, `PRAGMA foreign_keys=ON`), 4
+processor-transition scenarios ending in zero capped-non-terminal rows, the 3-step ABA sequence,
+and a clean `tsc --noEmit` (exit 0) on the updated scratch `provenance.ts`/`event.ts` against this
+repo's real tsconfig and zod. Also corrected one V2 evidence overstatement GPT-PM flagged: V2's
+"unrepresentable" claim (cited a DDL-only control that didn't prove it) replaced with the actual
+proven transition invariant from the four-scenario matrix.
+
+**V1 and V2 status sections updated** to point to V3; V2 marked SUPERSEDED at its own top-of-file
+header, not just in a Status footer, so a reader opening V2 directly sees immediately that it is
+historical. **`packages/`, `services/`, and `infra/migrations/` remain completely untouched** --
+verified by `git status` before commit.
+
+**Per the same deterministic boundary as Round 2's plan: this entry does not record GPT-PM's
+ruling on V3.** That send happens after this commit, under this same plan's final step; recording
+the reply's content is the next plan's job.
+
 ## 2026-09-12 — Rosetta plan GO obtained and executed; GPT-PM returns BLOCKER on the G2 proposal
 
 Fresh Claude Code session (per the prior session's own recorded conclusion that its PM Bridge

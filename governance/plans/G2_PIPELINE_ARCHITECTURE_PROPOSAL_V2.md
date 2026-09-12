@@ -1,3 +1,12 @@
+# G2 pipeline architecture — Revision 2 (SUPERSEDED — see Revision 3)
+
+**2026-09-13: GPT-PM returned `VERDICT: BLOCKER` on this document** (2 BLOCKER/2 MAJOR: incomplete
+processor outcome state machine, lease-token ABA gap, partially-fixed idempotency rule, incomplete
+`ProvenanceValue<T>` durable representation). All of Round 1's findings were confirmed closed.
+Superseded by `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V3.md`, which addresses exactly
+these 4 remaining findings. This document is kept as the historical record of Round 2; do not treat
+it as the current proposal.
+
 # G2 pipeline architecture — Revision 2 (PROPOSAL / PENDING GPT-PM / NON-NORMATIVE)
 
 **Status of this document: a proposal awaiting GPT-PM's ruling, not a settled decision.** Nothing

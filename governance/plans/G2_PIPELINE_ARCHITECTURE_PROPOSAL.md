@@ -203,5 +203,11 @@ validated in a scratch SQLite harness (`PRAGMA foreign_keys=ON`, a 7-case negati
 matrix, `EXPLAIN QUERY PLAN` proof of index-covered access with a negative control showing the plan
 change without it) and a clean `tsc --noEmit` run against the repo's own tsconfig and installed
 zod. Full document: `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V2.md`. Sent to GPT-PM for a
-fresh ruling under Rosetta plan `personal-decision-os-2026-09-12T21-44-44-733Z-f21028`; verdict
-pending recording under a follow-up plan.
+fresh ruling under Rosetta plan `personal-decision-os-2026-09-12T21-44-44-733Z-f21028`.
+
+**2026-09-13: GPT-PM returned `VERDICT: BLOCKER` on V2** (2 BLOCKER/2 MAJOR -- a materially
+narrower set than Round 1's 3+4, with all of Round 1's findings confirmed closed). Revision 3
+(`governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V3.md`) addresses the remaining 4 findings,
+executably validated the same way. Sent to GPT-PM under Rosetta plan
+`personal-decision-os-2026-09-12T23-05-18-895Z-8f6c31`; verdict pending recording under a
+follow-up plan.
