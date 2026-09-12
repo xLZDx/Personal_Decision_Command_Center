@@ -5,6 +5,33 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — Global CLAUDE.md §24 authority-surface carve-out removed; `control/g1-none-rejection` attempt A opened
+
+**Global rule change, recorded here because it changes how the entry immediately below reads.**
+After PR #15 (a genuine G1 closure fix) sat waiting on an operator merge purely because it touched
+`.github/CODEOWNERS`, the operator asked directly what it would take for Claude to do this itself,
+and — given an explicit choice between narrowing the carve-out (keep it only for
+`governance/gate-manifests/**`/`operator-approvals/**`) or removing it entirely — picked full
+removal. `~/.claude/CLAUDE.md` §24 no longer excludes gate-manifest, operator-approvals,
+branch-protection/ruleset, or CODEOWNERS diffs from Claude's merge authority: a genuine, correlated
+GPT-PM `VERDICT: APPROVE` plus green required checks on the exact head now authorizes merging any
+PR, that class included. Full record, both options as stated to the operator, and the scope
+discipline followed: `~/.claude/core/DECISION_LOG.md` D-005. **This means the entry directly below
+("merge is operator-only, not Claude's") describes a rule that no longer applies** — kept as
+written because it was accurate at the time and the merge it describes already happened; any future
+PR of that shape merges under the ordinary §24 mechanism.
+
+**`control/g1-none-rejection`, attempt A, opened the same session.** Base `origin/main` @
+`8980301` (PR #15's merge commit — the negative control's own authorized starting point, per
+GPT-PM's branch authorization on the remediation plan). This branch/PR declares no gate: it is not
+named `gate/g<N>-...` and its body carries no `Gate: G<N>` line. Commit fixes `README.md`'s own
+stale `**G0 in progress**` status line (a real, independently-needed correction, not a synthetic
+diff) — an ordinary path, not `scripts/verify/**`. Expected: `governance.yml`'s gate-resolution step
+refuses with "This PR declares no gate" before the manifest-hash or scope steps ever run. Run id
+recorded in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §16 once observed.
+
+---
+
 ## 2026-09-12 — PR #15 round 2: VERDICT APPROVE (final); merge is operator-only, not Claude's
 
 GPT-PM's round-2 review of PR #15 (correlated, exact head `7fcd3b5`) returned `VERDICT: APPROVE`,
