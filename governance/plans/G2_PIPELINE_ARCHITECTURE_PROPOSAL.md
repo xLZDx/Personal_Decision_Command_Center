@@ -139,9 +139,49 @@ document is the synthesis GPT-PM should review first. If GPT-PM wants the raw pe
 verbatim rather than this reconciliation, ask and it will be supplied in full per the standing rule
 against shortening a review payload.
 
+## 7. Three additional defects, found by an independent external audit and Claude-verified
+
+Not raised by any of the four agents above, but material to the same G2 decision and verified
+directly by Claude against primary sources (not taken on the audit's word) before this document was
+sent to GPT-PM. Full verification record: `reports/G2_external_audit_verification.ru.html`.
+
+- **Provenance fail-open in `packages/provenance/src/dag.ts:55-73`.** `isAiSafe()` checks only
+  `node.ai_policy === 'DENY'`, never `=== 'ALLOW'`. At the TypeScript type level `AiPolicy` has no
+  third value, but the check is not bound to the `zod` validation in `packages/contracts/src/
+  provenance.ts` (`AiPolicySchema` / `.strict()`) — any `ProvenanceNode` built without going through
+  that schema, carrying an arbitrary `ai_policy` value (including `undefined`), passes as safe as
+  long as it has no ancestors. `provenance.ts:9`'s own comment already says the shape layer is not
+  enforcement ("a type that carries an ai_policy field does not by itself stop anyone from
+  serializing it") — this is exactly the enforcement gap at the one place (`dag.ts`) that is
+  supposed to close it. Separately: an `ALLOW` node with empty `provenance: []` is accepted as a
+  valid root purely by a doc-comment convention ("never used to represent ancestry not loaded yet"),
+  with nothing in the type system or at runtime distinguishing a genuine `SourceEvent` leaf from any
+  other node that happens to carry an empty array. Needs: `isAiSafe` to require `ai_policy ===
+  'ALLOW'` explicitly (not merely `!== 'DENY'`), and either a runtime `AiPolicySchema.parse()` at
+  the `ProvenanceNode` construction boundary or separate root/derived node types per the original
+  audit's suggestion.
+- **`infra/migrations/0001_ingest_outbox.sql` allows a `telegram` source to carry an `ALLOW`
+  policy.** `source_policies` (:57-63) has independent `CHECK`s on `source IN ('telegram','gmail')`
+  and `ai_policy IN ('ALLOW','DENY')`, with no composite constraint forbidding `telegram + ALLOW`.
+  In `ingest_events` (:79-91), `source`, the FK to `source_accounts`, and the FK to
+  `source_policies` are three independent columns with nothing tying them together — an event's own
+  `source` need not match its `source_account`'s `source`, nor its `source_policy`'s `source`.
+  Combined with the `dag.ts` gap above, a lost- or wrong-provenance Telegram event could resolve to
+  an AI-safe node. Needs a composite CHECK (e.g. `CHECK (NOT (source = 'telegram' AND ai_policy =
+  'ALLOW'))` on `source_policies`, plus a trigger or application-level invariant tying
+  `ingest_events.source` to both referenced rows' `source` — SQLite has no native cross-table CHECK).
+- **`idempotencyKey()` (`packages/contracts/src/event.ts:105-111`) collides across sequential
+  `MESSAGE_UPDATED` events.** The key is a pure function of `source_account_id`, `source_event_id`,
+  `event_type` only. Two distinct edits of the same provider message both produce
+  `event_type = 'MESSAGE_UPDATED'` with the same account/event id, so they generate an identical
+  key and the second insert collides on `idx_ingest_events_idempotency` (UNIQUE) — the real update
+  is silently dropped as a duplicate rather than recorded. Needs a monotonic revision/version
+  component (e.g. provider `edit_date`/`historyId`) folded into the key for `MESSAGE_UPDATED`.
+
 ## Status
 
 Proposal stage. Nothing in `packages/`, `services/`, or `infra/migrations/` has been created or
 modified as a result of this document. Awaiting GPT-PM review of §2 (reconciler schema resolution),
-§4 (services/resolver scope), and §5's two open items (devices table, provenance DAG hop depth)
-before implementation begins.
+§4 (services/resolver scope), §5's two open items (devices table, provenance DAG hop depth), and
+§7's three additionally-verified defects (provenance fail-open, D1 telegram+ALLOW gap,
+idempotencyKey MESSAGE_UPDATED collision) before implementation begins.

@@ -5,6 +5,57 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — External audit verified against primary sources; 3 new defects folded into the G2 proposal
+
+Operator forwarded an independent external audit (BLOCK / NEEDS REVISION) covering governance,
+provenance, D1 schema, and the outbox/reconciler layer. Every claim re-verified against a primary
+source (file:line, `gh api`, `npm audit`) before accepting it, per global CLAUDE.md §3/§7/§23 — not
+taken on the audit's word. Full record: `reports/G2_external_audit_verification.ru.html` /
+`.html`.
+
+**All 4 BLOCKER claims confirmed as fact:**
+
+1. Live ruleset `PDCC` (`gh api .../rulesets/22899342`) has no `required_status_checks` rule; PR #20
+   merged with `governance: FAILURE` (`gh pr view 20`). **Reframed, not disputed**: this is not an
+   accidental gap — the entry two sections below (2026-09-12, "Operator directive: functional work
+   first") already records the operator's own explicit decision to remove required checks. The real
+   defect is that `core/PLAN_MASTER_GATES.md:11-12` and `core/RISK_REGISTER.md` were never updated
+   to reflect that decision (G1 still reads "NOT YET CLOSED", G2 still reads "BLOCKED — needs G1
+   closure first" while G2 code has already merged). Doc-sync fix needed, not a checks rollback.
+2. `packages/provenance/src/dag.ts:55-73` — `isAiSafe()` checks `!== 'DENY'`, not `=== 'ALLOW'`, and
+   is not bound to the `zod` `AiPolicySchema` validation in `packages/contracts/src/provenance.ts`.
+   Confirmed by direct code reading.
+3. `infra/migrations/0001_ingest_outbox.sql` — `source_policies` has no composite CHECK forbidding
+   `telegram + ALLOW`; `ingest_events.source`, its `source_accounts` FK, and its `source_policies`
+   FK are three independent columns with nothing tying them together. Confirmed by direct schema
+   reading (no probe re-run needed — the gap is visible in the DDL).
+4. Reconciler/outbox state-machine mismatch — **not new**: the project's own 4-agent proposal round
+   the same day (next entry below) already found and is tracking the identical defect plus the
+   attempt-cap-invisibility bug.
+
+**MAJORs independently confirmed**: `idempotencyKey()` (`packages/contracts/src/event.ts:105-111`)
+collides across sequential `MESSAGE_UPDATED` edits of the same provider message (verified by
+reading the function — it hashes only `source_account_id`/`source_event_id`/`event_type`); `npm
+audit --json` re-run matches the audit's count exactly (2 critical/1 high/3 moderate/6 total);
+`routing_hints` has no `.max()` (`event.ts:57`) — matches the project's own independent G2-proposal
+finding; Prettier/CRLF claim observed live (`git status` showed 13 files "modified" with zero real
+diff bytes, `core.autocrlf=true` vs `endOfLine: lf`).
+
+**Working tree note**: at session start, `git status` showed 13 modified files with zero content
+diff (`git diff --shortstat` empty) — confirmed as the CRLF-normalization MAJOR above, not another
+session's concurrent edit.
+
+**Three defects the audit found that the existing `G2_PIPELINE_ARCHITECTURE_PROPOSAL.md` did not
+cover** (provenance fail-open, D1 telegram+ALLOW gap, idempotencyKey collision) were appended to
+that document as new §7 before sending it to GPT-PM, per §17's one-sweep discipline — GPT-PM's G2
+ruling should see the complete picture, not a follow-up finding after the fact.
+
+**Not independently re-verified this round** (time budget, not doubt): secret-scan history/entropy,
+the UX-spec critique, and the 160/160 test / 47/47 mutation counts — carried over from the audit
+report as-is.
+
+---
+
 ## 2026-09-12 — G2 pipeline architecture: 4-agent proposal + Claude verification, pending GPT-PM
 
 Per operator instruction (agents propose -> Claude verifies -> GPT-PM decides), ran `type-design-

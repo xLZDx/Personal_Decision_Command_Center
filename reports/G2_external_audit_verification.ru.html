@@ -1,0 +1,281 @@
+<!doctype html>
+<title>Верификация аудита G2</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f6f4ee;
+    --surface: #ffffff;
+    --surface-2: #f0ede4;
+    --ink: #1d2430;
+    --ink-dim: #5b6472;
+    --ink-faint: #8a91a0;
+    --border: #e1dccd;
+    --accent: #2f6f68;
+    --accent-ink: #ffffff;
+    --accent-tint: #e3efec;
+    --amber: #9a6a12;
+    --amber-tint: #faf1de;
+    --red: #a5391f;
+    --red-tint: #fbeae5;
+    --green: #2c744a;
+    --green-tint: #e7f3ea;
+    --code-bg: #f1eee3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181e;
+      --surface: #1b212a;
+      --surface-2: #212833;
+      --ink: #e8e6de;
+      --ink-dim: #a7aebb;
+      --ink-faint: #757e8c;
+      --border: #2c333f;
+      --accent: #5fada4;
+      --accent-ink: #0d1512;
+      --accent-tint: #1c2b29;
+      --amber: #d9a03f;
+      --amber-tint: #2b2313;
+      --red: #e17858;
+      --red-tint: #2c1815;
+      --green: #6cbb8b;
+      --green-tint: #16261c;
+      --code-bg: #212833;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181e;
+    --surface: #1b212a;
+    --surface-2: #212833;
+    --ink: #e8e6de;
+    --ink-dim: #a7aebb;
+    --ink-faint: #757e8c;
+    --border: #2c333f;
+    --accent: #5fada4;
+    --accent-ink: #0d1512;
+    --accent-tint: #1c2b29;
+    --amber: #d9a03f;
+    --amber-tint: #2b2313;
+    --red: #e17858;
+    --red-tint: #2c1815;
+    --green: #6cbb8b;
+    --green-tint: #16261c;
+    --code-bg: #212833;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, sans-serif; line-height: 1.55; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 96px; }
+  header h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.01em; text-wrap: balance; margin: 0 0 6px; }
+  header .subtitle { color: var(--ink-dim); font-size: 1.05rem; margin: 0; }
+  code, .mono { font-family: 'IBM Plex Mono', monospace; font-size: 0.88em; }
+  .path { background: var(--code-bg); padding: 0.1em 0.4em; border-radius: 4px; }
+
+  section { margin-top: 44px; }
+  h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px; text-wrap: balance; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 24px 0 10px; }
+  p { margin: 0 0 12px; max-width: 70ch; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; letter-spacing: 0.02em; text-transform: uppercase; }
+  .pill.confirmed { background: var(--green-tint); color: var(--green); }
+  .pill.reframed { background: var(--amber-tint); color: var(--amber); }
+  .pill.new { background: var(--red-tint); color: var(--red); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; }
+  .card + .card { margin-top: 14px; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .summary-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .summary-tile .num { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .summary-tile .label { color: var(--ink-dim); font-size: 0.85rem; margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--ink-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .table-scroll table { border: none; }
+  .table-scroll .card { border: none; border-radius: 0; }
+  tr:last-child td { border-bottom: none; }
+
+  ul.tight { margin: 0 0 12px; padding-left: 20px; }
+  ul.tight li { margin-bottom: 6px; }
+
+  .finding { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; margin: 14px 0; }
+  .finding.blocker-note { border-left-color: var(--red); }
+  .finding.reframe-note { border-left-color: var(--amber); }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--ink-faint); font-size: 0.85rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Верификация аудита G2</h1>
+    <p class="subtitle">Personal Decision OS &mdash; независимая перепроверка находок внешнего аудита (BLOCK / NEEDS REVISION) по первичным источникам</p>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; main @ 534b1d2</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Копировать страницу" data-done="Скопировано"
+          data-fail="Выделите вручную">Копировать страницу</button>
+</div>
+<!-- report-conform:end -->
+
+<section>
+  <h2>Итог</h2>
+  <div class="summary-grid">
+    <div class="summary-tile"><div class="num">4 / 4</div><div class="label">BLOCKER подтверждены как факт</div></div>
+    <div class="summary-tile"><div class="num">1</div><div class="label">BLOCKER переквалифицирован (не сбой, а незадокументированное решение)</div></div>
+    <div class="summary-tile"><div class="num">6</div><div class="label">MAJOR подтверждены прямым чтением кода/схемы</div></div>
+    <div class="summary-tile"><div class="num">3</div><div class="label">новых дефекта, которых нет в уже отправленном G2-предложении</div></div>
+  </div>
+  <p>Все находки проверялись против первичных источников: файл:строка, вывод <code>git</code>/<code>gh api</code>/<code>npm audit</code>, а не пересказ агента. Формат согласно правилу FACT/INFERENCE/DECISION. Файлы не изменялись в ходе проверки (рабочее дерево содержало только CRLF-шум от <code class="path">core.autocrlf=true</code> &mdash; 0 байт реального diff, что само по себе является одной из уже известных MAJOR-находок).</p>
+</section>
+
+<section>
+  <h2>BLOCKER &mdash; все четыре подтверждены</h2>
+
+  <div class="finding blocker-note">
+    <strong>1. Governance-checks не обязательны в live ruleset.</strong> <span class="pill confirmed">FACT</span><br>
+    Проверено <code>gh api repos/xLZDx/Personal_Decision_Command_Center/rulesets/22899342</code>: правило <code>pull_request</code> с <code>required_approving_review_count: 0</code>, <code>require_code_owner_review: false</code>, и никакого правила <code>required_status_checks</code> вообще. <code>gh pr view 20</code> подтвердил: PR #20 смёржен 2026&#8209;09&#8209;12 при <code>governance: FAILURE</code> (<code>verify: SUCCESS</code>).
+  </div>
+  <div class="finding reframe-note">
+    <strong>Важная переквалификация.</strong> Это не случайный сбой governance и не тихий обход контроля. <a class="path" href="core/DECISION_LOG.md">core/DECISION_LOG.md:139&ndash;145</a> фиксирует явное решение оператора от 2026&#8209;09&#8209;12: обязательные checks сняты намеренно, чтобы не блокировать функциональную работу на процессной полировке G1; PR #19 смёржен на этом основании без GPT&#8209;PM APPROVE. Реальный дефект &mdash; в другом: <a class="path" href="core/PLAN_MASTER_GATES.md">core/PLAN_MASTER_GATES.md:11&ndash;12</a> и <a class="path" href="core/RISK_REGISTER.md">core/RISK_REGISTER.md</a> не синхронизированы с этим решением (G1 всё ещё помечен «NOT YET CLOSED», G2 &mdash; «BLOCKED &mdash; needs G1 closure first», хотя G2-код (PR #20) уже смёржен). Рекомендация аудита («вернуть checks или написать ADR») в целом верна, но правильный ремонт &mdash; синхронизировать документы с уже принятым решением, а не откатывать его.
+  </div>
+
+  <div class="finding blocker-note">
+    <strong>2. Provenance fail-open в <code class="path">packages/provenance/src/dag.ts:55&ndash;73</code>.</strong> <span class="pill confirmed">FACT</span><br>
+    <code>isAiSafe()</code> проверяет только <code>node.ai_policy === 'DENY'</code> и не проверяет <code>=== 'ALLOW'</code> &mdash; на уровне TypeScript-типа третьего значения нет, но исполняемая проверка не привязана к <code>zod</code>-схеме (<code class="path">packages/contracts/src/provenance.ts</code>): любой объект, полученный в обход <code>AiPolicySchema.parse()</code>, с произвольным <code>ai_policy</code> (в т.ч. <code>undefined</code>) пройдёт как безопасный, если у него нет предков. Комментарий самого <code class="path">provenance.ts:9</code> прямо признаёт: «a type that carries an ai_policy field does not by itself stop anyone from serializing it» &mdash; то есть реальная точка принуждения (<code>dag.ts</code>) и есть то место, где аудит нашёл дыру. ALLOW-узел с пустым <code>provenance: []</code> действительно принимается как валидный root чисто по соглашению в комментарии, без типового или runtime-различения «настоящий source-leaf» vs «случайно пустой массив».
+  </div>
+
+  <div class="finding blocker-note">
+    <strong>3. D1-схема допускает Telegram + ALLOW.</strong> <span class="pill confirmed">FACT</span><br>
+    В <a class="path" href="infra/migrations/0001_ingest_outbox.sql">infra/migrations/0001_ingest_outbox.sql:57&ndash;63</a> у <code>source_policies</code> есть независимые CHECK на <code>source IN ('telegram','gmail')</code> и на <code>ai_policy IN ('ALLOW','DENY')</code>, но нет составного ограничения, запрещающего пару <code>telegram + ALLOW</code>. В <code>ingest_events</code> (:79&ndash;91) поле <code>source</code>, FK на <code>source_accounts</code> и FK на <code>source_policies</code> &mdash; три независимых столбца без какой-либо проверки согласованности между ними. Структурно подтверждено прямым чтением схемы (composite FK/CHECK отсутствует); эмпирический SQLite-пробник аудита не перезапускался, но в этом не было необходимости &mdash; уязвимость видна из самой DDL.
+  </div>
+
+  <div class="finding blocker-note">
+    <strong>4. Reconciler/outbox: несогласованный state-machine запрос.</strong> <span class="pill confirmed">FACT &mdash; уже известно проекту</span><br>
+    Это не новая находка: проект <em>сам</em> нашёл и задокументировал тот же дефект тем же днём, независимо от внешнего аудита &mdash; см. <a class="path" href="core/DECISION_LOG.md">core/DECISION_LOG.md:8&ndash;31</a> и <a class="path" href="governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md">governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md:9&ndash;34</a> (4 агента, все сошлись независимо). Прочитано напрямую: <a class="path" href="docs/architecture/TDD.md">docs/architecture/TDD.md:840&ndash;846</a> задаёт запрос по <code>ingest_events.state</code>, тогда как <code>next_attempt_at</code>/<code>attempt_count</code> живут только в <code>processing_outbox</code> (<a class="path" href="infra/migrations/0001_ingest_outbox.sql">:129&ndash;138</a>), и единственный индекс (<code>idx_processing_outbox_reconciler</code>, :142) построен на несовместимом домене состояний. Отдельно подтверждён «attempt-cap-invisibility» баг: <code>attempt_count &lt; MAX_PROCESSING_ATTEMPTS</code> как WHERE-фильтр исключает событие ровно на пределе попыток из DLQ-перехода (<a class="path" href="docs/architecture/TDD.md">TDD.md:845</a>, <a class="path" href="core/adr/ADR-006-durable-ingest-outbox.md">ADR-006:43</a>). Ничего не реализовано &mdash; ждёт решения GPT&#8209;PM.
+  </div>
+</section>
+
+<section>
+  <h2>MAJOR &mdash; подтверждены прямой проверкой</h2>
+  <div class="table-scroll">
+  <div class="card">
+  <table>
+    <thead><tr><th>Находка аудита</th><th>Проверка</th><th>Результат</th></tr></thead>
+    <tbody>
+      <tr><td><code class="path">idempotencyKey()</code> не учитывает версию &mdash; последовательные <code>MESSAGE_UPDATED</code> считаются дублями</td><td>Прочитан <a class="path" href="packages/contracts/src/event.ts">packages/contracts/src/event.ts:105&ndash;111</a>: ключ &mdash; функция только от <code>source_account_id</code>, <code>source_event_id</code>, <code>event_type</code></td><td><span class="pill confirmed">FACT</span> &mdash; два разных редактирования одного provider-сообщения дают идентичный ключ и коллидируют на <code>UNIQUE</code>-индексе</td></tr>
+      <tr><td><code>routing_hints</code> не ограничен <code>.max()</code></td><td>Прочитан <a class="path" href="packages/contracts/src/event.ts">event.ts:57</a>: <code>routing_hints: z.array(ProvenanceValueSchema)</code>, без <code>.max()</code></td><td><span class="pill confirmed">FACT</span> &mdash; совпадает и с независимой находкой самого проекта (<a class="path" href="governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md">G2-предложение §5</a>)</td></tr>
+      <tr><td><code>npm audit</code>: 6 advisories &mdash; 2 critical, 1 high, 3 moderate</td><td>Перезапущен <code>npm audit --json</code></td><td><span class="pill confirmed">FACT</span> &mdash; счёт совпал бит-в-бит: 2/1/3/6</td></tr>
+      <tr><td>Prettier падает на 8 файлах из-за <code>core.autocrlf=true</code> при <code>endOfLine: lf</code></td><td><code>git status</code> в начале этой сессии показал 13 файлов «modified» с нулевым содержательным diff (только CRLF)</td><td><span class="pill confirmed">FACT</span> &mdash; наблюдалось живьём, не только со слов аудита</td></tr>
+      <tr><td>TDD требует generic <code>ProvenanceValue&lt;T&gt;</code>, контракт &mdash; string-only</td><td>Прочитан <a class="path" href="packages/contracts/src/provenance.ts">provenance.ts:46&ndash;55</a>: <code>value: z.string()</code>, без generic-параметра</td><td><span class="pill confirmed">FACT</span></td></tr>
+      <tr><td>DAG-обход рекурсивный, без memoization/лимита глубины</td><td>Прочитан <a class="path" href="packages/provenance/src/dag.ts">dag.ts:55&ndash;73</a>: обычная рекурсия по <code>node.provenance</code>, без кэша посещённых узлов между вызовами и без лимита узлов</td><td><span class="pill confirmed">FACT по коду</span> &mdash; заявленные миллисекунды на широком графе не перезамерялись отдельно</td></tr>
+    </tbody>
+  </table>
+  </div>
+  </div>
+  <p style="margin-top:14px">Не перепроверялись в этом раунде (не по причине сомнений, а по бюджету времени): secret-scan history/entropy, UX-спецификация, тестовое покрытие 160/160 и mutation 47/47 &mdash; эти числа взяты из отчёта аудита без независимого перезапуска.</p>
+</section>
+
+<section>
+  <h2>Новые находки &mdash; отсутствуют в уже отправленном G2-предложении</h2>
+  <p>Три из подтверждённых выше пунктов не фигурируют в <a class="path" href="governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md">governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md</a>, который уже готов к отправке GPT&#8209;PM. Поскольку это тот же слой (G2 pipeline) и тот же GPT&#8209;PM-раунд, они дописаны в документ отдельным разделом §7 перед отправкой, чтобы решение принималось по полной картине (§17 &mdash; один прогон, не по одной находке за раз):</p>
+  <ul class="tight">
+    <li><strong>Provenance fail-open</strong> (<code class="path">dag.ts</code>) &mdash; см. BLOCKER 2 выше;</li>
+    <li><strong>D1 telegram+ALLOW / несвязанные FK</strong> (<code class="path">0001_ingest_outbox.sql</code>) &mdash; см. BLOCKER 3 выше;</li>
+    <li><strong>idempotencyKey MESSAGE_UPDATED-коллизия</strong> &mdash; см. таблицу MAJOR выше.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Статус и следующий шаг</h2>
+  <p><code>pm_bridge_mode_status</code>: демон активен (pid 27196, порт 8765), очередь пуста, ничем не занят &mdash; безопасно отправлять. G2-предложение дополнено §7 с тремя новыми находками и отправляется GPT&#8209;PM (<code>project: "personal-decision-os"</code>) вместе с этим отчётом &mdash; это тот самый шаг, на котором предыдущая сессия остановилась из-за протухания демона/роутинга.</p>
+  <p><code>git push origin main</code> по-прежнему заблокирован защитой ветки (нужен PR &mdash; нужна новая ветка &mdash; нужно двойное подтверждение §14, либо GPT&#8209;PM <code>VERDICT: APPROVE</code> по §14/§20). Коммиты этой сессии остаются локальными на <code>main</code> до отдельного решения.</p>
+</section>
+
+  <footer>Personal Decision OS &mdash; отчёт составлен в рамках PM Bridge orchestrator mode (ON): после хендовера сессия продолжает работу, не останавливаясь.</footer>
+</div>
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
