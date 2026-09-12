@@ -822,7 +822,7 @@ PR-controlled code before failing.
 **PR #16 was closed unmerged** after both attempts' refusal evidence was captured — its sole
 purpose was producing the two CI runs quoted above; `main` was never touched by this branch.
 
-| Attempt | Instrument                              | Run           | Result (step 4) |
-| ------- | ---------------------------------------- | ------------- | ---------------- |
-| A       | `README.md` (ordinary path)              | `34679875903` | REFUSE            |
-| B       | `scripts/verify/check-gate-scope.mjs`    | `34679958587` | REFUSE (identical text) |
+| Attempt | Instrument                            | Run           | Result (step 4)         |
+| ------- | ------------------------------------- | ------------- | ----------------------- |
+| A       | `README.md` (ordinary path)           | `34679875903` | REFUSE                  |
+| B       | `scripts/verify/check-gate-scope.mjs` | `34679958587` | REFUSE (identical text) |

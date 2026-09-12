@@ -5,6 +5,14 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #17 (`gate/g1-doc-sync`) formatting fix, no content change
+
+`npm run verify`'s `Format` step flagged `core/PLAN_MASTER_GATES.md` and
+`governance/plans/G1_PREADOPTION_EVIDENCE.md` after manual markdown-table edits on this branch.
+Fixed with `npx prettier --write` on exactly those two files; verified via `git diff --stat` that
+no other file changed and via `prettier --check` that both are now clean under CI's plain (non-CRLF-
+tolerant) check. Routine — recorded only because the decision-log gate requires an entry per commit.
+
 ## 2026-09-12 — `control/g1-none-rejection` attempt B confirmed refused (identical to attempt A); PR #16 closed unmerged
 
 **Attempt B result.** Run `34679958587` (Governance, failure), head `2ce8388` — the commit that
