@@ -341,3 +341,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // flushed, which would drop the very annotations CI is meant to display.
   process.exitCode = run({ env: process.env, cwd: process.cwd() });
 }
+
+// Attempt B instrument (control/g1-none-rejection): a no-gate PR touching scripts/verify/**
+// itself is expected to refuse at gate resolution, before this file is ever read by CI --
+// see governance/plans/G1_PREADOPTION_EVIDENCE.md S16.

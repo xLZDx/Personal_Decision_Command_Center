@@ -5,6 +5,29 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — `control/g1-none-rejection` attempt A confirmed refused; attempt B opened
+
+**Attempt A result.** PR #16, run `34679875903` (Governance, failure). Refused at the very first
+step, "Resolve the gate this PR belongs to" — before the manifest-hash or scope steps ever ran:
+
+```
+::error::This PR declares no gate. Name the branch gate/g<N>-... or put a
+::error::'Gate: G<N>' line in the PR body. A change with no declaration has no
+::error::approved scope, which is the thing this check exists to require.
+```
+
+Notable: the PR body's own text contained the literal substring "Gate: NONE" (in "PR #15 (Gate:
+NONE removal)"), and it did **not** match — the resolver's regex requires a digit after `Gate:`, so
+free text mentioning the old mechanism's name does not accidentally resolve a gate. Confirms the
+removal in PR #15 left no special-cased "NONE" string anywhere in the live resolution logic.
+
+**Attempt B opened, same PR/branch**, still no gate declared, additionally touching
+`scripts/verify/check-gate-scope.mjs` itself (a harmless comment, not a functional change) — the
+enforcement code, to prove the refusal happens before that file is ever read by CI, regardless of
+which path the diff touches.
+
+---
+
 ## 2026-09-12 — Global CLAUDE.md §24 authority-surface carve-out removed; `control/g1-none-rejection` attempt A opened
 
 **Global rule change, recorded here because it changes how the entry immediately below reads.**
