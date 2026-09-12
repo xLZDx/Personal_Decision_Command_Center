@@ -5,6 +5,28 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #17 merged; `gate/g1-readme-fix` opened for `main`'s remaining stale README
+
+**PR #17 merged** (`860ae69`, a merge commit with two parents — `8980301` and `83f307c`, confirmed
+via `git show --format=%H %P`; not a fast-forward, correcting this entry's own first draft) on
+GPT-PM round-3 `VERDICT: APPROVE` (exact head `83f307c`, both required checks green, mergeable) —
+merged by Claude under global CLAUDE.md §24, which no longer has an authority-surface carve-out.
+
+**Separately, GPT-PM `VERDICT: APPROVE`'d branch `gate/g1-readme-fix`** (base `origin/main` @
+`860ae69`) for the one remaining stale item round 2 of PR #17 correctly kept out of that branch's
+scope: `README.md`'s own "**G0 in progress**" Status line. Fixed here to the current G0-closed/G1-
+remediated state, mirroring the wording already applied and approved elsewhere in this repository.
+
+**Scope amendment.** PR #18 round 1/2 review correctly flagged that this branch's authorized
+scope named only `README.md`, while every commit in this repository is mechanically required to
+carry a `core/DECISION_LOG.md` entry (`~/.claude/hooks/decision_log_gate.py` — verified: it blocked
+an unrelated commit earlier this same session). Asked directly, GPT-PM amended the branch's
+authorized scope to exactly these two files — `README.md` plus the minimal mandatory decision-log
+entry for this change, nothing else — rather than treating the mechanical requirement as an
+unauthorized scope excess.
+
+---
+
 ## 2026-09-12 — PR #17 round 2: VERDICT MAJOR — scope excess (README.md), reverted
 
 GPT-PM's round-2 review (correlated, exact head `8bafcdd`) returned `VERDICT: MAJOR`: the branch's
