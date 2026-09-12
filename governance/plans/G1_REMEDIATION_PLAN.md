@@ -5,11 +5,16 @@
 **Status:** Steps 1-9 done (2026-09-12) — all four negative controls now have real CI evidence in
 both directions where applicable; R13 closed as an accepted risk (operator decision, 2026-09-11).
 The step-10 fresh-context review returned `VERDICT: BLOCKER` (1 BLOCKER, 3 MAJOR) on 2026-09-12 —
-see `G1_PREADOPTION_EVIDENCE.md` §15 for the findings and their fixes, in progress on branch
-`gate/g1-closure-blockers`. Remaining: land that remediation (operator merge required — the branch
-touches `.github/CODEOWNERS`, an authority-surface path, so `~/.claude/CLAUDE.md` §24's
-implementer-merge carve-out does not apply), the `control/g1-none-rejection` real-CI negative
-control (§16), a second fresh-context review, then the closure report (step 11).
+see `G1_PREADOPTION_EVIDENCE.md` §15 for the findings and their fixes. Remediation landed as
+**PR #15** (GPT-PM `VERDICT: APPROVE` on the exact final head; merged by the operator, since global
+`~/.claude/CLAUDE.md` §24's authority-surface carve-out — which excluded the CODEOWNERS-touching
+diff from Claude's own merge authority — still applied at that time). The `control/g1-none-rejection`
+real-CI negative control (§16) then ran both required attempts (run `34679875903`, run
+`34679958587`), both refused identically at gate resolution; PR #16 closed unmerged. **The same
+day, the operator removed §24's authority-surface carve-out globally** (`~/.claude/core/DECISION_LOG.md`
+D-005) — a follow-up doc-sync fix for the now-stale carve-out wording is in progress on branch
+`gate/g1-doc-sync` (GPT-PM `VERDICT: APPROVE` on scope). Remaining: land that doc-sync PR, a second
+fresh-context review, then the closure report (step 11).
 **Supersedes:** nothing. Commit `b784265` is **bootstrap implementation, not gate-approved work**.
 
 ## Why this plan exists
@@ -78,9 +83,17 @@ procedural and no document in this repository may claim otherwise.
 7. Fix G1-M2: one governance workflow, hash-check -> scope-check DONE (see below)
 8. Confirm CI actually runs and is green on that branch          DONE (run 34544309071, steps 4-6 green)
 9. Negative-control PR tests (see below)                         DONE, 4 of 4 (2026-09-12)
-10. Fresh-context G1 review                                      pending
+10. Fresh-context G1 review                                      round 1 DONE (BLOCKER+3 MAJOR,
+                                                                        fixed, PR #15); round 2
+                                                                        pending doc-sync (below)
 11. G1 closure report                                            pending
 ```
+
+**Step 10 addendum, 2026-09-12.** Round 1's remediation (PR #15) and the `control/g1-none-rejection`
+negative control (PR #16, both attempts refused) are both complete. A second, genuinely
+fresh-context review is still needed before closure — not yet requested, pending the doc-sync fix
+on `gate/g1-doc-sync` landing first, so the reviewer sees consistent documents rather than a known
+stale spot.
 
 **Status of step 2, measured on 2026-09-11 rather than assumed.** The operator took the second R12
 option: the repository is public (`gh repo view --json isPrivate` → `false`), which makes Actions

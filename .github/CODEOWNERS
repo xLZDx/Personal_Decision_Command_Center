@@ -12,8 +12,11 @@
 # compliance plus the audit trail in core/DECISION_LOG.md), not mechanical. No document in this
 # repository may claim otherwise -- R13's own binding resolution. This file still has real value:
 # it is the authoritative RECORD of which paths are operator-owned, read by
-# tests/policy/codeowners.test.mjs and by CLAUDE.md §14/§24's authority-surface carve-out, and it
-# would start mechanically enforcing the moment code-owner review is turned back on.
+# tests/policy/codeowners.test.mjs, and it would start mechanically enforcing the moment
+# code-owner review is turned back on. (Global CLAUDE.md §24's authority-surface carve-out, which
+# used to keep a PR touching these paths on an operator-only merge track regardless of GPT-PM
+# review, was removed globally on 2026-09-12 -- see ~/.claude/core/DECISION_LOG.md D-005. A PR
+# touching these paths now merges under §24's ordinary conditions like any other PR.)
 
 # Governance state: manifests and approvals define what a gate may do.
 /governance/gate-manifests/     @xLZDx
