@@ -252,6 +252,49 @@ verified by `git status` before commit.
 ruling on V3.** That send happens after this commit, under this same plan's final step; recording
 the reply's content is the next plan's job.
 
+**Plan closed** (`pm_rosetta_close`, result `passed`, review class `LOCAL` -- 4 doc files, 1
+commit): every step executed as approved, reply captured and correlated
+(`replyId e96ddc1e-f38f-48a6-b317-d75acea7f11b`).
+
+## 2026-09-13 — GPT-PM's Round-3 ruling on the G2 V3 proposal: `VERDICT: APPROVE`, 0 BLOCKER/0
+MAJOR -- G2 architecture is now GPT-PM-approved
+
+Verbatim reply (`replyId e96ddc1e-f38f-48a6-b317-d75acea7f11b`, correlated, `request_id
+2f8e4c91-6a3d-4b7e-9c1f-5d0a8b3e7f24`) preserved in this session's PM Bridge transcript.
+
+**All four remaining findings confirmed closed:**
+- B2/B3 (processor state machine): "permanent failure is terminal at any attempt count; retryable
+  failure below the cap returns to RETRYABLE_FAILED; retryable failure at the cap reaches DLQ; and
+  success reaches PROCESSED... replaces V2's incorrect static 'unrepresentable' assertion with the
+  correct transition invariant."
+- Lease ABA: "V3 separates observability identity from the actual fencing credential, requires a
+  fresh per-claim token, predicates transitions on that token, and contains the exact stale-holder
+  regression demanded in the previous review."
+- M4 (idempotency): "explicit mandatory-version condition in both proposed DB and contract
+  boundaries, and the evidence covers the three required behaviors."
+- M5 (provenance metadata): "sensitivity, created_at, and derivation_version are present in the
+  durable representation; sensitivity is required end-to-end without inventing a closed
+  vocabulary; and zero ancestry is permitted only for STATIC_CONFIG."
+
+**Two non-blocking implementation notes for the actual code (not architecture-blocking, to carry
+into the implementation gate's own review):**
+1. Make `MESSAGE_UPDATED.source_version` non-empty as well as non-null at both boundaries (the
+   architecture used `.min(1)`-style non-emptiness in the scratch validation; ensure the real
+   implementation's CHECK/superRefine both enforce non-empty, not merely non-null).
+2. Keep the actual stale-lease recovery CAS consistent with the fresh-token semantics demonstrated
+   by the ABA test -- i.e., implementation must not regress to owner-based fencing anywhere.
+
+**Explicit scope boundary GPT-PM restated:** "This verdict does not itself authorize modifications
+to packages/, services/, or infra/migrations/; the document explicitly reserves those changes for
+that next GO." G2 implementation requires its own, separate Rosetta plan and GO.
+
+**Operator authorization on record for what follows:** "план меняется ГО делать все до конца, пм
+теперь работает нормально" / "тоесть ГО закончить мвп 1 автономно автаризирую" (2026-09-13) --
+explicit GO to continue autonomously through G2 implementation and subsequent gates (G3-G6) toward
+MVP1 completion, using this project's normal Rosetta plan -> GPT-PM GO -> act -> validate ->
+document cycle at each gate, escalating to the operator only for the operator-only class under
+global CLAUDE.md SS4/SS14/SS20.
+
 ## 2026-09-12 — Rosetta plan GO obtained and executed; GPT-PM returns BLOCKER on the G2 proposal
 
 Fresh Claude Code session (per the prior session's own recorded conclusion that its PM Bridge
