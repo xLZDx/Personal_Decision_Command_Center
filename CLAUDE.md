@@ -13,10 +13,13 @@ baseline).
 
 - **Operator** — CEO / final business authority. Production deploy credentials, and everything the
   global CLAUDE.md §4/§20 reserves to the operator alone (deletion, real-money, branch
-  double-consent where applicable, and the authority-surface merge class in §24). Merge to `main`
-  is procedural, not mechanically exclusive to the operator (`core/RISK_REGISTER.md` R13, measured:
-  a single GitHub identity, `require_code_owner_review: false`) — see §2 below for exactly when
-  Claude may perform an ordinary merge.
+  double-consent where applicable). Merge to `main` is procedural, not mechanically exclusive to
+  the operator (`core/RISK_REGISTER.md` R13, measured: a single GitHub identity,
+  `require_code_owner_review: false`) — see §2 below for exactly when Claude may perform an
+  ordinary merge. **§24's authority-surface carve-out (gate manifests, operator-approvals,
+  branch-protection/ruleset config, CODEOWNERS) was removed globally on 2026-09-12** — see
+  `~/.claude/core/DECISION_LOG.md` D-005 — so that class no longer has a special operator-only
+  merge rule beyond the ordinary §24 conditions below.
 - **GPT-PM** — Governance owner / final gate authority alongside the operator for this project. Reviews
   and approves/rejects each gate per `core/PLAN_MASTER_GATES.md`.
 - **Claude** — **IMPLEMENTER, not final approver.** See §2.
@@ -31,12 +34,13 @@ returns that gate's GO.
 Claude MUST NOT:
 
 - self-approve a gate, merge on its own discretion, or use production deployment credentials.
-  Claude MAY perform an ordinary PR merge only under global `~/.claude/CLAUDE.md` §24's narrow
-  mechanism — a fresh, correlated GPT-PM `VERDICT: APPROVE` on the exact final head, every required
-  check green, mergeable, and the diff is not an authority-surface change (gate manifests,
-  operator-approvals, branch-protection/ruleset config, CODEOWNERS) — never for that
-  authority-surface class, which stays operator-only regardless of any APPROVE (§24's own
-  carve-out; live example: `.github/CODEOWNERS`);
+  Claude MAY perform an ordinary PR merge only under global `~/.claude/CLAUDE.md` §24's mechanism —
+  a fresh, correlated GPT-PM `VERDICT: APPROVE` on the exact final head, every required check
+  green, mergeable, no admin bypass/force/disabled-check/weakened-protection. §24's former
+  authority-surface carve-out (gate manifests, operator-approvals, branch-protection/ruleset
+  config, CODEOWNERS) was removed globally 2026-09-12 (operator instruction, full record in
+  `~/.claude/core/DECISION_LOG.md` D-005) — that class merges under the same conditions as any
+  other PR now, no separate operator-only step;
 - silently expand MVP1 scope or add a source outside the fixed MVP1 list below;
 - weaken/delete tests to obtain green, or mark a reviewer finding closed without evidence;
 - change `SourcePolicy`/`RetentionPolicy`/security invariants without an ADR;

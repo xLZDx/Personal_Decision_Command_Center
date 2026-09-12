@@ -5,6 +5,136 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #17 round 2: VERDICT MAJOR — scope excess (README.md), reverted
+
+GPT-PM's round-2 review (correlated, exact head `8bafcdd`) returned `VERDICT: MAJOR`: the branch's
+GPT-PM-authorized scope named exactly eight files, and this session had added a ninth (`README.md`)
+during round-1 remediation — GPT-PM's own round-1 comment on the stale README was an out-of-scope
+_observation_, not authorization to fold the fix into this branch. Correctly caught: a bounded GO
+absorbing unrelated cleanup during review is exactly how exact-scope authorization erodes into
+open-ended authority.
+
+**Fix:** `git checkout origin/main -- README.md` — reverted to `main`'s exact current content.
+`G1_PREADOPTION_EVIDENCE.md` §16 updated to state plainly that the README correction is real, still
+due, but out of this branch's authorized scope and belongs to a separately authorized change.
+Round 1's actual MINOR fix (the attempt-A commit-description correction) is untouched and already
+confirmed correct by GPT-PM.
+
+**Lesson, worth keeping:** a reviewer naming something as "out of scope, worth fixing before X"
+is not consent to fix it on the branch in hand — that is a new action needing its own scope check,
+per global CLAUDE.md §21.
+
+---
+
+## 2026-09-12 — PR #17 round 1: VERDICT MINOR, both findings fixed
+
+GPT-PM's round-1 review of PR #17 (correlated, exact head `52c0ada`) returned `VERDICT: MINOR`, no
+BLOCKER/MAJOR:
+
+1. **MINOR, verified against `git show --stat 7ec0f24`**: `G1_PREADOPTION_EVIDENCE.md` §16 said
+   attempt A's commit "touched only `README.md`" — false; the same commit also carries a
+   27-line `core/DECISION_LOG.md` addition. Fixed: reworded to distinguish the control
+   _instrument_ (`README.md`) from the commit's actual contents.
+2. **Out-of-scope note, verified against `git show origin/main:README.md`**: `main`'s own
+   `README.md` still reads "G0 in progress" — the correction existed only on PR #16
+   (`control/g1-none-rejection`), which was intentionally closed unmerged, so it never reached
+   `main`. Fixed on this branch too, since it is real, independently-true drift and GPT-PM flagged
+   it as worth resolving before the second closure review rather than carrying it forward known.
+
+Both fixes are on this same PR; a fresh exact-head review follows before merge.
+
+---
+
+## 2026-09-12 — PR #17 (`gate/g1-doc-sync`) formatting fix, no content change
+
+`npm run verify`'s `Format` step flagged `core/PLAN_MASTER_GATES.md` and
+`governance/plans/G1_PREADOPTION_EVIDENCE.md` after manual markdown-table edits on this branch.
+Fixed with `npx prettier --write` on exactly those two files; verified via `git diff --stat` that
+no other file changed and via `prettier --check` that both are now clean under CI's plain (non-CRLF-
+tolerant) check. Routine — recorded only because the decision-log gate requires an entry per commit.
+
+## 2026-09-12 — `control/g1-none-rejection` attempt B confirmed refused (identical to attempt A); PR #16 closed unmerged
+
+**Attempt B result.** Run `34679958587` (Governance, failure), head `2ce8388` — the commit that
+additionally touched `scripts/verify/check-gate-scope.mjs` (a harmless comment, no functional
+change). Step 4 ("Resolve the gate this PR belongs to") failed with **byte-identical** error text to
+attempt A's run `34679875903`:
+
+```
+::error::This PR declares no gate. Name the branch gate/g<N>-... or put a
+::error::'Gate: G<N>' line in the PR body. A change with no declaration has no
+::error::approved scope, which is the thing this check exists to require.
+```
+
+Confirmed via `gh run view 34679958587 --log`, filtered to that step: the failure fires before step
+5 (hash) or step 6 (scope) run, exactly as in attempt A, regardless of the diff touching the
+enforcement script's own path.
+
+**Both required attempts of the real-CI negative control are now captured.** Full evidence recorded
+in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §16 (corrected there: the branch's actual base is
+`8980301`, PR #15's GitHub merge commit, confirmed via `git merge-base` — not `ab51f71`, which is
+the PR #15 branch's own last commit, as an earlier entry misstated).
+
+**PR #16 closed unmerged**, per its stated lifetime (the branch existed solely to produce these two
+CI runs) — `main` was never touched by it.
+
+**What remains for G1 closure:** the project `CLAUDE.md`/`AGENTS.md`/`docs/architecture/TDD_ERRATA.md`
+E-002 wording describing the now-removed global §24 authority-surface carve-out is stale and needs
+its own fix/PR/GPT-PM review cycle, then a second fresh-context closure review before
+`G1_CLOSURE_REPORT.md`.
+
+---
+
+## 2026-09-12 — `control/g1-none-rejection` attempt A confirmed refused; attempt B opened
+
+**Attempt A result.** PR #16, run `34679875903` (Governance, failure). Refused at the very first
+step, "Resolve the gate this PR belongs to" — before the manifest-hash or scope steps ever ran:
+
+```
+::error::This PR declares no gate. Name the branch gate/g<N>-... or put a
+::error::'Gate: G<N>' line in the PR body. A change with no declaration has no
+::error::approved scope, which is the thing this check exists to require.
+```
+
+Notable: the PR body's own text contained the literal substring "Gate: NONE" (in "PR #15 (Gate:
+NONE removal)"), and it did **not** match — the resolver's regex requires a digit after `Gate:`, so
+free text mentioning the old mechanism's name does not accidentally resolve a gate. Confirms the
+removal in PR #15 left no special-cased "NONE" string anywhere in the live resolution logic.
+
+**Attempt B opened, same PR/branch**, still no gate declared, additionally touching
+`scripts/verify/check-gate-scope.mjs` itself (a harmless comment, not a functional change) — the
+enforcement code, to prove the refusal happens before that file is ever read by CI, regardless of
+which path the diff touches.
+
+---
+
+## 2026-09-12 — Global CLAUDE.md §24 authority-surface carve-out removed; `control/g1-none-rejection` attempt A opened
+
+**Global rule change, recorded here because it changes how the entry immediately below reads.**
+After PR #15 (a genuine G1 closure fix) sat waiting on an operator merge purely because it touched
+`.github/CODEOWNERS`, the operator asked directly what it would take for Claude to do this itself,
+and — given an explicit choice between narrowing the carve-out (keep it only for
+`governance/gate-manifests/**`/`operator-approvals/**`) or removing it entirely — picked full
+removal. `~/.claude/CLAUDE.md` §24 no longer excludes gate-manifest, operator-approvals,
+branch-protection/ruleset, or CODEOWNERS diffs from Claude's merge authority: a genuine, correlated
+GPT-PM `VERDICT: APPROVE` plus green required checks on the exact head now authorizes merging any
+PR, that class included. Full record, both options as stated to the operator, and the scope
+discipline followed: `~/.claude/core/DECISION_LOG.md` D-005. **This means the entry directly below
+("merge is operator-only, not Claude's") describes a rule that no longer applies** — kept as
+written because it was accurate at the time and the merge it describes already happened; any future
+PR of that shape merges under the ordinary §24 mechanism.
+
+**`control/g1-none-rejection`, attempt A, opened the same session.** Base `origin/main` @
+`8980301` (PR #15's merge commit — the negative control's own authorized starting point, per
+GPT-PM's branch authorization on the remediation plan). This branch/PR declares no gate: it is not
+named `gate/g<N>-...` and its body carries no `Gate: G<N>` line. Commit fixes `README.md`'s own
+stale `**G0 in progress**` status line (a real, independently-needed correction, not a synthetic
+diff) — an ordinary path, not `scripts/verify/**`. Expected: `governance.yml`'s gate-resolution step
+refuses with "This PR declares no gate" before the manifest-hash or scope steps ever run. Run id
+recorded in `governance/plans/G1_PREADOPTION_EVIDENCE.md` §16 once observed.
+
+---
+
 ## 2026-09-12 — PR #15 round 2: VERDICT APPROVE (final); merge is operator-only, not Claude's
 
 GPT-PM's round-2 review of PR #15 (correlated, exact head `7fcd3b5`) returned `VERDICT: APPROVE`,

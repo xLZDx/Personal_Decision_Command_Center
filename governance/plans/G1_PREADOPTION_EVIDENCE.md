@@ -782,6 +782,56 @@ discipline (`~/.claude/CLAUDE.md` §17).
 
 ## 16. Real CI negative control: no-gate PR rejected at gate resolution
 
-Filled in once `control/g1-none-rejection`'s two sequential attempts (ordinary path, then
-`scripts/verify/**`) have run against the merged fix — see `governance/plans/G1_REMEDIATION_PLAN.md`
-for the live tracking; this section records the final run ids once both are captured.
+**FACT.** Branch `control/g1-none-rejection`, base `main` @ `8980301` (PR #15's actual merge commit
+— confirmed via `git merge-base main control/g1-none-rejection`, distinct from `ab51f71`, which is
+the PR #15 branch's own last commit before GitHub's merge commit was created). Carries the
+BLOCKER+3-MAJOR remediation from §15. PR #16, deliberately declaring no gate: the
+branch name does not match `gate/g<N>-...` and the PR body carries no `Gate: G<N>` line. Branch
+creation authorized the same way as §12's three controls — GPT-PM `VERDICT: APPROVE` under §20,
+naming this branch by name/base/purpose, since branch creation is reversible.
+
+**Attempt A — ordinary path.** The control instrument was `README.md` (a stale "G0 in progress"
+status line already due for correction, per §15's third MAJOR); the same commit (`7ec0f24`) also
+recorded the attempt in `core/DECISION_LOG.md` — the commit is not README-only, only the
+instrument is. Run `34679875903`, job on `governance`:
+step 4 ("Resolve the gate this PR belongs to") failed immediately, verbatim:
+
+```
+::error::This PR declares no gate. Name the branch gate/g<N>-... or put a
+::error::'Gate: G<N>' line in the PR body. A change with no declaration has no
+::error::approved scope, which is the thing this check exists to require.
+```
+
+No manifest-hash step and no scope step ran — the failure is at gate resolution itself, before any
+PR-controlled scope code executes.
+
+**Attempt B — touching the enforcement code's own path.** A second commit on the same branch
+(`2ce8388`) additionally added a harmless comment to `scripts/verify/check-gate-scope.mjs` — the
+scope checker itself — with no functional change. Run `34679958587`, job on `governance`: step 4
+failed with the **identical** error text quoted above, at the same timestamp offset in the job
+(`07:08:59`), before step 5 or step 6 ran. Confirmed via
+`gh run view 34679958587 --log`, filtered to the "Resolve the gate this PR belongs to" step.
+
+**Note on `main`'s own README.md.** The correction attempt A carried (fixing the stale "G0 in
+progress" line) existed only on PR #16, which was intentionally closed unmerged — so it never
+reached `main`. That correction is real and still due, but is **not** part of this branch's
+authorized scope (GPT-PM round 2, `VERDICT: MAJOR`, caught an earlier attempt to fold it in here as
+a scope excess and required a revert) — it belongs to whichever branch is actually authorized to
+carry it, separately.
+
+**What this establishes.** The removal of the "Gate: NONE" ungated path (§15's BLOCKER fix) refuses
+an undeclared PR at the very first workflow step, unconditionally — including when the diff being
+refused is a no-op edit to the enforcement script's own source. The refusal does not depend on
+which path the diff touches; it depends only on the PR declaring no gate. This is the real-CI
+demonstration that the self-modification hole GPT-PM found (an ungated PR editing
+`scripts/verify/check-floor-scope.mjs`'s own forbidden-path list) cannot recur through the
+successor mechanism, because there is no longer any path through gate resolution that reaches
+PR-controlled code before failing.
+
+**PR #16 was closed unmerged** after both attempts' refusal evidence was captured — its sole
+purpose was producing the two CI runs quoted above; `main` was never touched by this branch.
+
+| Attempt | Instrument                            | Run           | Result (step 4)         |
+| ------- | ------------------------------------- | ------------- | ----------------------- |
+| A       | `README.md` (ordinary path)           | `34679875903` | REFUSE                  |
+| B       | `scripts/verify/check-gate-scope.mjs` | `34679958587` | REFUSE (identical text) |

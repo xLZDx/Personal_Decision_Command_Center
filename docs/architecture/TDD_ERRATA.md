@@ -79,11 +79,14 @@ own binding resolution, worded so no document in this repository may claim other
 
 `~/.claude/CLAUDE.md` §24 (2026-09-11) narrows this further, not by weakening it: Claude MAY
 perform an ordinary PR merge, but only when a genuine, correlated GPT-PM `VERDICT: APPROVE` names
-the exact final head, every required check is green, the PR is mergeable, and the diff is not an
-authority-surface change (gate manifests, operator-approvals, branch-protection/ruleset config,
-CODEOWNERS) — that class stays operator-only regardless of any APPROVE. This is a real mechanism
-that has actually executed on this repository (PR #13, #14, both merged by Claude under exactly
-this condition, 2026-09-11/12) — it is not a hypothetical relaxation.
+the exact final head, every required check is green, and the PR is mergeable. This is a real
+mechanism that has actually executed on this repository (PR #13, #14, both merged by Claude under
+exactly this condition, 2026-09-11/12) — it is not a hypothetical relaxation. §24 originally also
+excluded an authority-surface class (gate manifests, operator-approvals, branch-protection/ruleset
+config, CODEOWNERS) from this mechanism, requiring an operator merge instead — that carve-out was
+removed globally on 2026-09-12, by direct operator instruction, after it cost the operator a manual
+merge on PR #15 (`~/.claude/core/DECISION_LOG.md` D-005). That class now merges under the same
+conditions as any other PR.
 
 **Why this matters as an erratum rather than a footnote.** A future session reading §57's concrete
 "protected, no direct merge permission" language literally would conclude a control exists that

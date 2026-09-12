@@ -32,9 +32,10 @@ or delete a test to obtain green; mark a reviewer finding closed without evidenc
 paths); send Telegram-derived content or state to any AI call, in any form. Merge to `main` is
 procedural, not mechanically exclusive to a human (`core/RISK_REGISTER.md` R13: one GitHub
 identity, `require_code_owner_review: false`) — a Claude Code agent specifically may perform an
-ordinary merge only under `CLAUDE.md` §2's narrow, GPT-PM-APPROVE-gated mechanism, never for an
-authority-surface change (gate manifests, operator-approvals, branch-protection/ruleset config,
-CODEOWNERS), which stays operator-only regardless.
+ordinary merge only under `CLAUDE.md` §2's GPT-PM-APPROVE-gated mechanism. That mechanism's former
+authority-surface carve-out (gate manifests, operator-approvals, branch-protection/ruleset config,
+CODEOWNERS) was removed globally 2026-09-12 — see `~/.claude/core/DECISION_LOG.md` D-005 — so that
+class merges under the same conditions as any other PR, no separate operator-only step.
 
 ## Non-negotiable invariants
 
