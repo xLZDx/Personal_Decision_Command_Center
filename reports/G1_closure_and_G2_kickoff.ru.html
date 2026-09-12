@@ -1,0 +1,366 @@
+<!doctype html>
+<title>Закрытие G1 и старт G2</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f6f4ee;
+    --surface: #ffffff;
+    --surface-2: #f0ede4;
+    --ink: #1d2430;
+    --ink-dim: #5b6472;
+    --ink-faint: #8a91a0;
+    --border: #e1dccd;
+    --accent: #2f6f68;
+    --accent-ink: #ffffff;
+    --accent-tint: #e3efec;
+    --amber: #9a6a12;
+    --amber-tint: #faf1de;
+    --red: #a5391f;
+    --red-tint: #fbeae5;
+    --green: #2c744a;
+    --green-tint: #e7f3ea;
+    --code-bg: #f1eee3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181e;
+      --surface: #1b212a;
+      --surface-2: #212833;
+      --ink: #e8e6de;
+      --ink-dim: #a7aebb;
+      --ink-faint: #757e8c;
+      --border: #2c333f;
+      --accent: #5fada4;
+      --accent-ink: #0d1512;
+      --accent-tint: #1c2b29;
+      --amber: #d9a03f;
+      --amber-tint: #2b2313;
+      --red: #e17858;
+      --red-tint: #2c1815;
+      --green: #6cbb8b;
+      --green-tint: #16261c;
+      --code-bg: #212833;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181e;
+    --surface: #1b212a;
+    --surface-2: #212833;
+    --ink: #e8e6de;
+    --ink-dim: #a7aebb;
+    --ink-faint: #757e8c;
+    --border: #2c333f;
+    --accent: #5fada4;
+    --accent-ink: #0d1512;
+    --accent-tint: #1c2b29;
+    --amber: #d9a03f;
+    --amber-tint: #2b2313;
+    --red: #e17858;
+    --red-tint: #2c1815;
+    --green: #6cbb8b;
+    --green-tint: #16261c;
+    --code-bg: #212833;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, sans-serif; line-height: 1.55; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 96px; }
+  header h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.01em; text-wrap: balance; margin: 0 0 6px; }
+  header .subtitle { color: var(--ink-dim); font-size: 1.05rem; margin: 0; }
+  code, .mono { font-family: 'IBM Plex Mono', monospace; font-size: 0.88em; }
+  .path { background: var(--code-bg); padding: 0.1em 0.4em; border-radius: 4px; }
+
+  section { margin-top: 44px; }
+  h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px; text-wrap: balance; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 24px 0 10px; }
+  p { margin: 0 0 12px; max-width: 68ch; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; letter-spacing: 0.02em; text-transform: uppercase; }
+  .pill.closed { background: var(--green-tint); color: var(--green); }
+  .pill.pending { background: var(--amber-tint); color: var(--amber); }
+  .pill.blocked { background: var(--red-tint); color: var(--red); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; }
+  .card + .card { margin-top: 14px; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .summary-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .summary-tile .num { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .summary-tile .label { color: var(--ink-dim); font-size: 0.85rem; margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--ink-dim); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .table-scroll table { border: none; }
+  .table-scroll .card { border: none; border-radius: 0; }
+  tr:last-child td { border-bottom: none; }
+  td.yes { color: var(--green); font-weight: 600; }
+  td.no { color: var(--red); font-weight: 600; }
+
+  ul.tight { margin: 0 0 12px; padding-left: 20px; }
+  ul.tight li { margin-bottom: 6px; }
+
+  .finding { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; margin: 14px 0; }
+  .finding.blocker-note { border-left-color: var(--red); }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--ink-faint); font-size: 0.85rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Закрытие G1 и старт G2</h1>
+    <p class="subtitle">Personal Decision OS &mdash; статус-отчёт, 29 коммитов с последнего отчёта</p>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Проект</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Папка</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; main @ 5e0039d</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Копировать страницу" data-done="Скопировано"
+          data-fail="Выделите вручную">Копировать страницу</button>
+</div>
+<!-- report-conform:end -->
+
+  <section>
+    <h2>Итого</h2>
+    <div class="summary-grid">
+      <div class="summary-tile"><div class="num">G1</div><div class="label">Гейт закрыт &mdash; <span class="pill closed">закрыт</span></div></div>
+      <div class="summary-tile"><div class="num">6</div><div class="label">BLOCKER/MAJOR исправлено в финальном раунде ремедиации G1</div></div>
+      <div class="summary-tile"><div class="num">2</div><div class="label">PR смержено за окно (#19 фикс G1, #20 старт G2)</div></div>
+      <div class="summary-tile"><div class="num">4</div><div class="label">специализированных агента по архитектуре G2 &mdash; <span class="pill pending">ждёт GPT-PM</span></div></div>
+    </div>
+    <p>G1 (governance/lifecycle гейт) закрыт. У G2 (durable ingest pipeline) смержены D1-схема и
+    provenance-примитивы; следующий слой &mdash; outbox dispatch, queue consumer, reconciler, DLQ
+    &mdash; это проверенное проектное предложение, ожидающее решения GPT-PM; ничего ещё не
+    реализовано.</p>
+  </section>
+
+  <section>
+    <h2>G1: ремедиация lifecycle-fix &mdash; закрыто</h2>
+    <p>Второй ревью с чистым контекстом вернул <strong>VERDICT: BLOCKER</strong> (2 BLOCKER +
+    3 MAJOR) по механизму governance G1. Все четыре закрыты в ветке
+    <code>gate/g1-lifecycle-fix</code> (PR&nbsp;#19, смержен как <code class="path">5dabbf2</code>):</p>
+    <div class="table-scroll"><div class="card"><table>
+      <tr><th>Находка</th><th>Решение</th></tr>
+      <tr><td>BLOCKER &mdash; привязка разрешения гейта к <code>GATE_ACTIVE</code></td>
+          <td>Привязано к переменной репозитория, управляемой оператором. Один из двух BLOCKER
+          <strong>оспорен с доказательствами из первоисточников</strong> (прежнее принятие R13,
+          собственный пункт&nbsp;5 ограничений <code>g1.yaml</code>), а не исправлен вслепую &mdash;
+          записано в журнал решений, а не тихо переопределено.</td></tr>
+      <tr><td>Протокол bootstrap манифеста</td>
+          <td>Переписан <code class="path">scripts/verify/check-manifest-proposal.mjs</code> по
+          скорректированной GPT-PM модели «сначала одобренный хэш, потом проверка равенства»:
+          реальный SHA-256 кандидата-манифеста должен точно совпасть с заранее заданным оператором
+          значением <code>GATE_MANIFEST_APPROVED_HASH_&lt;GATE&gt;</code>. 20 новых тестов
+          (<code class="path">tests/policy/manifest-proposal.test.mjs</code>), 47/47 мутаций убито.</td></tr>
+      <tr><td>Отчёт по дельте покрытия</td>
+          <td>В <code class="path">scripts/verify/report-coverage.mjs</code> добавлена дельта
+          покрытия база-vs-голова плюс кэширование базовой линии CI между пушами/PR.</td></tr>
+    </table></div></div>
+    <p>Оставшиеся полировочные пункты G1 оператор явно отложил в середине ремедиации (см.
+    «Изменение процесса» ниже) и перевёл в бэклог, а не доработал в этом окне: негативный контроль
+    <code>manifest-amendment</code>, третий ревью закрытия с чистым контекстом,
+    <code>G1_CLOSURE_REPORT.md</code>, устаревшая строка в
+    <code class="path">governance/operator-approvals/README.md</code>.</p>
+  </section>
+
+  <section>
+    <h2>Изменение процесса в середине окна (директива оператора)</h2>
+    <p>Оператор посчитал, что полировка governance/процесса отнимает непропорционально много
+    времени относительно функциональной пользы, и установил новое постоянное правило: работа, не
+    влияющая на функционал, уходит в бэклог без раунда ревью, чтобы время ревью оставалось на
+    функциональной работе. Конкретно в этом окне:</p>
+    <ul class="tight">
+      <li>Правило <code>required_status_checks</code> убрано из ruleset ветки <code>main</code> на
+      GitHub (явный выбор оператора) &mdash; проверка <code>governance</code> была красной только
+      потому, что <code>GATE_ACTIVE</code> намеренно оставлен неустановленным (именно те
+      доказательства негативного контроля, что были нужны этой ремедиации), и это механически
+      блокировало мерж PR&nbsp;#19. <code>deletion</code>, <code>non_fast_forward</code> и
+      требование <code>pull_request</code> (0 обязательных апрувов) остаются активными.</li>
+      <li>Оставшиеся полировочные пункты G1 выше переведены в бэклог.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Старт G2 &mdash; смержено (PR #20)</h2>
+    <div class="table-scroll"><div class="card"><table>
+      <tr><th>Часть</th><th>Что это</th></tr>
+      <tr><td><code class="path">infra/migrations/0001_ingest_outbox.sql</code></td>
+          <td>D1-схема: таблицы аккаунтов/политик/курсоров плюс полный пайплайн ingest/outbox/DLQ
+          (ADR-006) и счётчик мягкого бюджета очереди (TDD&nbsp;&sect;16.3). Намеренно ограничено
+          собственным доменом G2 &mdash; последующие гейты (G5&ndash;G8) добавят свои таблицы, когда
+          они им понадобятся.</td></tr>
+      <tr><td><code class="path">core/adr/ADR-004-normalized-event.md</code>,
+          <code class="path">ADR-006-durable-ingest-outbox.md</code></td>
+          <td>Приняты из черновиков-заглушек эпохи G0, формализуют решения, уже реализованные в
+          <code>packages/contracts</code> и заданные в TDD &sect;13/&sect;14/&sect;17/&sect;18.</td></tr>
+      <tr><td><code class="path">packages/provenance</code> (новый)</td>
+          <td><code>isAiSafe()</code>/<code>assertAiSafe()</code> &mdash; обход DAG и
+          fail-closed правило композиции, которое ADR-005 требует как тестируемый примитив.
+          Fail-closed на DENY-узле, неразрешённом предке или цикле. 15 тестов.</td></tr>
+    </table></div></div>
+  </section>
+
+  <section>
+    <h2>Архитектура пайплайна G2 &mdash; стадия предложения, <span class="pill pending">ждёт GPT-PM</span></h2>
+    <p>По новому процессу, заданному оператором (специализированные агенты предлагают &rarr;
+    Claude проверяет по первоисточникам &rarr; GPT-PM решает), четыре агента запущены параллельно
+    по слою поверх уже смерженной схемы: <code>type-design-analyzer</code>, <code>database-reviewer</code>,
+    <code>code-architect</code>, <code>architect</code>. <strong>Ничего не реализовано</strong>
+    &mdash; ни один файл в <code>packages/</code>, <code>services/</code> или
+    <code>infra/migrations/</code> не создан и не изменён в рамках этого раунда предложений.</p>
+
+    <h3>Сходящаяся находка &mdash; проверена независимо, не принята на слово агента</h3>
+    <div class="finding blocker-note">
+      <p>Все четыре агента независимо нашли один и тот же дефект: запрос Processing Reconciler,
+      как он буквально записан в связующей спецификации
+      (<code>docs/architecture/TDD.md:840-846</code>) и в <code>ADR-006:40-44</code>, смешивает
+      значения <code>ingest_events.state</code> со столбцами
+      <code>next_attempt_at</code>/<code>attempt_count</code> таблицы <code>processing_outbox</code>
+      и её собственным индексом &mdash; невыполним как единый запрос, покрытый индексом. Проверено
+      напрямую чтением всех трёх файлов, а не принято на веру по цитате. Должно быть решено
+      <em>до</em> применения миграции к любому живому D1 &mdash; SQLite не умеет менять
+      ограничение <code>CHECK</code> задним числом.</p>
+    </div>
+
+    <h3>Предложены четыре разных, взаимоисключающих решения</h3>
+    <div class="table-scroll"><div class="card"><table>
+      <tr><th>Агент</th><th>Решение</th><th>Удовлетворяет требованию TDD о восстановлении после истечения очереди?</th></tr>
+      <tr><td><code>architect</code></td><td>Добавить два новых терминальных состояния,
+          <code>DONE</code>/<code>TERMINAL</code>, в CHECK <code>processing_outbox.state</code>.
+          Запрос реконсилятора становится чисто нативным для <code>processing_outbox</code> и
+          полностью покрыт индексом.</td>
+          <td class="yes">Да</td></tr>
+      <tr><td><code>code-architect</code></td><td>Без изменения схемы; трактует <code>DISPATCHED</code>
+          как терминальное по соглашению.</td><td class="no">Нет &mdash; полностью исключает DISPATCHED</td></tr>
+      <tr><td><code>database-reviewer</code></td><td>Отметил неоднозначность, рекомендовал
+          задокументировать соответствие. Вопрос DISPATCHED не решён.</td><td>Не рассмотрено</td></tr>
+      <tr><td><code>type-design-analyzer</code></td><td>Смоделировал допустимое состояние только как
+          PENDING/RETRY_PENDING.</td><td class="no">Нет &mdash; тот же пробел</td></tr>
+    </table></div></div>
+    <p>Проверка Claude: только решение <code>architect</code> удовлетворяет названному требованию
+    устойчивости из <code>docs/architecture/TDD.md:870</code> (повторная отправка сообщения «даже
+    если старая строка outbox говорит DISPATCHED», т.е. восстановление после смоделированного
+    простоя очереди &gt;24ч). У двух других конкретных решений &mdash; подтверждённый, реальный
+    пробел именно в этом требовании, а не стилистическое различие.</p>
+
+    <h3>Другие проверенные находки</h3>
+    <ul class="tight">
+      <li><strong>Невидимость события на пределе попыток</strong>: два из четырёх предложений
+      реализуют <code>attempt_count &lt; MAX</code> как буквальный SQL-фильтр, из-за чего
+      «ядовитое» событие останется навсегда нетерминальным и невидимым для DLQ. Решает только
+      дизайн <code>architect</code> (безусловный захват строки, разбиение в памяти).</li>
+      <li><strong>Именование пакетов/сервисов</strong>: именование <code>architect</code>
+      (<code>packages/domain</code>, <code>policy</code>, <code>telemetry</code>, <code>testkit</code>;
+      <code>services/ingest</code> + <code>services/processor</code>) точно совпадает с
+      собственной канонической структурой репозитория из
+      <code>docs/architecture/TDD.md:2319-2381</code>. <code>code-architect</code> придумал
+      <code>packages/db</code>/<code>outbox</code>/<code>services/reconciler</code>, которых в
+      спецификации нет.</li>
+      <li><strong>Открытый пробел, не рассмотренный всеми четырьмя</strong>:
+      <code>services/resolver</code> назван в канонической структуре спецификации и в ADR-011, но
+      ни одно предложение его не заполняет.</li>
+      <li>Гонка check-then-increment в <code>queue_budget_counters</code> (подтверждена по
+      собственному комментарию миграции); таблица <code>devices</code>, нарушающая собственное
+      правило границ области действия миграции; открытый вопрос о многошаговом обходе provenance
+      DAG против ADR-005; неограниченный массив <code>routing_hints</code>; подтверждение, что CPU
+      нельзя измерить внутри Cloudflare Worker (<code>Date.now()</code> заморожен во время
+      вычислений).</li>
+    </ul>
+
+    <h3>Статус</h3>
+    <p>Полная сверка записана в
+    <code class="path">governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md</code>. Отправлено
+    в GPT-PM для реальных решений (разрешение схемы реконсилятора, именование пакетов, область
+    <code>services/resolver</code>, таблица <code>devices</code>, вопрос по provenance DAG)
+    &mdash; <strong>отправка не завершилась</strong>: оркестратор PM Bridge работал на устаревшей
+    сборке и отказал в вызове; режим выключен, чтобы снять блокировку. Оператор попросил
+    остановиться до повторной попытки отправки. Следующая сессия: снова включить режим PM Bridge и
+    отправить предложение &mdash; фактически оно ещё не дошло до GPT-PM.</p>
+  </section>
+
+  <footer>Personal Decision OS &mdash; внутренний статус-отчёт.</footer>
+</div>
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->

@@ -5,6 +5,52 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — G2 pipeline architecture: 4-agent proposal + Claude verification, pending GPT-PM
+
+Per operator instruction (agents propose -> Claude verifies -> GPT-PM decides), ran `type-design-
+analyzer`, `database-reviewer`, `code-architect`, `architect` in parallel on the outbox/queue/
+reconciler/DLQ layer above `infra/migrations/0001_ingest_outbox.sql`. All four independently found
+the same defect: the reconciler query as literally written in `docs/architecture/TDD.md:840-846`
+and `core/adr/ADR-006-durable-ingest-outbox.md:40-44` mixes `ingest_events.state` values with
+`processing_outbox`'s `next_attempt_at`/`attempt_count` columns and its own purpose-built index
+(`infra/migrations/0001_ingest_outbox.sql:142`) -- unexecutable as a single index-covered query,
+verified directly against all three files, not taken on an agent's word.
+
+They proposed four DIFFERENT, mutually exclusive resolutions. Claude verified against
+`docs/architecture/TDD.md:870` (queue-expiry recovery must work "even if the old outbox row says
+DISPATCHED") that only `architect`'s resolution (add `DONE`/`TERMINAL` terminal states to
+`processing_outbox.state`'s CHECK) satisfies that named resilience requirement -- the other two
+concrete resolutions (`code-architect`, `type-design-analyzer`) both exclude `DISPATCHED` from the
+reconciler query entirely, which would leave a lost-in-flight message never re-picked-up. Also
+found: an `attempt_count`-at-cap invisibility bug (present in 2 of 4 proposals, only `architect`'s
+fixed it) that would leave a poison event non-terminal forever with `dead_letter_events` staying
+empty; and that `architect`'s package/service naming (`packages/domain`, `packages/policy`,
+`packages/telemetry`, `packages/testkit`; `services/ingest` + `services/processor`) is the only one
+of the two full proposals that matches `docs/architecture/TDD.md:2319-2381`'s own canonical repo
+layout -- `code-architect` invented `packages/db`/`packages/outbox`/`services/reconciler`, none of
+which the spec names.
+
+Full reconciliation written to `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md` (not yet
+committed). Sent to GPT-PM for the actual decision (reconciler-schema resolution, package naming,
+`services/resolver` scope, the `devices` table scope-boundary question, the provenance-DAG
+multi-hop question) -- **send did not complete**: PM Bridge orchestrator was on a stale build
+(`gpt_send_and_await` refused with "No compatible orchestrator is active... Gate C disables the
+multi-writer direct browser path"; `pm_bridge_mode_on` then refused too, daemon build
+`9a81eded13fbdec7` vs on-disk `13dcd7c53221f421`). `pm_bridge_mode_off` was run to release the lock.
+Operator then said stop before the mode was restarted and the send retried.
+
+**Nothing implemented.** No file under `packages/`, `services/`, or `infra/migrations/` was created
+or edited as part of this proposal round -- it is a design-review artifact only.
+
+**How to apply, next session:** `pm_bridge_mode_on` (should pick up the fresh build now that
+`_off` released the stale daemon), then re-send the synthesis in
+`governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md` to GPT-PM via `gpt_send_and_await`
+(project `Personal_Decision_Command_Center`) verbatim -- it was never actually delivered, so this
+is a first send, not a retry/resend. Do not implement any of the four agents' proposals until
+GPT-PM has ruled on the open decisions listed in that file.
+
+---
+
 ## 2026-09-12 — G2 kickoff: D1 schema (migration 0001), ADR-004/006 adopted, `packages/provenance`
 
 `infra/migrations/0001_ingest_outbox.sql`: accounts/policy/cursor tables plus the full ingest/
