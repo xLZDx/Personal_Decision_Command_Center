@@ -69,6 +69,39 @@ way -- flagged here rather than silently assumed to be one or the other.
 (this one's routing code cannot be fixed by any in-session action) to send
 `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md`'s content to GPT-PM.
 
+**Handoff for the next session (operator asked to record this explicitly):**
+
+1. **The canonical ChatGPT conversation is now registered**, closing the title-only-matching gap:
+   `pm_project_register` was called with `repo_url=https://github.com/xLZDx/Personal_Decision_Command_Center.git`,
+   `project_folder=D:\Repo\Personal_Decision_Command_Center`,
+   `conversation_url=https://chatgpt.com/c/6aa55285-de40-83eb-8a59-341c5cbd4191`. Result:
+   **use `project: "personal-decision-os"`** (not the folder name) for `gpt_send_and_await`/etc.
+   from now on in this repo.
+2. **The G2 synthesis to send is fully composed already** -- it is the full text of
+   `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md` (committed at `1d1805e`). Do not
+   re-derive it; send that file's content (or a close paraphrase of it) to GPT-PM via
+   `gpt_send_and_await` with `project: "personal-decision-os"`. The durable `request_id` already
+   in use for this exchange is `7f3a9c1e-4b2d-4a6f-9e21-8c5d6f0a1b34` -- reuse it if retrying the
+   same logical send; a genuinely new send should get its own new UUID.
+3. **Every send attempt so far has failed on PM Bridge daemon/session staleness**, not on content:
+   first this session's own routing code was stale (fixed by registering the canonical
+   conversation above, which does not depend on the stale project-resolution path); then the
+   daemon itself went stale relative to disk twice in a row while another session appeared to be
+   editing `pm-bridge/src/` concurrently (see `pm-bridge-src-edit-desyncs-every-session` /
+   `pm-bridge-server-js-is-routing-identity` in workspace memory). **Before retrying, call
+   `pm_bridge_mode_status` first** and only send once it reports the daemon is current -- do not
+   blindly resend into a stale daemon a second time in the same session without checking.
+4. **`git push origin main` is blocked by GitHub branch protection** ("Changes must be made
+   through a pull request" -- the `pull_request` rule was deliberately kept active when
+   `required_status_checks` was removed earlier). The report commits (`1d1805e`, `82abfd9`) and the
+   G2 proposal doc are committed locally on `main` but not pushed. Pushing needs either a PR (which
+   needs a new branch, which needs the operator's two-approval §14 consent -- not yet given) or an
+   explicit operator instruction on how to get this to `origin`.
+5. **Nothing under `packages/`, `services/`, or `infra/migrations/` has been implemented.** Do not
+   start G2 implementation until GPT-PM has actually ruled on the 5 open decisions listed in
+   `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md` (reconciler-schema resolution, package
+   naming, `services/resolver` scope, the `devices` table, the provenance-DAG multi-hop question).
+
 ---
 
 ## 2026-09-12 — G2 kickoff: D1 schema (migration 0001), ADR-004/006 adopted, `packages/provenance`
