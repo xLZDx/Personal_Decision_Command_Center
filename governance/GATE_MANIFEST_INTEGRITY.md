@@ -295,13 +295,13 @@ public.** Actions are free and unmetered for public repositories, and rulesets a
 — so **R11 and R12 are both resolved**, and `governance` and `verify` genuinely run and pass on every
 PR head. What remains is narrower than "the enforcement is unverified":
 
-| Owed                                                                  | Status                                                                                                                         |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Ruleset evidence from `gh api`                                        | **DONE** — see the bullet above                                                                                                |
-| Negative test: manifest edited without the variable updated must fail | **NOT DONE** — needs a branch that deliberately edits `g1.yaml`; operator territory                                            |
-| Negative test: out-of-scope path must fail, at the scope step         | **NOT DONE** — the scope step has only ever been observed PASSING; earlier refusals were at the hash step, a different control |
+| Owed                                                                  | Status                                                                                                                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ruleset evidence from `gh api`                                        | **DONE** — see the bullet above                                                                                                                      |
+| Negative test: manifest edited without the variable updated must fail | **DONE** — `governance/plans/G1_PREADOPTION_EVIDENCE.md` §12.1, run `34654217044`, hash mismatch refused before scope ran                            |
+| Negative test: out-of-scope path must fail, at the scope step         | **DONE** — `governance/plans/G1_PREADOPTION_EVIDENCE.md` §11, run `34640409639`, `.gitignore` refused while 3 in-scope paths in the same diff passed |
 
 So the honest statement of this mechanism's status is now: **the matcher and the manifest reader are
 verified (unit tests + mutation testing); the hash step has been observed both refusing and passing;
-the scope step has been observed only passing, and a guard never seen refusing is not known to
-refuse.**
+the scope step has been observed both refusing (§11) and passing (§10) — the same mechanism answering
+both ways, with nothing changing between the two observations except the diff's content.**

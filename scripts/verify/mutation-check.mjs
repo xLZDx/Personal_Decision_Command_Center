@@ -289,9 +289,54 @@ const MUTATIONS = [
     to: "runGit(['diff', '--name-status', range]);",
   },
 
-  // CODEOWNERS is the only control that actually enforces anything here (merge authority; CI is
-  // detection), so dropping a path from it is the highest-consequence silent edit in the repo.
-  // These mutate the data rather than code, which is exactly right: the guard IS the assertion.
+  // The manifest-proposal bootstrap path (closure-review BLOCKER 2). Its whole value is refusing
+  // anything but a single, genuinely-new manifest file -- every mutation below widens what it lets
+  // through, which is the same direction a broken bootstrap check fails in as check-gate-scope.mjs.
+  {
+    label: 'check-manifest-proposal.mjs: accept a branch missing the trailing gate number',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'const PROPOSAL_BRANCH_RE = /^manifest-proposal\\/([gG][0-9]+)$/;',
+    to: 'const PROPOSAL_BRANCH_RE = /^manifest-proposal\\/([gG][0-9]*)$/;',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: allow any number of changed files, not exactly one',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'if (changedPaths.length !== 1) {',
+    to: 'if (false) {',
+  },
+  {
+    label:
+      'check-manifest-proposal.mjs: stop checking the changed file is the expected manifest path',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: '} else if (changedPaths[0] !== expectedPath) {',
+    to: '} else if (false) {',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: admit a proposal for a gate that is already adopted',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'if (approvedHash) {',
+    to: 'if (false) {',
+  },
+  {
+    label:
+      'check-manifest-proposal.mjs: run() treats a non-proposal branch as valid without checking',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: "if (!isProposalBranch) {\n    log('Not a manifest-proposal branch; ordinary gate resolution applies.');\n    return 0;\n  }",
+    to: 'if (!isProposalBranch) {\n    return 1;\n  }',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: run() exits 0 despite an invalid proposal',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: "  if (!valid) {\n    logError('::error::This manifest-proposal PR is invalid:');",
+    to: "  if (false) {\n    logError('::error::This manifest-proposal PR is invalid:');",
+  },
+
+  // CODEOWNERS declares intended ownership; it does not currently mechanically enforce anything
+  // (core/RISK_REGISTER.md R13: require_code_owner_review is measured false) -- but dropping a
+  // path from it still erases the audit-trail record of who is supposed to own that surface, which
+  // is exactly the highest-consequence silent edit this file can suffer regardless of enforcement
+  // state. These mutate the data rather than code, which is exactly right: the guard IS the
+  // assertion.
   {
     label: 'CODEOWNERS: comment out /docs/architecture/, unprotecting the TDD and its errata',
     file: '.github/CODEOWNERS',

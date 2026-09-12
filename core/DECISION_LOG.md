@@ -5,6 +5,73 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — Second fresh-context G1 closure review: `VERDICT: BLOCKER` (2 BLOCKER + 3 MAJOR); remediated on `gate/g1-lifecycle-fix`
+
+Requested once PR #17 (doc-sync) and PR #18 (README fix) had both merged, so the reviewer would see
+consistent documents. GPT-PM returned `VERDICT: BLOCKER`. Every finding was independently
+re-verified against primary sources (git log/show/diff, `gh api` against the live ruleset on
+`main`, `governance/gate-manifests/g1.yaml`'s own documented limitations, and grep across
+`ci.yml`/`package.json`/`vitest.config.ts`) before any fix was designed, per global CLAUDE.md §3/§23
+— all 5 confirmed genuine, none disputed:
+
+- **BLOCKER 1 — gate resolution binds to a purely PR-controlled label.** `governance.yml` resolved
+  "which gate does this PR belong to" from the branch name / PR body alone, both written by the
+  implementer. A PR could declare an already-adopted-but-retired gate's label and ride that gate's
+  still-valid manifest/hash — the manifest's own "DELIBERATELY EXCLUDED" text already named this
+  exact gap. **Fix:** a new operator-controlled repo variable, `GATE_ACTIVE`, checked in the
+  gate-resolution step. Unset -> fails closed with an operator-actionable message (same bootstrap
+  philosophy as `GATE_MANIFEST_APPROVED_HASH_G1`). Set but not matching the PR's declared gate ->
+  fails closed with a distinct "gate may have been retired" message.
+- **BLOCKER 2 — no bootstrap path for a new, not-yet-adopted manifest.** `g1.yaml` itself was
+  originally adopted via a direct push to `main`, which is no longer possible now that `main`'s
+  ruleset has `bypass_actors: []`. There was no other path left to propose a brand-new `g<N>.yaml`
+  for operator review. **Fix:** a narrow `manifest-proposal/g<N>` branch-naming bootstrap path in
+  `governance.yml`, validated by new `scripts/verify/check-manifest-proposal.mjs` — passes only when
+  the PR's cumulative diff is exactly one file (`governance/gate-manifests/g<N>.yaml`) for a gate
+  with no currently-approved hash. 14 unit tests (`tests/policy/manifest-proposal.test.mjs`), 6 new
+  mutations (branch-regex weakening, single-file-diff removal, already-adopted-gate admission, and
+  two `run()` exit-path mutations), all killed alongside the existing 38 (44 total).
+- **MAJOR 3 — `GATE_MANIFEST_INTEGRITY.md`'s own verification table said two negative controls were
+  "NOT DONE"**, though both were already demonstrated on real CI runs: the scope-refusal control
+  (`G1_PREADOPTION_EVIDENCE.md` §11, run `34640409639`) and the hash-mismatch control (§12.1, run
+  `34654217044`). Stale wording, not a real gap. **Fix:** the table now cites both sections by name
+  and run id.
+- **MAJOR 4 — no mutation coverage for the theoretical new guard** (at review time, not yet
+  written). Closed by the 6 mutations under BLOCKER 2 above, plus a fresh full run confirming all 44
+  mutations killed.
+- **MAJOR 5 — TDD.md §57(12) ("CI reports test count and coverage/diff changes") was unimplemented.**
+  **Fix:** `@vitest/coverage-v8@2.1.8` added; `vitest.config.ts` gained a `coverage` block
+  (`v8` provider, `text`+`json-summary` reporters); new `scripts/verify/report-coverage.mjs` reads
+  the summary and reports the four metrics, with 7 unit tests; wired into `ci.yml`'s `Tests` step
+  (`vitest run --coverage`) and a new `Report coverage` step. Read narrowly and honestly: this
+  reports the CURRENT run's numbers precisely, not a fabricated cross-commit coverage-diff pipeline
+  — flagged in the script's own header as an interpretation GPT-PM may still push back on.
+
+**Side effect flagged, not hidden:** adding `@vitest/coverage-v8` raised `npm audit`'s finding count
+from 5 to 6 (a new critical entry for `@vitest/coverage-v8` itself) — same underlying `vitest` chain
+R14 already covers, not a new vulnerability class. `core/RISK_REGISTER.md` R14 updated to the new
+count and evidence.
+
+**Also fixed in the same batch (doc-sync, not separately scoped):** `core/PLAN_MASTER_GATES.md`'s
+G1 status cell (was still saying the doc-sync/README fixes were pending, though PR #17/#18 had both
+already merged — GPT-PM's own round-2 review said this correction belongs in this same final PR,
+not a separate one) and `governance/plans/G1_REMEDIATION_PLAN.md` (same stale pending-items list,
+plus the sequence table's step 10/11 rows).
+
+**Branch authorization.** `gate/g1-lifecycle-fix`, base `origin/main` @ `26d3df2`. This session's
+PM Bridge chat channel (`gpt_send_and_await`) was confirmed genuinely broken for this session
+specifically (a stale in-process routing build the tool itself warned risked misdelivering this
+project's content into a different project's ChatGPT conversation; restarting the daemon does not
+fix it, only a new session would) — so the operator was asked directly, via an `AskUserQuestion`
+carrying the `[GPT-ASKED]` marker per global CLAUDE.md §16's escape hatch (GPT-PM was genuinely
+unreachable through the normal channel). The operator selected proceeding with the branch
+immediately and reviewing the diff afterward via `review.js` — a separate CLI subprocess invocation
+confirmed unaffected by this session's stale in-process routing state, used successfully for PR #17/
+#18 review even during the routing breakage. `review.js` is this session's review transport for the
+remainder of this work, not `gpt_send_and_await`.
+
+---
+
 ## 2026-09-12 — PR #17 merged; `gate/g1-readme-fix` opened for `main`'s remaining stale README
 
 **PR #17 merged** (`860ae69`, a merge commit with two parents — `8980301` and `83f307c`, confirmed

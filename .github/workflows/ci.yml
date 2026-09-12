@@ -34,13 +34,18 @@ jobs:
         run: npm run typecheck
 
       - name: Tests
-        run: npm run test
+        run: npx vitest run --coverage
 
       # A suite that reports success while running zero tests is the failure mode that would make
       # every check above meaningless. vitest is configured with passWithNoTests:false, and this
       # asserts the count independently rather than trusting that config to stay set.
       - name: Assert the suite actually ran tests
         run: node scripts/verify/assert-tests-ran.mjs
+
+      # TDD.md §57(12): "CI reports test count and coverage/diff changes." Test count is the step
+      # above; this reads the json-summary the Tests step just produced (vitest.config.ts).
+      - name: Report coverage
+        run: node scripts/verify/report-coverage.mjs
 
       - name: Test-deletion guard
         if: github.event_name == 'pull_request'

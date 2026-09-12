@@ -18,5 +18,14 @@ export default defineConfig({
     // and reports success is the failure mode that makes every other guarantee here worthless
     // (global CLAUDE.md: "a broken instrument imitates the result you wanted").
     passWithNoTests: false,
+    // TDD.md §57(12): "CI reports test count and coverage/diff changes." `text` for the CI log,
+    // `json-summary` as the machine-readable artifact scripts/verify/report-coverage.mjs reads to
+    // print (and, on a PR, diff against) the total-lines percentage.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      reportsDirectory: 'coverage',
+      include: ['scripts/verify/**/*.mjs', 'packages/**/src/**/*.ts'],
+    },
   },
 });

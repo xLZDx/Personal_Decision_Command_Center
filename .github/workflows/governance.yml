@@ -33,6 +33,22 @@ name: Governance
 # code inside the PR being checked. There is no ungated path anymore -- every PR must resolve to a
 # real, adopted gate (a `gate/g<N>-...` branch or a `Gate: G<N>` body line) or the workflow fails at
 # gate resolution below, before any PR-controlled scope code ever executes.
+#
+# TWO ADDITIONS BELOW, from the second fresh-context closure review (2026-09-12), both closing
+# gaps a resolved gate's own manifest still had:
+#
+# GATE_ACTIVE (BLOCKER): removing "Gate: NONE" closed the self-modification hole, but resolving a
+# gate purely from the PR-controlled branch name/body still meant ANY adopted gate's manifest/hash
+# stays trusted forever, even after that gate is done and should be retired -- a PR could always
+# relabel itself `Gate: G1` and ride G1's broad approved scope. The operator-controlled
+# GATE_ACTIVE variable names the one gate currently authorized; a PR declaring any other gate is
+# refused regardless of that other gate's manifest/hash still validating.
+#
+# manifest-proposal/g<N> (BLOCKER): once main is ruleset-protected (no bypass actors), there was no
+# PR path left to ever introduce the NEXT gate's manifest -- a PR labeled for the current gate hits
+# that gate's own forbidden_paths on any governance/gate-manifests/** touch, and a PR labeled for a
+# future gate fails at the hash step (no manifest/hash exists yet). See
+# scripts/verify/check-manifest-proposal.mjs for the narrow bootstrap path this adds.
 
 on:
   pull_request:
@@ -52,11 +68,37 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Check for a manifest-proposal PR
+        id: proposal
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          # A branch named exactly manifest-proposal/g<N> is validated entirely by the next step,
+          # never by ordinary gate resolution -- see check-manifest-proposal.mjs and this file's
+          # header. Any other branch name is unaffected; this step only classifies.
+          if [[ "$BRANCH" =~ ^manifest-proposal/[gG][0-9]+$ ]]; then
+            echo "is_proposal=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_proposal=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate the manifest-proposal PR
+        if: steps.proposal.outputs.is_proposal == 'true'
+        env:
+          BRANCH: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ALL_VARS: ${{ toJSON(vars) }}
+        run: node scripts/verify/check-manifest-proposal.mjs
+
       - name: Resolve the gate this PR belongs to
         id: gate
+        if: steps.proposal.outputs.is_proposal != 'true'
         env:
           BRANCH: ${{ github.head_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          GATE_ACTIVE: ${{ vars.GATE_ACTIVE }}
         run: |
           set -euo pipefail
           # Branch `gate/g1-something` -> G1; or a `Gate: G1` line in the PR body. There is no
@@ -76,11 +118,32 @@ jobs:
             echo "::error::approved scope, which is the thing this check exists to require."
             exit 1
           fi
+
+          # GATE_ACTIVE binds resolution to operator-controlled lifecycle state (closure-review
+          # BLOCKER 1): a PR-declared gate label is otherwise pure implementer-controlled text, so
+          # a retired gate's still-valid manifest/hash could be ridden by simply relabeling a PR.
+          if [[ -z "$GATE_ACTIVE" ]]; then
+            echo "::error::GATE_ACTIVE is not set. The operator must set this repository variable"
+            echo "::error::to the currently authorized gate label (e.g. G1) before any PR-declared"
+            echo "::error::gate can be trusted -- a declared gate with no operator-controlled"
+            echo "::error::active-gate binding has no enforced scope, regardless of that gate's"
+            echo "::error::own manifest/hash still existing."
+            exit 1
+          fi
+          if [[ "$gate" != "${GATE_ACTIVE^^}" ]]; then
+            echo "::error::This PR declares Gate: $gate, but the operator-controlled active gate"
+            echo "::error::is $GATE_ACTIVE. A gate that is not the currently active one has no"
+            echo "::error::enforced scope regardless of its manifest/hash still existing -- it may"
+            echo "::error::have been retired."
+            exit 1
+          fi
+
           echo "gate=$gate" >> "$GITHUB_OUTPUT"
-          echo "Resolved gate: $gate"
+          echo "Resolved gate: $gate (active: $GATE_ACTIVE)"
 
       - name: Verify manifest hash against operator-controlled state
         id: manifest
+        if: steps.proposal.outputs.is_proposal != 'true'
         env:
           GATE: ${{ steps.gate.outputs.gate }}
           ALL_VARS: ${{ toJSON(vars) }}
@@ -130,6 +193,7 @@ jobs:
       # Reachable only when the hash step above exited 0 -- the manifest it verified is passed on
       # unchanged.
       - name: Check changed paths against the verified scope
+        if: steps.proposal.outputs.is_proposal != 'true'
         env:
           GATE: ${{ steps.gate.outputs.gate }}
           MANIFEST: ${{ steps.manifest.outputs.manifest }}
