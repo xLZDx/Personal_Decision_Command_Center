@@ -5,6 +5,18 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #19 opened; `GATE_ACTIVE` unset produced real fail-closed evidence incidentally
+
+PR #19 (`gate/g1-lifecycle-fix`, see the entry below) was opened before the operator has bootstrapped
+the new `GATE_ACTIVE` repository variable this PR itself introduces — the same bootstrap ordering
+`GATE_MANIFEST_APPROVED_HASH_G1` already had. Run `34687783026` refused exactly as designed, at gate
+resolution, before any hash/scope step ran. Recorded as `G1_PREADOPTION_EVIDENCE.md` §17. Operator
+action still needed: set `GATE_ACTIVE=G1` (mirrors the original hash-variable bootstrap) — this is
+the "setting a value that MAKES something binding" class global CLAUDE.md §25 keeps operator-only
+even after narrowing the rest of that section; not something Claude may do on its own authority.
+
+---
+
 ## 2026-09-12 — Second fresh-context G1 closure review: `VERDICT: BLOCKER` (2 BLOCKER + 3 MAJOR); remediated on `gate/g1-lifecycle-fix`
 
 Requested once PR #17 (doc-sync) and PR #18 (README fix) had both merged, so the reviewer would see
