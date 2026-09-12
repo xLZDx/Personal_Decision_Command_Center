@@ -5,6 +5,57 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #19 round 1: `VERDICT: BLOCKER` (2 BLOCKER + 2 MAJOR); fixed 3 of 4, disputing 1 with evidence
+
+`review.js` round 1 on PR #19 (`gate/g1-lifecycle-fix`) returned `VERDICT: BLOCKER`. Each finding
+verified against primary sources before deciding how to respond, per global CLAUDE.md §3/§17/§23:
+
+- **BLOCKER — the manifest bootstrap fix (BLOCKER 2's remediation) implemented the inverse of the
+  approved adoption protocol.** Confirmed correct: `check-manifest-proposal.mjs`'s first version
+  admitted a candidate manifest whenever NO approved hash existed yet, relying entirely on the
+  merge-time review (§24) to catch an unreviewed candidate -- CI itself offered zero resistance to
+  sight-unseen bytes. GPT-PM's required model — operator pre-approves the exact candidate hash,
+  CI passes only on equality — is the SAME pre-approved-hash-then-verify-match shape the ordinary
+  adopted-gate hash check already uses, and is strictly more defense-in-depth. **Fixed**: rewrote
+  `check-manifest-proposal.mjs` to compute the candidate file's real sha256 and require it to
+  EQUAL `GATE_MANIFEST_APPROVED_HASH_<GATE>` (never merely "hash absent"); added a sibling
+  `manifest-amendment/g<N>` branch pattern (the same check, for revising an already-adopted gate's
+  manifest) per GPT-PM's explicit ask. 20 tests (`tests/policy/manifest-proposal.test.mjs`,
+  rewritten), 7 mutations (up from 6 -- added one for the new `AMENDMENT_BRANCH_RE`), all killed
+  (47 total).
+- **MAJOR — TDD §57(12) still didn't report a base-vs-head coverage DELTA**, only the current
+  run's numbers. Confirmed correct against the script's own header, which had explicitly declined
+  to build this. **Fixed** without doubling CI runtime: `ci.yml` now caches each `push`-to-`main`
+  run's `coverage-summary.json` keyed by that commit's own SHA (`actions/cache/save`), and a
+  `pull_request` run restores whatever is cached under its BASE SHA (`actions/cache/restore`,
+  best-effort -- absent for the first run after this ships or after a cache eviction, reported
+  honestly rather than fabricated). `report-coverage.mjs` gained `formatDelta()` and reads the
+  restored file when present. 7 new tests.
+- **MAJOR — PR #19 touches `core/RISK_REGISTER.md`, which GPT-PM says was not in this branch's
+  authorized file list.** I have no record of an exact file-list authorization for THIS branch
+  under either name (`gate/g1-lifecycle-fix` or the name GPT-PM used, `gate/g1-closure-remediation-
+r2`) -- this branch was authorized by the operator's own explicit `AskUserQuestion` selection, not
+  a GPT-PM file-list approval. GPT-PM itself said the R14 update is sensible and confirmed correct;
+  requesting the narrow scope amendment in round 2 rather than reverting a real, needed correction
+  (R14's count would otherwise silently understate the current `npm audit` finding count).
+- **BLOCKER — GATE_ACTIVE is still enforced by PR-controlled code (`governance.yml` itself), so a
+  PR could edit the comparison away in the same PR that tries to ride a retired gate.** Verified
+  TRUE as a technical claim (GitHub Actions runs a same-repo PR's OWN workflow file, not main's).
+  **Disputing rather than implementing GPT-PM's suggested fix** (a `pull_request_target`/external
+  check redesign): this is the SAME risk `core/RISK_REGISTER.md` R13 already accepted by explicit
+  operator decision on 2026-09-11 -- "no document... may claim that CODEOWNERS, branch protection,
+  or any procedure mechanically separates implementer from operator" -- and `g1.yaml`'s own
+  limitation 5 already discloses, by name, "edit the Governance workflow itself" as part of that
+  accepted risk. `GATE_ACTIVE`'s actual, narrower purpose -- closing the ORDINARY-PR case that
+  doesn't also tamper with governance.yml -- is genuinely fixed and has real CI evidence
+  (`G1_PREADOPTION_EVIDENCE.md` §17). A `pull_request_target` redesign is a large, independently
+  risky change (privileged execution of PR-controlled code is the classic Actions security bug) and
+  is not, on this evidence, a new gap this gate's own remediation introduced -- it is R13 under a
+  new name. Raised back to GPT-PM with both citations in round 2, per §17 ("Disagree out loud, with
+  evidence"), not silently overridden.
+
+---
+
 ## 2026-09-12 — PR #19 opened; `GATE_ACTIVE` unset produced real fail-closed evidence incidentally
 
 PR #19 (`gate/g1-lifecycle-fix`, see the entry below) was opened before the operator has bootstrapped

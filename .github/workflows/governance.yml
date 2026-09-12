@@ -44,11 +44,15 @@ name: Governance
 # GATE_ACTIVE variable names the one gate currently authorized; a PR declaring any other gate is
 # refused regardless of that other gate's manifest/hash still validating.
 #
-# manifest-proposal/g<N> (BLOCKER): once main is ruleset-protected (no bypass actors), there was no
-# PR path left to ever introduce the NEXT gate's manifest -- a PR labeled for the current gate hits
-# that gate's own forbidden_paths on any governance/gate-manifests/** touch, and a PR labeled for a
-# future gate fails at the hash step (no manifest/hash exists yet). See
-# scripts/verify/check-manifest-proposal.mjs for the narrow bootstrap path this adds.
+# manifest-proposal/g<N> and manifest-amendment/g<N> (BLOCKER): once main is ruleset-protected (no
+# bypass actors), there was no PR path left to ever introduce a NEW gate's manifest, or revise an
+# already-adopted one -- a PR labeled for the current gate hits that gate's own forbidden_paths on
+# any governance/gate-manifests/** touch, and a PR labeled for a future gate fails at the ordinary
+# hash step (no manifest/hash exists yet). Both branch names are validated by the SAME check,
+# reusing the pre-approved-hash-then-verify-equality model the ordinary hash step below already
+# uses -- corrected from this fix's first version, which wrongly treated an absent hash as
+# sufficient by itself; GPT-PM's round-1 review of that version caught it as still a BLOCKER. See
+# scripts/verify/check-manifest-proposal.mjs.
 
 on:
   pull_request:
@@ -68,22 +72,23 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Check for a manifest-proposal PR
+      - name: Check for a manifest-proposal/amendment PR
         id: proposal
         env:
           BRANCH: ${{ github.head_ref }}
         run: |
           set -euo pipefail
-          # A branch named exactly manifest-proposal/g<N> is validated entirely by the next step,
-          # never by ordinary gate resolution -- see check-manifest-proposal.mjs and this file's
-          # header. Any other branch name is unaffected; this step only classifies.
-          if [[ "$BRANCH" =~ ^manifest-proposal/[gG][0-9]+$ ]]; then
+          # A branch named exactly manifest-proposal/g<N> or manifest-amendment/g<N> is validated
+          # entirely by the next step, never by ordinary gate resolution -- see
+          # check-manifest-proposal.mjs and this file's header. Any other branch name is unaffected;
+          # this step only classifies.
+          if [[ "$BRANCH" =~ ^manifest-(proposal|amendment)/[gG][0-9]+$ ]]; then
             echo "is_proposal=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_proposal=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Validate the manifest-proposal PR
+      - name: Validate the manifest-proposal/amendment PR
         if: steps.proposal.outputs.is_proposal == 'true'
         env:
           BRANCH: ${{ github.head_ref }}

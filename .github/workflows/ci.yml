@@ -42,10 +42,36 @@ jobs:
       - name: Assert the suite actually ran tests
         run: node scripts/verify/assert-tests-ran.mjs
 
-      # TDD.md §57(12): "CI reports test count and coverage/diff changes." Test count is the step
-      # above; this reads the json-summary the Tests step just produced (vitest.config.ts).
+      # TDD.md §57(12) needs coverage/diff CHANGES reported, not only the current run's numbers
+      # (GPT-PM's round-1 finding on this remediation: the first version of this reporter only did
+      # the latter). Re-running the whole suite against the base commit just to get a comparison
+      # number would double CI time for every PR, so instead every commit that lands on `main`
+      # caches its own coverage-summary.json keyed by its own SHA; a PR restores whatever is cached
+      # under its BASE commit's SHA (best-effort -- absent for the very first run after this
+      # shipped, or after a cache eviction, and report-coverage.mjs says so plainly rather than
+      # fabricating a delta).
+      - name: Restore coverage baseline (base commit, PRs only)
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@v4
+        with:
+          path: .coverage-baseline
+          key: coverage-summary-${{ github.event.pull_request.base.sha }}
+
       - name: Report coverage
         run: node scripts/verify/report-coverage.mjs
+
+      - name: Save coverage baseline for this commit (push to main only)
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p .coverage-baseline
+          cp coverage/coverage-summary.json .coverage-baseline/coverage-summary.json
+
+      - name: Cache coverage baseline for this commit (push to main only)
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: .coverage-baseline
+          key: coverage-summary-${{ github.sha }}
 
       - name: Test-deletion guard
         if: github.event_name == 'pull_request'

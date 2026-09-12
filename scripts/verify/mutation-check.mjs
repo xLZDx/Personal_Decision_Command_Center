@@ -289,14 +289,22 @@ const MUTATIONS = [
     to: "runGit(['diff', '--name-status', range]);",
   },
 
-  // The manifest-proposal bootstrap path (closure-review BLOCKER 2). Its whole value is refusing
-  // anything but a single, genuinely-new manifest file -- every mutation below widens what it lets
-  // through, which is the same direction a broken bootstrap check fails in as check-gate-scope.mjs.
+  // The manifest bootstrap/amendment guard (closure-review BLOCKER 2, corrected to a
+  // pre-approved-hash-then-verify-EQUALITY model). Its whole value is refusing anything but a
+  // single manifest file whose bytes exactly match an operator-approved hash -- every mutation
+  // below widens what it lets through, the same direction a broken bootstrap check fails in as
+  // check-gate-scope.mjs.
   {
     label: 'check-manifest-proposal.mjs: accept a branch missing the trailing gate number',
     file: 'scripts/verify/check-manifest-proposal.mjs',
-    from: 'const PROPOSAL_BRANCH_RE = /^manifest-proposal\\/([gG][0-9]+)$/;',
-    to: 'const PROPOSAL_BRANCH_RE = /^manifest-proposal\\/([gG][0-9]*)$/;',
+    from: 'export const PROPOSAL_BRANCH_RE = /^manifest-proposal\\/([gG][0-9]+)$/;',
+    to: 'export const PROPOSAL_BRANCH_RE = /^manifest-proposal\\/([gG][0-9]*)$/;',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: accept an amendment branch missing the gate number too',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'export const AMENDMENT_BRANCH_RE = /^manifest-amendment\\/([gG][0-9]+)$/;',
+    to: 'export const AMENDMENT_BRANCH_RE = /^manifest-amendment\\/([gG][0-9]*)$/;',
   },
   {
     label: 'check-manifest-proposal.mjs: allow any number of changed files, not exactly one',
@@ -312,23 +320,36 @@ const MUTATIONS = [
     to: '} else if (false) {',
   },
   {
-    label: 'check-manifest-proposal.mjs: admit a proposal for a gate that is already adopted',
+    label: 'check-manifest-proposal.mjs: admit a candidate with no approved hash set at all',
     file: 'scripts/verify/check-manifest-proposal.mjs',
-    from: 'if (approvedHash) {',
+    from: 'if (!approvedHash) {',
     to: 'if (false) {',
   },
   {
-    label:
-      'check-manifest-proposal.mjs: run() treats a non-proposal branch as valid without checking',
+    label: 'check-manifest-proposal.mjs: skip the hash-equality check entirely (compare-nothing)',
     file: 'scripts/verify/check-manifest-proposal.mjs',
-    from: "if (!isProposalBranch) {\n    log('Not a manifest-proposal branch; ordinary gate resolution applies.');\n    return 0;\n  }",
-    to: 'if (!isProposalBranch) {\n    return 1;\n  }',
+    from: '} else if (approvedHash !== candidateHash) {',
+    to: '} else if (false) {',
   },
   {
-    label: 'check-manifest-proposal.mjs: run() exits 0 despite an invalid proposal',
+    label:
+      'check-manifest-proposal.mjs: treat candidateHash === undefined the same as a real match',
     file: 'scripts/verify/check-manifest-proposal.mjs',
-    from: "  if (!valid) {\n    logError('::error::This manifest-proposal PR is invalid:');",
-    to: "  if (false) {\n    logError('::error::This manifest-proposal PR is invalid:');",
+    from: 'if (candidateHash !== null) {',
+    to: 'if (candidateHash !== undefined) {',
+  },
+  {
+    label:
+      'check-manifest-proposal.mjs: run() treats a non-manifest branch as valid without checking',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: "if (!isManifestBranch) {\n    log('Not a manifest-proposal/amendment branch; ordinary gate resolution applies.');\n    return 0;\n  }",
+    to: 'if (!isManifestBranch) {\n    return 1;\n  }',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: run() exits 0 despite an invalid proposal/amendment',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: '  if (!valid) {\n    logError(`::error::This ${kind} PR is invalid:`);',
+    to: '  if (false) {\n    logError(`::error::This ${kind} PR is invalid:`);',
   },
 
   // CODEOWNERS declares intended ownership; it does not currently mechanically enforce anything

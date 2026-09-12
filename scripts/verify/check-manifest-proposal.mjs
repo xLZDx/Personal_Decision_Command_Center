@@ -1,71 +1,105 @@
 #!/usr/bin/env node
 /**
- * Manifest-proposal bootstrap path (closes G1 closure-review BLOCKER 2).
+ * Manifest bootstrap/amendment guard (closes G1 closure-review BLOCKER 2; corrected after GPT-PM's
+ * round-1 review of this file's first version found the correction itself wrong).
  *
  * Problem this exists to solve: once `main` is ruleset-protected (no bypass actors, PR + required
- * checks mandatory), there is no way to ever introduce the NEXT gate's manifest candidate.
- * `g1.yaml` itself only reached `main` because it was pushed directly, before that ruleset existed
- * -- a PR labeled `Gate: G1` hits `g1.yaml`'s own `forbidden_paths` on any
- * `governance/gate-manifests/**` touch, and a PR labeled for a future gate fails at the hash step
- * because no manifest/approved-hash exists for it yet. Both paths dead-end.
+ * checks mandatory), there is no way to ever introduce a NEW gate's manifest, or revise an already
+ * ADOPTED one. `g1.yaml` itself only reached `main` because it was pushed directly, before that
+ * ruleset existed -- a PR labeled `Gate: G1` hits `g1.yaml`'s own `forbidden_paths` on any
+ * `governance/gate-manifests/**` touch, and a PR labeled for a future gate fails at the ordinary
+ * hash step because no manifest exists for it yet. Both paths dead-end.
  *
- * The fix: a distinct branch-naming convention, `manifest-proposal/g<N>`, that can never collide
- * with `gate/g<N>-...` (ordinary gate work). A PR on such a branch is validated HERE, narrowly:
- * its cumulative diff must be EXACTLY one file, `governance/gate-manifests/g<N>.yaml`, and that
- * gate's approval-hash variable must currently be UNSET (a genuinely new, not-yet-adopted
- * candidate -- never a revision of something already binding, which would be an ordinary gate's
- * own scope-checked content change instead). If the branch uses this naming convention at all, it
- * is this check's PR to validate -- it never silently falls through to ordinary gate resolution,
- * because a proposal that fails these conditions is exactly the self-authorization attempt this
- * mechanism exists to catch, not an ordinary content change to be judged some other way.
+ * FIRST VERSION OF THIS FIX WAS WRONG, and the wrongness is worth keeping on record rather than
+ * silently overwriting: it treated "no approved hash exists yet" as sufficient to admit ANY new
+ * candidate bytes sight-unseen, trusting the merge-time review (global CLAUDE.md §24) as the only
+ * gate. GPT-PM's round-1 review caught that this inverts the actual approved protocol -- the
+ * pre-approved-hash-then-verify-EQUALITY model the ORDINARY hash check already uses for an adopted
+ * gate -- and that inversion means CI itself offers zero resistance to an unreviewed manifest; only
+ * the merge process does. That is a real, avoidable weakening of defense-in-depth this gate's own
+ * `GATE_MANIFEST_INTEGRITY.md` argues for everywhere else (hash-before-scope, in one job, so a
+ * tampered manifest never authorizes its own diff).
  *
- * This restores exactly the capability the direct-push bootstrap used to provide (implementer
- * proposes candidate bytes, operator reviews and adopts by setting the hash) through the PR path,
- * with no ruleset bypass and no widening of any adopted gate's own scope.
+ * THE CORRECTED MODEL: identical in shape to the ordinary hash check. A branch below carries
+ * exactly one file -- the gate's own manifest -- and CI computes that file's sha256 and compares it
+ * to the operator-controlled `GATE_MANIFEST_APPROVED_HASH_<GATE>` repository variable, passing ONLY
+ * on an exact match. The operator must review the exact candidate bytes (the PR's real diff on
+ * GitHub, or the file shared directly) and set the variable to match BEFORE this check can go
+ * green -- mirroring exactly how `g1.yaml` itself was bootstrapped (CI prints the computed hash on
+ * failure so the operator can read it off a real run, never as a substitute for reading the file).
+ *
+ * TWO BRANCH NAMES, ONE CHECK: `manifest-proposal/g<N>` names a gate with no manifest file on
+ * `main` yet (a genuine first adoption); `manifest-amendment/g<N>` names a revision to an already-
+ * adopted gate's manifest. The distinction exists for audit clarity -- which of the two a reader
+ * is looking at -- not because the underlying validation differs: what actually matters is only
+ * whether the CURRENT operator-set variable matches the CURRENT candidate bytes, never whether a
+ * hash existed before this PR.
  */
 
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { changedPathsFrom } from './check-gate-scope.mjs';
 
 export const PROPOSAL_BRANCH_RE = /^manifest-proposal\/([gG][0-9]+)$/;
+export const AMENDMENT_BRANCH_RE = /^manifest-amendment\/([gG][0-9]+)$/;
 
 /**
  * @param {string} branch
- * @returns {{ isProposalBranch: boolean, gate?: string }}
+ * @returns {{ isManifestBranch: boolean, kind: 'proposal'|'amendment'|null, gate: string|null }}
  */
-export function detectProposalBranch(branch) {
-  const match = PROPOSAL_BRANCH_RE.exec(branch ?? '');
-  if (!match) return { isProposalBranch: false };
-  return { isProposalBranch: true, gate: match[1].toUpperCase() };
+export function detectManifestBranch(branch) {
+  const proposal = PROPOSAL_BRANCH_RE.exec(branch ?? '');
+  if (proposal) {
+    return { isManifestBranch: true, kind: 'proposal', gate: proposal[1].toUpperCase() };
+  }
+  const amendment = AMENDMENT_BRANCH_RE.exec(branch ?? '');
+  if (amendment) {
+    return { isManifestBranch: true, kind: 'amendment', gate: amendment[1].toUpperCase() };
+  }
+  return { isManifestBranch: false, kind: null, gate: null };
 }
 
 /**
  * Pure validation over already-computed inputs -- no process, no git, no environment.
  *
- * @param {{ gate: string, changedPaths: string[], approvedHash: string|undefined }} input
+ * @param {{ kind: 'proposal'|'amendment', gate: string, changedPaths: string[],
+ *           approvedHash: string|undefined, candidateHash: string|null }} input
  * @returns {{ valid: boolean, errors: string[], expectedPath: string }}
  */
-export function validateProposal({ gate, changedPaths, approvedHash }) {
+export function validateManifestChange({ kind, gate, changedPaths, approvedHash, candidateHash }) {
   const errors = [];
   const expectedPath = `governance/gate-manifests/${gate.toLowerCase()}.yaml`;
+  const branchLabel = `${kind === 'proposal' ? 'manifest-proposal' : 'manifest-amendment'}/${gate.toLowerCase()}`;
 
   if (changedPaths.length !== 1) {
     errors.push(
-      `a manifest-proposal PR must change exactly one file; this PR changes ${changedPaths.length}: ` +
+      `a ${kind} PR must change exactly one file; this PR changes ${changedPaths.length}: ` +
         changedPaths.join(', '),
     );
   } else if (changedPaths[0] !== expectedPath) {
-    errors.push(
-      `branch manifest-proposal/${gate.toLowerCase()} must change ${expectedPath}, not ${changedPaths[0]}.`,
-    );
+    errors.push(`branch ${branchLabel} must change ${expectedPath}, not ${changedPaths[0]}.`);
   }
 
-  if (approvedHash) {
-    errors.push(
-      `GATE_MANIFEST_APPROVED_HASH_${gate} is already set -- ${gate} is already adopted. A ` +
-        `manifest-proposal PR is only for a gate with no approved hash yet; revising an adopted ` +
-        `manifest is that gate's own scope-checked content change, not a proposal.`,
-    );
+  // candidateHash is only computed by run() when the single-file check above already passed --
+  // absent here means that check failed, and its own error is enough; do not also emit a
+  // misleading hash complaint about a file that was never the one actually evaluated.
+  if (candidateHash !== null) {
+    if (!approvedHash) {
+      errors.push(
+        `GATE_MANIFEST_APPROVED_HASH_${gate} is not set. The operator must review these exact ` +
+          `candidate bytes and set it to ${candidateHash} -- ONLY if they actually reviewed the ` +
+          `file. This is not a substitute for reading the manifest.`,
+      );
+    } else if (approvedHash !== candidateHash) {
+      errors.push(
+        `GATE_MANIFEST_APPROVED_HASH_${gate} (${approvedHash}) does not match this candidate's ` +
+          `bytes (${candidateHash}). Set it to the printed value only after reviewing these exact ` +
+          `bytes, or revise the candidate to match what was already approved.`,
+      );
+    }
   }
 
   return { valid: errors.length === 0, errors, expectedPath };
@@ -74,16 +108,13 @@ export function validateProposal({ gate, changedPaths, approvedHash }) {
 /**
  * The whole CLI, as a function that RETURNS an exit code instead of calling process.exit.
  *
- * Mirrors check-gate-scope.mjs / check-test-deletion.mjs: every guarantee is expressed in the
- * return value, not buried in an untestable main(), and dependencies are injected so the exit
- * paths can be exercised without a real repository or environment.
- *
  * @returns {0|1} process exit code
  */
 export function run({
   env,
-  cwd,
+  cwd = process.cwd(),
   listChangedPaths = changedPathsFrom,
+  readManifestBytes = (path) => readFileSync(path),
   log = console.log,
   logError = console.error,
 } = {}) {
@@ -92,10 +123,10 @@ export function run({
   const headSha = env?.HEAD_SHA;
   const allVarsRaw = env?.ALL_VARS;
 
-  const { isProposalBranch, gate } = detectProposalBranch(branch);
+  const { isManifestBranch, kind, gate } = detectManifestBranch(branch);
 
-  if (!isProposalBranch) {
-    log('Not a manifest-proposal branch; ordinary gate resolution applies.');
+  if (!isManifestBranch) {
+    log('Not a manifest-proposal/amendment branch; ordinary gate resolution applies.');
     return 0;
   }
 
@@ -120,27 +151,48 @@ export function run({
     return 1;
   }
 
-  const approvedHash = allVars[`GATE_MANIFEST_APPROVED_HASH_${gate}`];
-  const { valid, errors, expectedPath } = validateProposal({ gate, changedPaths, approvedHash });
+  const expectedPath = `governance/gate-manifests/${gate.toLowerCase()}.yaml`;
+  const label = kind === 'proposal' ? 'Manifest-proposal' : 'Manifest-amendment';
 
-  log(`Manifest-proposal branch detected: proposing ${expectedPath}.`);
+  log(`${label} branch detected: ${expectedPath}.`);
   log(`Changed paths (${changedPaths.length}):`);
   for (const p of changedPaths) log(`  ${p}`);
 
+  let candidateHash = null;
+  if (changedPaths.length === 1 && changedPaths[0] === expectedPath) {
+    try {
+      const bytes = readManifestBytes(join(cwd, expectedPath));
+      candidateHash = createHash('sha256').update(bytes).digest('hex');
+      log(`actual:   ${candidateHash}`);
+    } catch (error) {
+      logError(`::error::could not read ${expectedPath} to compute its hash: ${error.message}`);
+      return 1;
+    }
+  }
+
+  const approvedHash = allVars[`GATE_MANIFEST_APPROVED_HASH_${gate}`];
+  const { valid, errors } = validateManifestChange({
+    kind,
+    gate,
+    changedPaths,
+    approvedHash,
+    candidateHash,
+  });
+
   if (!valid) {
-    logError('::error::This manifest-proposal PR is invalid:');
+    logError(`::error::This ${kind} PR is invalid:`);
     for (const e of errors) logError(`::error::  - ${e}`);
     logError(
-      '::error::A branch named manifest-proposal/g<N> is validated by this check alone -- it ' +
-        'never falls through to ordinary gate resolution.',
+      `::error::A branch named ${kind === 'proposal' ? 'manifest-proposal' : 'manifest-amendment'}` +
+        '/g<N> is validated by this check alone -- it never falls through to ordinary gate resolution.',
     );
     return 1;
   }
 
   log(
-    `Valid manifest proposal for ${gate}: exactly ${expectedPath} changed, no approved hash ` +
-      `exists yet. This PR carries no binding scope -- it becomes real only when the operator ` +
-      `reviews these bytes and sets GATE_MANIFEST_APPROVED_HASH_${gate} (INV-28).`,
+    `Valid ${kind} for ${gate}: ${expectedPath} matches the operator-approved ` +
+      `GATE_MANIFEST_APPROVED_HASH_${gate}. This PR carries no binding scope beyond the manifest ` +
+      `file itself (INV-28).`,
   );
   return 0;
 }
