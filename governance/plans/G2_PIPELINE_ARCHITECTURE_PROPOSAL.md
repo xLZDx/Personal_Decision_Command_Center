@@ -196,3 +196,12 @@ provenance-DAG and budget-counter/routing-hints/CPU-measurement recommendations 
 **Nothing in `packages/`, `services/`, or `infra/migrations/` has been created or modified.**
 **G2 implementation must not start** until a revised proposal addresses all 3 BLOCKERs and 4 MAJORs
 above and receives a fresh GPT-PM ruling under a new Rosetta plan/GO.
+
+**2026-09-12/13: Revision 2 filed.** Three specialist agents (`database-reviewer`,
+`type-design-analyzer`, `architect`) redesigned fixes for every BLOCKER/MAJOR above, executably
+validated in a scratch SQLite harness (`PRAGMA foreign_keys=ON`, a 7-case negative-control insert
+matrix, `EXPLAIN QUERY PLAN` proof of index-covered access with a negative control showing the plan
+change without it) and a clean `tsc --noEmit` run against the repo's own tsconfig and installed
+zod. Full document: `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V2.md`. Sent to GPT-PM for a
+fresh ruling under Rosetta plan `personal-decision-os-2026-09-12T21-44-44-733Z-f21028`; verdict
+pending recording under a follow-up plan.

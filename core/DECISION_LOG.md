@@ -3,6 +3,121 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-12/13 — G2 Revision 2: 3-agent redesign, executably validated, Rosetta plan revised
+after GPT-PM's own plan-level BLOCKER, GO obtained, V2 proposal sent
+
+**Context.** GPT-PM's `VERDICT: BLOCKER` on the original G2 proposal (3 BLOCKER + 4 MAJOR, see the
+entry below) named the process to fix it: specialist agents redesign, Claude verifies, GPT-PM rules
+again. Ran three agents in parallel, per this project's standing process and the workspace habit
+"[[feedback-always-use-agents-for-design-arch-review]]": `database-reviewer` (schema/idempotency),
+`type-design-analyzer` (provenance contracts), `architect` (reconciler/DLQ/lease — the hardest part,
+covering both remaining BLOCKERs). All three initially hit their internal per-call turn limits
+mid-task and were orphaned across a session boundary; resumed via `SendMessage` in this session,
+all three returned `status: completed` with full designs.
+
+**First Rosetta plan attempt (`...T21-40-50-268Z-0114c4`) was itself refused by GPT-PM at GO,
+`VERDICT: BLOCKER`, 0 BLOCKER/2 MAJOR on the plan itself** — not on the underlying redesign, which
+GPT-PM explicitly confirmed as real and necessary ("current event.ts still lacks source_version/
+hint bounds, current provenance.ts is string-only, dag.ts retains the fail-open shape, and
+migration 0001 still contains devices, independent source/policy FKs, and the single ambiguous
+attempt_count"). The two MAJORs: (1) the plan's promised "exact DDL/SQL/contracts" rested on
+citation-to-an-agent-plus-a-source-line, which proves provenance of an idea, not that the design is
+valid — required executable proof instead (apply DDL to a real DB with FKs on, `EXPLAIN QUERY PLAN`
+on the real queries, type-check the real shapes); (2) the plan's post-ruling commit boundary was
+ambiguous (committed docs before sending, then proposed a further DECISION_LOG edit after receiving
+the reply, with no stated evidence/commit split for that). Accepted both without dispute -- exactly
+the correction this project's own §17 ground-truth-order habit calls for.
+
+**Revised plan (`personal-decision-os-2026-09-12T21-44-44-733Z-f21028`) fixed both:** added
+executable scratch validation as its own step, and set a deterministic boundary -- the plan closes
+the instant GPT-PM's reply to the V2 document is captured; recording that reply's *content* is
+explicitly the next plan's job, not this one's. Sent for GO.
+
+**PM Bridge transport was genuinely unstable across this send**, not merely slow -- worth recording
+precisely since it cost several retries and two daemon restarts before resolving:
+1. First `gpt_send_and_await` (request_id `e3a4c8f1-...`, the first plan) returned
+   `CHATGPT_SEND_UNCONFIRMED` ("No matching new ChatGPT user turn appeared after Enter within 32s").
+2. Retried the same request_id per the tool's own instruction twice; `pm_bridge_job_status` showed
+   the durable record completely unchanged (`updatedAt` byte-identical) both times -- a latched,
+   non-retrying record, matching `[[pmbridge-send-unconfirmed-peek-before-retrying]]`.
+3. `pm_bridge_restart(safeOnly:true)` refused twice, claiming "the daemon is making progress" while
+   the job record showed zero progress -- a real contradiction, not a misread.
+4. Attempted to route this exact operational question to the operator via `AskUserQuestion`; the
+   `ask_routing_gate` hook correctly redirected it to GPT-PM per global CLAUDE.md §16 -- but GPT-PM
+   was reachable only through the very transport that was stuck, a genuine catch-22 this project has
+   hit before. Before a `[GPT-ASKED]`-marked question could be sent, **the operator interrupted
+   directly and instructed a force-restart** ("перезапусти демона и аркистратора") -- an
+   operator-given instruction for a reversible, non-destructive action, executed immediately:
+   `pm_bridge_restart(force:true)` (pid 27616 -> 13272). `pm_bridge_mode_off` alone is now refused
+   for Claude sessions per a fresh 2026-09-13 operator instruction baked into the tool itself
+   ("Only the operator turns it off, from their own terminal").
+5. Retried with the same request_id post-restart: identical `CHATGPT_SEND_UNCONFIRMED` failure, but
+   this time `pm_bridge_job_status`'s `updatedAt` had genuinely changed -- a real second attempt had
+   occurred and failed again, and its `deadlineAt` had now passed. Not a stale/frozen record after
+   all; a real, repeated composer-timeout, most likely from this payload's size against a long-lived
+   conversation (32s is a tight window for a multi-KB paste to register as a new turn).
+6. Generated a **fresh** request_id (`b8e3f571-...`) for the now-expired job. This attempt failed
+   differently -- `"No compatible orchestrator is active"` -- because `pm_bridge_mode_status`
+   revealed a concurrent session was actively mid-edit on `pm-bridge/src/` (disk build hash changed
+   three times, `f7920483... -> ed11a25a... -> e92ede2d...`, within about 20 seconds), a live
+   instance of `[[pm-bridge-src-edit-desyncs-every-session]]` more acute than previously logged --
+   normally one stale snapshot, here a moving target no single restart could catch.
+7. Operator confirmed a fresh restart on their end ("демон рестартанули на новом билде"). Re-checked
+   `pm_bridge_mode_status` (build finally settled, "this session is behind, harmlessly -- routing is
+   unaffected"), retried the fresh request_id: **succeeded**, correlated reply
+   (`replyId ef7684d2-0684-4126-9e8e-63664f8e4993`): `VERDICT: APPROVE`, 0 BLOCKER/0 MAJOR, both
+   MAJORs from step 2 above confirmed fixed, "no regression from the prior approval." Recorded via
+   `pm_rosetta_go` against plan hash `ef6b4fc7...e06548e` (first `pm_rosetta_go` call was rejected --
+   passed the request_id instead of the actual `replyId` field from `pm_bridge_job_status`'s
+   `result`; corrected and it succeeded).
+
+**Operator instruction mid-execution ("ГО делай все без ПМ пока , потом отправишь все сразу как
+закончишь"):** confirmed doing exactly what the approved plan already specified -- execute steps
+1-7 without further GPT-PM round-trips, send the finished V2 document once, in one batch. No scope
+change from what GO already covered.
+
+**Executed the approved plan's steps.** Full evidence, DDL, SQL, and TypeScript design in
+`governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V2.md`. Summary of what was actually run, not
+just designed:
+
+- **Scratch SQLite DB** (`D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\scratchpad\g2v2\`,
+  outside the repo tree), `PRAGMA foreign_keys=ON` confirmed `1`. Full synthesized DDL applied
+  clean. Seven deliberately-invalid inserts (telegram+ALLOW, source-mismatched composite FK, orphan
+  `provenance_event_id`, DLQ-with-live-lease, PROCESSING-without-lease, DLQ-zero-attempts,
+  budget-counter-over-cap) each rejected by a real constraint violation, literal error text
+  captured; every corresponding positive control inserted without error.
+- **`EXPLAIN QUERY PLAN`** on the reconciler-eligibility query and the lease-expiry sweep query
+  against 1004 bulk-populated rows (950 terminal, 45 open, 5 live-leased): both `SEARCH`-only, no
+  `SCAN`, no `USE TEMP B-TREE FOR ORDER BY`. Two negative controls (partial-index predicates
+  stripped) showed the plan **change** to a full `SCAN` plus a materialized sort -- proving the
+  partial indexes are load-bearing, not merely present.
+- **`tsc --noEmit`**, exit code `0`, zero diagnostics: the discriminated provenance node union, the
+  generic `provenanceValueSchema<T>()` factory, the fail-closed `isAiSafe`, and the extended
+  `NormalizedEvent`/`idempotencyKey` all compile clean against this repo's own real tsconfig
+  (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`) and
+  installed zod (`3.25.76`) -- via a scratch `tsconfig.json` extending the real one, never a
+  hypothetical config.
+
+**V2 document written** (`G2_PIPELINE_ARCHITECTURE_PROPOSAL_V2.md`), explicitly headed
+"PROPOSAL / PENDING GPT-PM / NON-NORMATIVE." Cross-references every one of GPT-PM's 3 BLOCKER + 4
+MAJOR items (including the mid-ruling `ProvenanceValueSchema` MAJOR) to exactly where this revision
+resolves it, and separately confirms all three invariants GPT-PM's plan-level APPROVE required
+survive synthesis (`ingest_events.state` sole processing authority / outbox `CLOSED`
+optimization-only; queue dispatch never consumes the processing-attempt budget; atomic
+processor-side DLQ at cap coexists with a reclaimable expired lease). Explicitly flagged, not
+decided unilaterally: `sensitivity`'s value set (INFERENCE, unratified by the TDD),
+`PROCESSING_LEASE_TTL=120s` (HYPOTHESIS pending G2-PREFLIGHT-01 measurement), claim-time vs.
+failure-time attempt increment, and D1's actual default for `PRAGMA foreign_keys`.
+
+**Original proposal's Status section updated** to point to V2. **`packages/`, `services/`, and
+`infra/migrations/` remain completely untouched** -- verified by `git status` before commit; only
+the scratch harness outside the repo tree exercised anything resembling those shapes.
+
+**Per the deterministic boundary this plan itself sets: this entry does not record GPT-PM's ruling
+on the V2 document.** That send happens after this commit, under this same plan (its final step,
+per the approved scope), and the reply is captured but recording its *content* belongs to the next
+plan -- exactly the ambiguity the revised plan was built to avoid repeating.
+
 ## 2026-09-12 — Rosetta plan GO obtained and executed; GPT-PM returns BLOCKER on the G2 proposal
 
 Fresh Claude Code session (per the prior session's own recorded conclusion that its PM Bridge
