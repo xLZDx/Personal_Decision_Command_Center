@@ -289,9 +289,75 @@ const MUTATIONS = [
     to: "runGit(['diff', '--name-status', range]);",
   },
 
-  // CODEOWNERS is the only control that actually enforces anything here (merge authority; CI is
-  // detection), so dropping a path from it is the highest-consequence silent edit in the repo.
-  // These mutate the data rather than code, which is exactly right: the guard IS the assertion.
+  // The manifest bootstrap/amendment guard (closure-review BLOCKER 2, corrected to a
+  // pre-approved-hash-then-verify-EQUALITY model). Its whole value is refusing anything but a
+  // single manifest file whose bytes exactly match an operator-approved hash -- every mutation
+  // below widens what it lets through, the same direction a broken bootstrap check fails in as
+  // check-gate-scope.mjs.
+  {
+    label: 'check-manifest-proposal.mjs: accept a branch missing the trailing gate number',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'export const PROPOSAL_BRANCH_RE = /^manifest-proposal\\/([gG][0-9]+)$/;',
+    to: 'export const PROPOSAL_BRANCH_RE = /^manifest-proposal\\/([gG][0-9]*)$/;',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: accept an amendment branch missing the gate number too',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'export const AMENDMENT_BRANCH_RE = /^manifest-amendment\\/([gG][0-9]+)$/;',
+    to: 'export const AMENDMENT_BRANCH_RE = /^manifest-amendment\\/([gG][0-9]*)$/;',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: allow any number of changed files, not exactly one',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'if (changedPaths.length !== 1) {',
+    to: 'if (false) {',
+  },
+  {
+    label:
+      'check-manifest-proposal.mjs: stop checking the changed file is the expected manifest path',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: '} else if (changedPaths[0] !== expectedPath) {',
+    to: '} else if (false) {',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: admit a candidate with no approved hash set at all',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'if (!approvedHash) {',
+    to: 'if (false) {',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: skip the hash-equality check entirely (compare-nothing)',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: '} else if (approvedHash !== candidateHash) {',
+    to: '} else if (false) {',
+  },
+  {
+    label:
+      'check-manifest-proposal.mjs: treat candidateHash === undefined the same as a real match',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: 'if (candidateHash !== null) {',
+    to: 'if (candidateHash !== undefined) {',
+  },
+  {
+    label:
+      'check-manifest-proposal.mjs: run() treats a non-manifest branch as valid without checking',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: "if (!isManifestBranch) {\n    log('Not a manifest-proposal/amendment branch; ordinary gate resolution applies.');\n    return 0;\n  }",
+    to: 'if (!isManifestBranch) {\n    return 1;\n  }',
+  },
+  {
+    label: 'check-manifest-proposal.mjs: run() exits 0 despite an invalid proposal/amendment',
+    file: 'scripts/verify/check-manifest-proposal.mjs',
+    from: '  if (!valid) {\n    logError(`::error::This ${kind} PR is invalid:`);',
+    to: '  if (false) {\n    logError(`::error::This ${kind} PR is invalid:`);',
+  },
+
+  // CODEOWNERS declares intended ownership; it does not currently mechanically enforce anything
+  // (core/RISK_REGISTER.md R13: require_code_owner_review is measured false) -- but dropping a
+  // path from it still erases the audit-trail record of who is supposed to own that surface, which
+  // is exactly the highest-consequence silent edit this file can suffer regardless of enforcement
+  // state. These mutate the data rather than code, which is exactly right: the guard IS the
+  // assertion.
   {
     label: 'CODEOWNERS: comment out /docs/architecture/, unprotecting the TDD and its errata',
     file: '.github/CODEOWNERS',

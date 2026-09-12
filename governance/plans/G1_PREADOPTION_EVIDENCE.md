@@ -835,3 +835,30 @@ purpose was producing the two CI runs quoted above; `main` was never touched by 
 | ------- | ------------------------------------- | ------------- | ----------------------- |
 | A       | `README.md` (ordinary path)           | `34679875903` | REFUSE                  |
 | B       | `scripts/verify/check-gate-scope.mjs` | `34679958587` | REFUSE (identical text) |
+
+## 17. Real CI negative control: `GATE_ACTIVE` unset, produced incidentally by this remediation's own PR
+
+**FACT.** Not a deliberately staged control — the ordinary consequence of opening PR #19
+(`gate/g1-lifecycle-fix`, base `main` @ `26d3df2`) for review before the operator has bootstrapped
+the new `GATE_ACTIVE` variable this same PR introduces. Run `34687783026`, job `103537703713`, step
+"Resolve the gate this PR belongs to" **failed**, verbatim:
+
+```
+##[error]GATE_ACTIVE is not set. The operator must set this repository variable
+##[error]to the currently authorized gate label (e.g. G1) before any PR-declared
+##[error]gate can be trusted -- a declared gate with no operator-controlled
+##[error]active-gate binding has no enforced scope, regardless of that gate's
+##[error]own manifest/hash still existing.
+```
+
+No hash step and no scope step ran — refused at gate resolution itself, exactly as designed. This
+is the same bootstrap shape `GATE_MANIFEST_APPROVED_HASH_G1` already had: the mechanism fails
+closed until the operator sets the corresponding repository variable, and this run is that failure
+mode demonstrated on a real PR rather than only reasoned about. `verify` (the other required check)
+passed independently (run `34687783023`) — the failure is isolated to the new gate-resolution
+logic, not a broken build.
+
+**Still open**: the mirror case — `GATE_ACTIVE` set but not matching the PR's declared gate (the
+"may have been retired" message) — needs a deliberate control once `GATE_ACTIVE=G1` exists to set
+away from and back to, per `~/.claude/CLAUDE.md` §25 (a wrong value only ever makes the gate
+stricter). Not yet executed.

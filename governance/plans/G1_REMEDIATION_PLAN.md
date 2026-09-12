@@ -12,9 +12,35 @@ diff from Claude's own merge authority — still applied at that time). The `con
 real-CI negative control (§16) then ran both required attempts (run `34679875903`, run
 `34679958587`), both refused identically at gate resolution; PR #16 closed unmerged. **The same
 day, the operator removed §24's authority-surface carve-out globally** (`~/.claude/core/DECISION_LOG.md`
-D-005) — a follow-up doc-sync fix for the now-stale carve-out wording is in progress on branch
-`gate/g1-doc-sync` (GPT-PM `VERDICT: APPROVE` on scope). Remaining: land that doc-sync PR, a second
-fresh-context review, then the closure report (step 11).
+D-005) — the follow-up doc-sync fix for the now-stale carve-out wording merged as **PR #17**
+(`gate/g1-doc-sync` -> `860ae69`), and a separate fix for `main`'s own stale README status line
+merged as **PR #18** (`gate/g1-readme-fix` -> `26d3df2`).
+
+**A second fresh-context closure review then returned `VERDICT: BLOCKER`** (2 BLOCKER + 3 MAJOR,
+2026-09-12): (1) gate resolution bound the "which gate does this PR belong to" question purely to
+the PR-controlled branch name/PR body, with no operator-controlled lifecycle state — a PR could
+declare an already-retired gate's label and ride its still-valid manifest/hash; (2) with `main`'s
+ruleset now blocking every direct push (`bypass_actors: []`), there was no path left to bootstrap a
+brand-new, not-yet-adopted manifest the way `g1.yaml` itself was originally adopted; (3)-(5)
+`GATE_MANIFEST_INTEGRITY.md`'s own verification table still said two negative controls were
+"NOT DONE" though both were already demonstrated (§11, §12.1); no mutation coverage existed for a
+theoretical new guard; TDD.md §57(12) ("CI reports test count and coverage/diff changes") was
+unimplemented. All 5 independently re-verified against primary sources (git log/show/diff, `gh api`
+against the live ruleset, the manifest's own documented limitations) before any fix was designed.
+
+Remediated on branch **`gate/g1-lifecycle-fix`** (authorized via the operator's own explicit
+`AskUserQuestion` selection, since the PM Bridge chat channel was confirmed broken from this
+session and `review.js` was adopted as this session's review transport instead): a `GATE_ACTIVE`
+operator-controlled repo variable added to `governance.yml`'s gate-resolution step (fails closed if
+unset or mismatched); a `manifest-proposal/g<N>` branch-naming bootstrap path validated by the new
+`scripts/verify/check-manifest-proposal.mjs` (exactly one file, the not-yet-adopted manifest itself,
+no approved hash yet); `GATE_MANIFEST_INTEGRITY.md`'s stale table corrected to cite the real §11/
+§12.1 evidence; TDD.md §57(12) coverage reporting implemented (`@vitest/coverage-v8`,
+`scripts/verify/report-coverage.mjs`, wired into `ci.yml`); mutation tests added for the new guard
+(6 mutations, all killed, 44 total). Remaining: a clean review-round-2 verdict on this branch's
+exact head, the two real negative controls this branch's own new mechanisms need (a
+manifest-proposal PR actually admitting a valid candidate; a `GATE_ACTIVE` mismatch refusal), then
+the closure report (step 11).
 **Supersedes:** nothing. Commit `b784265` is **bootstrap implementation, not gate-approved work**.
 
 ## Why this plan exists
@@ -85,15 +111,18 @@ procedural and no document in this repository may claim otherwise.
 9. Negative-control PR tests (see below)                         DONE, 4 of 4 (2026-09-12)
 10. Fresh-context G1 review                                      round 1 DONE (BLOCKER+3 MAJOR,
                                                                         fixed, PR #15); round 2
-                                                                        pending doc-sync (below)
+                                                                        DONE (2 BLOCKER+3 MAJOR,
+                                                                        fixed on gate/g1-lifecycle-
+                                                                        fix, below); round 3 pending
 11. G1 closure report                                            pending
 ```
 
 **Step 10 addendum, 2026-09-12.** Round 1's remediation (PR #15) and the `control/g1-none-rejection`
-negative control (PR #16, both attempts refused) are both complete. A second, genuinely
-fresh-context review is still needed before closure — not yet requested, pending the doc-sync fix
-on `gate/g1-doc-sync` landing first, so the reviewer sees consistent documents rather than a known
-stale spot.
+negative control (PR #16, both attempts refused) are both complete. The doc-sync fix (PR #17) and
+the README fix (PR #18) then landed. **Round 2**, requested once those two PRs made the documents
+consistent again, returned `VERDICT: BLOCKER` (2 BLOCKER + 3 MAJOR — see the plan header above for
+the findings and the `gate/g1-lifecycle-fix` remediation). A third, genuinely fresh-context review
+is still needed before closure, against this branch's exact final head.
 
 **Status of step 2, measured on 2026-09-11 rather than assumed.** The operator took the second R12
 option: the repository is public (`gh repo view --json isPrivate` → `false`), which makes Actions
