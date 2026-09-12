@@ -11,9 +11,12 @@ baseline).
 
 ## 1. Roles
 
-- **Operator** — CEO / final business authority. Holds merge to `main`, production deploy credentials,
-  and everything the global CLAUDE.md §4/§20 reserves to the operator alone (deletion, real-money,
-  branch double-consent where applicable).
+- **Operator** — CEO / final business authority. Production deploy credentials, and everything the
+  global CLAUDE.md §4/§20 reserves to the operator alone (deletion, real-money, branch
+  double-consent where applicable, and the authority-surface merge class in §24). Merge to `main`
+  is procedural, not mechanically exclusive to the operator (`core/RISK_REGISTER.md` R13, measured:
+  a single GitHub identity, `require_code_owner_review: false`) — see §2 below for exactly when
+  Claude may perform an ordinary merge.
 - **GPT-PM** — Governance owner / final gate authority alongside the operator for this project. Reviews
   and approves/rejects each gate per `core/PLAN_MASTER_GATES.md`.
 - **Claude** — **IMPLEMENTER, not final approver.** See §2.
@@ -27,7 +30,13 @@ returns that gate's GO.
 
 Claude MUST NOT:
 
-- self-approve a gate, merge protected `main`, or use production deployment credentials;
+- self-approve a gate, merge on its own discretion, or use production deployment credentials.
+  Claude MAY perform an ordinary PR merge only under global `~/.claude/CLAUDE.md` §24's narrow
+  mechanism — a fresh, correlated GPT-PM `VERDICT: APPROVE` on the exact final head, every required
+  check green, mergeable, and the diff is not an authority-surface change (gate manifests,
+  operator-approvals, branch-protection/ruleset config, CODEOWNERS) — never for that
+  authority-surface class, which stays operator-only regardless of any APPROVE (§24's own
+  carve-out; live example: `.github/CODEOWNERS`);
 - silently expand MVP1 scope or add a source outside the fixed MVP1 list below;
 - weaken/delete tests to obtain green, or mark a reviewer finding closed without evidence;
 - change `SourcePolicy`/`RetentionPolicy`/security invariants without an ADR;
@@ -55,8 +64,10 @@ Completion of one gate does NOT authorize the next. Each gate has its own bindin
 and needs its own plan + GO before implementation, exactly like the global GO contract — this section
 narrows _scope_ (one gate, not "MVP1"), it does not relax the global mechanism.
 
-**Current state: G0 in progress.** See `governance/plans/` for the live plan and
-`core/DECISION_LOG.md` for what has actually been decided/closed so far.
+**Current state: G0 CLOSED (2026-09-10); G1 remediated, closure findings being resolved
+(2026-09-12).** See `core/PLAN_MASTER_GATES.md` for the authoritative per-gate status table and
+`core/DECISION_LOG.md` for what has actually been decided/closed so far — this line is a pointer,
+not the source of truth, and is the kind of line that goes stale; check the table if in doubt.
 
 ## 5. Review roles
 

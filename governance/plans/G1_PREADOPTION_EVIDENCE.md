@@ -684,3 +684,104 @@ approval hash has authorized itself. The boundary is held by choice, and saying 
 actions this section tracked — it is not itself a G1 closure verdict. G1 closes on its own
 fresh-context review and a `G1_CLOSURE_REPORT.md`, not by this checklist alone reaching zero
 remaining rows.
+
+## 14. `g1.yaml`'s own `status:` field is stale, and deliberately left that way
+
+**FACT, found during the fresh-context closure review (2026-09-12).** The manifest's `status:`
+field still reads
+`OPERATOR_DIRECTED_IMPLEMENTER_AUTHORED_CANDIDATE_AWAITING_OPERATOR_REVIEW_AND_HASH` — a
+pre-adoption label, even though the operator reviewed and adopted it on 2026-09-11 (§10). This is
+not fixed here, and should not be: `governance/gate-manifests/**/*.yaml` is the manifest's own
+first `forbidden_paths` entry (INV-28), so an implementer edit to this field — however cosmetic —
+would be exactly the self-authorization loop that entry exists to prevent, regardless of how
+narrow the edit looks.
+
+**What actually makes the manifest binding is unaffected by this field.** `governance.yml`'s hash
+step checks the file's `sha256sum` against the operator-controlled `GATE_MANIFEST_APPROVED_HASH_G1`
+repository variable — it never reads `status:`, `plan_hash`, or any other field's content (the
+manifest itself says as much: "the checker reads `allowed_paths` and `forbidden_paths` and NOTHING
+ELSE"). A stale status string sitting next to a correct, matching hash is inert to the mechanism;
+it is only misleading to a human reader who assumes the label reflects reality.
+
+**Disposition:** accepted as MINOR documentation debt, listed here rather than silently left
+unexplained. If the operator wants the label corrected, that is a manifest edit and needs the same
+review-and-rehash ceremony as any other change to this file — not a routine implementer fix.
+
+## 15. Fresh-context closure review, round 1: BLOCKER + 3 MAJOR, all independently verified and fixed
+
+**A fresh-context G1 closure request (2026-09-12), asking GPT-PM to re-verify the whole gate
+against live state rather than any earlier round's summary, returned `VERDICT: BLOCKER`** with one
+BLOCKER and three MAJOR findings. Each was independently re-verified against a primary source
+before any fix began (per `~/.claude/CLAUDE.md` §3/§23 — a reviewer's finding is a claim to check,
+not an instruction to act on unread), and every citation below is the file/line/command that
+verification actually used, not GPT-PM's own wording repeated back.
+
+**BLOCKER — the "Gate: NONE" ungated PR path could edit its own enforcement.** Read directly from
+`scripts/verify/check-floor-scope.mjs`: `FORBIDDEN_PATHS` listed
+`governance/gate-manifests/**`, `governance/operator-approvals/**`, `docs/architecture/TDD.md`,
+`.github/workflows/**`, `.github/CODEOWNERS` — and did **not** list `scripts/verify/**`, even
+though `.github/CODEOWNERS` already declared `/scripts/verify/ @xLZDx` operator-owned and
+`tests/policy/codeowners.test.mjs`'s `OPERATOR_OWNED` list included it too. Because
+`governance.yml` runs `node scripts/verify/check-floor-scope.mjs` from the PR's own checkout, an
+ungated ("Gate: NONE") PR editing that file to drop its own forbidden entry would have its EDITED
+version executed by CI, with nothing catching the edit — a self-modification hole, not merely a
+missing path. **Fix:** removed the "Gate: NONE" path entirely rather than patching the floor's
+forbidden list (patching would have left the same self-modifying-enforcement-code property intact
+for whatever the floor still allowed). Every PR now must resolve to a real adopted gate
+(`gate/g<N>-...` branch or a `Gate: G<N>` body line) or `governance.yml`'s gate-resolution step
+fails immediately, before any PR-controlled scope code executes at all.
+`scripts/verify/check-floor-scope.mjs` deleted; `tests/policy/floor-scope.test.mjs` rewritten (per
+GPT-PM's own remediation-approval instruction, not deleted) into a static regression suite proving
+the source no longer contains the removed path; the 4 corresponding entries in
+`scripts/verify/mutation-check.mjs` removed as dead weight. §16 below will record the real CI
+negative-control run ids proving a no-gate PR is refused, once `control/g1-none-rejection`'s two
+attempts have actually run after this remediation merges — not yet, and not part of this round's
+evidence.
+
+**MAJOR — CODEOWNERS and its test still claimed mechanical enforcement R13 had already
+disclaimed.** `.github/CODEOWNERS`'s own header said "This file is the control that actually
+enforces the governance invariant... CI checks are detection, merge authority is enforcement" and
+"G1's DoD requires evidence that it is actually on"; `tests/policy/codeowners.test.mjs`'s docstring
+said "CODEOWNERS is the only control that actually enforces the governance invariant (merge
+authority; CI is detection)." Both directly contradicted `core/RISK_REGISTER.md` R13's own binding
+resolution ("no document in this repository may claim that CODEOWNERS... mechanically separates
+implementer from operator") and the live, measured ruleset state
+(`require_code_owner_review: false`, `required_approving_review_count: 0`). **Fix:** both files
+corrected to state plainly that CODEOWNERS currently declares intended ownership without
+mechanically enforcing it; `docs/architecture/TDD_ERRATA.md` gained **E-002**, correcting TDD §57's
+"protected main, no direct merge permission" claim against the same measurement, and recording that
+`~/.claude/CLAUDE.md` §24's narrow merge mechanism is a real, already-executed one (PR #13, #14).
+Project `CLAUDE.md` and `AGENTS.md` also corrected: both previously said "merge protected main"
+unconditionally forbidden to Claude, which was stale against §24's mechanism already in active use
+this session.
+
+**MAJOR — several operating documents were still describing a G0-in-progress, no-code,
+no-manifest repository.** Confirmed stale, each against its own primary source: project `CLAUDE.md`
+line 58 ("Current state: G0 in progress"); `AGENTS.md` line 52 ("No code exists yet — this
+repository is at gate G0"); `governance/gate-manifests/README.md` line 15 ("No manifest exists
+yet"); `core/PLAN_MASTER_GATES.md`'s G0-section note on item O, still describing `forbidden_paths`
+and the hash-mismatch control as "have still never run." All four corrected to current state (the
+`PLAN_MASTER_GATES.md` note kept as an explicitly-labeled historical quote rather than deleted,
+since it was a real, dated observation at G0's own closure). `governance/gate-manifests/g1.yaml`'s
+own stale `status:` field was found in the same pass and is **not** part of this fix — §14 above
+records why it is left alone and accepted as MINOR debt instead.
+
+**MAJOR — 5 npm audit findings with no matching risk-register disposition.** `npm audit --json`
+confirmed exactly GPT-PM's citation: 3 moderate, 1 high, 1 critical, all in the
+`vitest`/`vite`/`esbuild` chain; `package.json` has no `dependencies` section at all (not an empty
+one — `node -e "console.log(require('./package.json').dependencies)"` prints `undefined`), and
+`vitest` is a `devDependencies` entry. **Fix:** `core/RISK_REGISTER.md` R14 added, stating the
+disposition precisely — not shipped as production runtime dependencies, but a real dev/CI-runner
+exposure, not "non-reachable" — with an explicit G8 exit condition (upgrade to `vitest` 5.x, a
+semver-major bump not taken in this remediation, or re-accept with fresh evidence).
+
+**What this section does NOT claim.** These four fixes close exactly the findings GPT-PM's BLOCKER
+review named — they are not a second, broader documentation sweep, and any other stale claim found
+later belongs to whichever gate discovers it, per this project's own "one sweep per gate" review
+discipline (`~/.claude/CLAUDE.md` §17).
+
+## 16. Real CI negative control: no-gate PR rejected at gate resolution
+
+Filled in once `control/g1-none-rejection`'s two sequential attempts (ordinary path, then
+`scripts/verify/**`) have run against the merged fix — see `governance/plans/G1_REMEDIATION_PLAN.md`
+for the live tracking; this section records the final run ids once both are captured.

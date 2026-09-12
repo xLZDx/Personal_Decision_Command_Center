@@ -5,6 +5,107 @@ Newest entries at the top.
 
 ---
 
+## 2026-09-12 — PR #15 round 2: VERDICT APPROVE (final); merge is operator-only, not Claude's
+
+GPT-PM's round-2 review of PR #15 (correlated, exact head `7fcd3b5`) returned `VERDICT: APPROVE`,
+final: all three round-1 findings correctly resolved, no regression, exact-head `Governance`
+(`34659687692`) and `verify` (`34659687719`) both green, PR mergeable.
+
+**This APPROVE does not authorize a Claude merge.** GPT-PM restated the constraint explicitly:
+because PR #15 changes `.github/CODEOWNERS`, it is an authority-surface diff under
+`~/.claude/CLAUDE.md` §24's own carve-out, which excludes that class from the implementer-merge
+mechanism regardless of how clean the APPROVE is. The merge is the operator's, not a routine
+approval to skip. Reported to the operator directly with the PR link.
+
+Once merged: the next step is the already-authorized `control/g1-none-rejection` branch (base =
+that merge's resulting `main`), two sequential attempts (no-gate + ordinary path, then no-gate +
+`scripts/verify/**`), both expected to REFUSE at gate resolution — the real-CI evidence
+`G1_PREADOPTION_EVIDENCE.md` §16 is reserved for.
+
+---
+
+## 2026-09-12 — PR #15 round 1: GPT-PM's 2 MAJOR + 1 MINOR on the remediation itself, fixed
+
+GPT-PM's round-1 review of PR #15 (`gate/g1-closure-blockers`, correlated, both required checks
+independently confirmed green on the exact head) returned `VERDICT: MAJOR` — the structural
+Gate:NONE fix itself was confirmed correct, but the write-up had three of its own defects:
+
+1. **MAJOR** — `CLAUDE.md`'s new §2 wording said "`.github/CODEOWNERS` and this file are both on
+   that list," accidentally adding CLAUDE.md itself as a fifth authority-surface category beyond the
+   four `~/.claude/CLAUDE.md` §24 actually names (gate manifests, operator-approvals,
+   branch-protection/ruleset config, CODEOWNERS). Fixed by removing the added clause; CODEOWNERS
+   stays the cited live example.
+2. **MAJOR** — `G1_PREADOPTION_EVIDENCE.md` §15 said "§16 below records the real CI negative-control
+   run ids" in the present tense, while §16 itself (correctly) says the run ids are filled in only
+   after `control/g1-none-rejection` actually executes post-merge. Fixed to future tense, explicit
+   that this is not yet part of this round's evidence.
+3. **MINOR** — `PLAN_MASTER_GATES.md`'s preserved historical note labeled itself "AS OF G0'S OWN
+   CLOSURE (2026-09-10)" while quoting a run "first observed on 2026-09-11" — a state dated one day
+   before the observation it describes could have existed. Relabeled as an early-G1 (2026-09-11)
+   snapshot instead of a G0-closure one.
+
+All three fixed on the same branch; no other scoped finding. Sent for round 2.
+
+---
+
+## 2026-09-12 — Fresh-context G1 closure review: VERDICT BLOCKER, remediated on gate/g1-closure-blockers
+
+A fresh-context G1 closure request (asking GPT-PM to re-verify against live state, not any earlier
+round's summary) returned `VERDICT: BLOCKER` with 1 BLOCKER + 3 MAJOR. Every finding was
+independently re-verified against a primary source before any fix began — see
+`governance/plans/G1_PREADOPTION_EVIDENCE.md` §15 for the full record, citations, and fixes. Short
+version:
+
+1. **BLOCKER** — `scripts/verify/check-floor-scope.mjs`'s `FORBIDDEN_PATHS` omitted
+   `scripts/verify/**`, and because `governance.yml` runs that script from the PR's own checkout, an
+   ungated "Gate: NONE" PR could edit the script to drop its own forbidden entry and CI would run
+   the edited version. **Fixed by removing the "Gate: NONE" path entirely** (not by widening the
+   forbidden list, which would have left the same self-modification property intact) — every PR now
+   must resolve to a real adopted gate or fail at gate resolution, before any PR-controlled code
+   runs. `check-floor-scope.mjs` deleted; `tests/policy/floor-scope.test.mjs` rewritten (per GPT-PM's
+   remediation-approval instruction) into a static regression suite; `mutation-check.mjs`'s 4 dead
+   entries removed.
+2. **MAJOR** — `.github/CODEOWNERS` and `tests/policy/codeowners.test.mjs` still claimed mechanical
+   enforcement ("the control that actually enforces... merge authority is enforcement") that
+   `core/RISK_REGISTER.md` R13 had already disclaimed. Both corrected; new `docs/architecture/
+TDD_ERRATA.md` E-002 corrects TDD §57's "protected main, no direct merge permission" against the
+   same live measurement; project `CLAUDE.md`/`AGENTS.md` corrected to describe the actual, narrow,
+   already-executing `~/.claude/CLAUDE.md` §24 merge mechanism instead of an unconditional ban.
+3. **MAJOR** — `CLAUDE.md`, `AGENTS.md`, `governance/gate-manifests/README.md`, and
+   `PLAN_MASTER_GATES.md`'s O-item note all still described a G0-in-progress, no-code,
+   no-manifest repository. Corrected to current state (the `PLAN_MASTER_GATES.md` note kept as an
+   explicit historical quote rather than deleted). `g1.yaml`'s own stale `status:` field was found
+   in the same pass and deliberately NOT touched — it is in the manifest's own `forbidden_paths`
+   (INV-28); recorded as accepted MINOR debt in `G1_PREADOPTION_EVIDENCE.md` §14.
+4. **MAJOR** — 5 `npm audit` findings (3 moderate/1 high/1 critical, all in the `vitest`/`vite`/
+   `esbuild` devDependency chain) had no matching risk-register disposition despite `ci.yml`'s own
+   comment pointing at one. New `core/RISK_REGISTER.md` R14: not shipped as production runtime
+   dependencies, but a real dev/CI-runner exposure (not "non-reachable"); G8 exit condition is
+   upgrade to `vitest` 5.x or re-accept with fresh evidence.
+
+**Revision cycle on the remediation plan itself, recorded because the correction mattered.** My
+first proposed fix for finding 1 was to just add `scripts/verify/**` to the floor's forbidden list.
+GPT-PM's own `VERDICT: CHANGES REQUIRED` caught that this does not close the hole — the checker
+code is still PR-controlled regardless of what its own list says, so a malicious diff could still
+remove the new entry before the check reads it. The structural fix (remove the ungated path
+entirely, forcing gate resolution to fail first) was GPT-PM's suggested minimal correction, adopted
+as-is after independently confirming (via `gh pr list --state all` across all 14 PRs in this repo's
+history) that removing "Gate: NONE" breaks nothing currently in use.
+
+**Branch authorization: `gate/g1-closure-blockers` (base `2681181`, merge-and-delete) and
+`control/g1-none-rejection` (base = that merge's resulting main, close-unmerged)**, both APPROVED
+by GPT-PM in the same ruling that approved the revised remediation plan, under
+`~/.claude/CLAUDE.md` §14 via §20.
+
+**Important limit on this approval, stated by GPT-PM and binding:** `gate/g1-closure-blockers`
+touches `.github/CODEOWNERS`, an authority-surface path under `~/.claude/CLAUDE.md` §24's own
+carve-out. Claude may implement, push, test, and get this PR reviewed by GPT-PM, but **may not
+merge it itself** — that specific merge is operator-only regardless of any APPROVE, because §24's
+implementer-merge mechanism explicitly excludes authority-surface diffs. Flagged to the operator
+directly when the PR is ready.
+
+---
+
 ## 2026-09-12 — PR #13 merged (VERDICT: APPROVE, round 3); S13's stale checklist corrected
 
 PR #13 (`gate/g1-evidence-update`) merged as `a2a2794` after GPT-PM's round-3, correlated,

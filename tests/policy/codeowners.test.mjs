@@ -9,14 +9,20 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * Paths whose contents can change what is BINDING on this project: what a gate may touch, what a
  * check does, what the architecture says, what the operating contract requires.
  *
- * CODEOWNERS is the only control that actually enforces the governance invariant (merge authority;
- * CI is detection). A path that can redefine the rules and is not on this list can be changed by an
- * implementer branch with no operator review at all.
+ * This file records which paths CODEOWNERS DECLARES operator-owned -- it is not currently a
+ * mechanical enforcement guarantee. core/RISK_REGISTER.md R12/R13 (measured, current as of
+ * 2026-09-12): the live ruleset on `main` has `require_code_owner_review: false` and
+ * `required_approving_review_count: 0`, so no platform control actually blocks a merge on this
+ * file's contents today. A path that can redefine the rules and is not on this list would have no
+ * DECLARED owner at all, which is the gap this test still catches -- but a path that IS on this
+ * list is not thereby mechanically protected; separation is procedural (implementer compliance
+ * plus core/DECISION_LOG.md's audit trail), per R13's own binding resolution that no document here
+ * may claim otherwise.
  *
- * This assertion exists because that happened twice in one gate: `scripts/verify/` held a
- * governance check while only `.github/` was protected, and `docs/architecture/TDD_ERRATA.md` was
- * created as a NORMATIVE document that outranks the TDD -- and left unprotected -- in the very
- * change that was tightening the boundary. GPT-PM caught the second one.
+ * This assertion exists because an undeclared gap happened twice in one gate: `scripts/verify/`
+ * held a governance check while only `.github/` was declared, and `docs/architecture/
+ * TDD_ERRATA.md` was created as a NORMATIVE document that outranks the TDD -- and left
+ * undeclared -- in the very change that was tightening the boundary. GPT-PM caught the second one.
  *
  * Adding a path here is cheap. Removing one should be loud, which is the point.
  */

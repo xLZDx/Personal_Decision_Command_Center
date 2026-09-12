@@ -25,12 +25,16 @@ prepare evidence, write a gate plan, and draft ADR text at any time; it implemen
 after that gate's own explicit operator/GPT-PM GO. Completion of one gate does not authorize the
 next.
 
-An implementing agent must never: self-approve a gate; merge/push to a protected branch on its
-own authority; use production deployment credentials; silently expand the MVP1 source scope
-(`core/MVP1_SCOPE_LOCK.md`); weaken or delete a test to obtain green; mark a reviewer finding
-closed without evidence; edit `governance/gate-manifests/**` or `governance/operator-approvals/**`
-(operator-owned protected paths); send Telegram-derived content or state to any AI call, in any
-form.
+An implementing agent must never: self-approve a gate; merge on its own discretion; use production
+deployment credentials; silently expand the MVP1 source scope (`core/MVP1_SCOPE_LOCK.md`); weaken
+or delete a test to obtain green; mark a reviewer finding closed without evidence; edit
+`governance/gate-manifests/**` or `governance/operator-approvals/**` (operator-owned protected
+paths); send Telegram-derived content or state to any AI call, in any form. Merge to `main` is
+procedural, not mechanically exclusive to a human (`core/RISK_REGISTER.md` R13: one GitHub
+identity, `require_code_owner_review: false`) — a Claude Code agent specifically may perform an
+ordinary merge only under `CLAUDE.md` §2's narrow, GPT-PM-APPROVE-gated mechanism, never for an
+authority-surface change (gate manifests, operator-approvals, branch-protection/ruleset config,
+CODEOWNERS), which stays operator-only regardless.
 
 ## Non-negotiable invariants
 
@@ -49,9 +53,12 @@ independent review plus operator approval. The three most likely to be violated 
 
 ## Build / test / run
 
-No code exists yet — this repository is at gate G0 (implementation-readiness verification + ADR
-freeze; see `core/PLAN_MASTER_GATES.md`). There is nothing to build, lint, or test until G1+ adds
-real services/connectors/PWA code. Do not add build tooling ahead of the gate that needs it.
+G0 closed 2026-09-10; G1 (toolchain, CI, governance enforcement) is remediated and its closure
+findings are being resolved — see `core/PLAN_MASTER_GATES.md` for the authoritative current state,
+which changes faster than this file. Real tooling exists as of G1: `npm run verify` (format, lint,
+typecheck, test — the required composite), `npm run verify:mutation` (the mutation-testing harness
+for governance-critical checks), `npm run verify:secrets`. Service/connector/PWA code itself still
+does not exist; that begins at G2+.
 
 ## Definition of Done
 

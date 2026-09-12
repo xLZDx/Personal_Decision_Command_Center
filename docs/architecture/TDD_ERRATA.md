@@ -58,6 +58,56 @@ the deviation as a footnote.
 
 ---
 
+## E-002 — §57's merge-authority mechanics are procedural, not mechanical
+
+**TDD location:** §57 "Enforced governance mechanics", items 1 and 3 (around line 2428-2430):
+"Protected `main` branch; Claude has no direct merge permission" and "Merge and production
+deployment require operator-controlled identity/token." Also line 2408, the "Claude MUST NOT" list:
+"merge protected main."
+
+**What the TDD says:** `main` is platform-protected against Claude merging it at all, and merge
+requires a separate operator-controlled credential Claude's implementation session does not hold.
+
+**What is true instead:** measured against the live ruleset `PDCC` on `main`
+(`governance/GATE_MANIFEST_INTEGRITY.md` §1, `core/RISK_REGISTER.md` R12/R13, both current as of
+2026-09-11): `required_approving_review_count` is **0** and `require_code_owner_review` is
+**false**. No platform control requires human approval before a merge, CODEOWNERS review is not
+enforced, and the implementer's own GitHub credential carries `admin` on this repository — it
+technically _can_ merge. Separation between implementer and operator is procedural (the
+implementer's compliance plus the audit trail in `core/DECISION_LOG.md`), not mechanical — R13's
+own binding resolution, worded so no document in this repository may claim otherwise.
+
+`~/.claude/CLAUDE.md` §24 (2026-09-11) narrows this further, not by weakening it: Claude MAY
+perform an ordinary PR merge, but only when a genuine, correlated GPT-PM `VERDICT: APPROVE` names
+the exact final head, every required check is green, the PR is mergeable, and the diff is not an
+authority-surface change (gate manifests, operator-approvals, branch-protection/ruleset config,
+CODEOWNERS) — that class stays operator-only regardless of any APPROVE. This is a real mechanism
+that has actually executed on this repository (PR #13, #14, both merged by Claude under exactly
+this condition, 2026-09-11/12) — it is not a hypothetical relaxation.
+
+**Why this matters as an erratum rather than a footnote.** A future session reading §57's concrete
+"protected, no direct merge permission" language literally would conclude a control exists that
+does not, understating the actual (procedural) risk and potentially deferring to a document instead
+of verifying live state — exactly the failure mode `~/.claude/CLAUDE.md` §3/§23 exist to prevent.
+INV-01..INV-31 are untouched: this entry corrects an implementation-mechanics claim, not an
+invariant, and does not authorize anything beyond what §24 already independently establishes.
+
+**Authority:** GPT-PM, G1 closure review (2026-09-12), `VERDICT: BLOCKER` (1) + `MAJOR` (3),
+remediation plan `VERDICT: APPROVE`. Verbatim, on the wording gap this entry closes:
+
+> MAJOR | claim | R13 is marked CLOSED on a condition that the live repository still violates:
+> multiple current documents/tests still present CODEOWNERS/merge authority as mechanical
+> enforcement. ... The frozen TDD still says "Protected main; Claude has no direct merge
+> permission" and "Merge … require[s] operator-controlled identity/token," while the current errata
+> contains only E-001 and does not correct this R13 reality. ... required change | Reconcile every
+> present-tense live claim ... Since TDD.md is frozen, add a normative erratum for the concrete §57
+> enforcement model rather than silently leaving the contradiction.
+
+**See also:** `governance/GATE_MANIFEST_INTEGRITY.md` §1 (the measurement), `core/RISK_REGISTER.md`
+R12/R13, `~/.claude/CLAUDE.md` §24, `core/DECISION_LOG.md` (2026-09-12).
+
+---
+
 ## Superseded figures recorded elsewhere, not duplicated here
 
 Two G0 findings correct numbers the TDD relies on. They are not restated as errata entries because

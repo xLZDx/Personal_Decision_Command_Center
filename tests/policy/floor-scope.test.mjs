@@ -1,138 +1,71 @@
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { ALLOWED_PATHS, FORBIDDEN_PATHS, run } from '../../scripts/verify/check-floor-scope.mjs';
-import { checkScope } from '../../scripts/verify/check-gate-scope.mjs';
+/**
+ * Regression suite for a removed control, not a live one.
+ *
+ * This file used to test `scripts/verify/check-floor-scope.mjs`, the enforcement code for a
+ * "Gate: NONE" ungated PR path. That path was removed as a G1 closure BLOCKER (GPT-PM review,
+ * 2026-09-12): the floor's own FORBIDDEN_PATHS did not include `scripts/verify/**`, so an ungated
+ * PR could edit the very script that was supposed to constrain it, and CI would run the EDITED
+ * version from that PR's own checkout and see nothing wrong -- widening the forbidden list would
+ * only have moved the same self-modification problem, not closed it. See
+ * `governance/plans/G1_PREADOPTION_EVIDENCE.md` for the full finding and its remediation.
+ *
+ * What this file asserts now: the source no longer contains an ungated path, and the file that
+ * used to implement it is gone. That is a STATIC guarantee, not a behavioral one -- the real
+ * behavioral proof (a genuine CI run showing a no-gate PR refused before any PR-controlled scope
+ * code executes) lives in `governance/plans/G1_PREADOPTION_EVIDENCE.md` as a real run id, on the
+ * `control/g1-none-rejection` branch, because bash embedded in a workflow YAML step has no module
+ * boundary a unit test can import and exercise directly.
+ */
 
-describe('the floor scope constants', () => {
-  it('declares the deliberate allow-everything scope, and nothing else', () => {
-    expect(ALLOWED_PATHS).toEqual(['**']);
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+describe('the "Gate: NONE" ungated path is gone, not merely narrowed', () => {
+  it('check-floor-scope.mjs no longer exists', () => {
+    expect(existsSync(join(REPO, 'scripts', 'verify', 'check-floor-scope.mjs'))).toBe(false);
   });
 
-  it('forbids exactly the governance-authority paths an ungated PR must not touch', () => {
-    expect(FORBIDDEN_PATHS).toEqual([
-      'governance/gate-manifests/**',
-      'governance/operator-approvals/**',
-      'docs/architecture/TDD.md',
-      '.github/workflows/**',
-      '.github/CODEOWNERS',
-    ]);
-  });
-});
-
-describe('the floor scope, via checkScope', () => {
-  it('forbids a per-gate manifest, so an ungated PR can never touch gate-scope authority', () => {
-    const { violations } = checkScope({
-      changedPaths: ['governance/gate-manifests/g1.yaml'],
-      allowed: ALLOWED_PATHS,
-      forbidden: FORBIDDEN_PATHS,
-    });
-    expect(violations).toEqual([
-      { path: 'governance/gate-manifests/g1.yaml', pattern: 'governance/gate-manifests/**' },
-    ]);
+  it('governance.yml no longer resolves a NONE gate from the PR body', () => {
+    const workflow = readFileSync(join(REPO, '.github', 'workflows', 'governance.yml'), 'utf8');
+    // Scoped to the executable body (from `jobs:` on) -- the header comment intentionally
+    // documents the removed "Gate: NONE" path and check-floor-scope.mjs by name, historically,
+    // the same way TDD_ERRATA.md E-001 names the workflow files it replaced.
+    const body = workflow.slice(workflow.indexOf('\njobs:'));
+    expect(body).not.toMatch(/gate="NONE"/);
+    expect(body).not.toMatch(/\[\[\s*"\$GATE"\s*==\s*"NONE"\s*\]\]/);
+    expect(body).not.toMatch(/\[\[\s*"\$gate"\s*==\s*"NONE"\s*\]\]/);
+    expect(body).not.toMatch(/steps\.gate\.outputs\.gate\s*!=\s*'NONE'/);
+    expect(body).not.toContain('check-floor-scope.mjs');
   });
 
-  it('forbids the enforcement workflow itself', () => {
-    const { violations } = checkScope({
-      changedPaths: ['.github/workflows/governance.yml'],
-      allowed: ALLOWED_PATHS,
-      forbidden: FORBIDDEN_PATHS,
-    });
-    expect(violations).toEqual([
-      { path: '.github/workflows/governance.yml', pattern: '.github/workflows/**' },
-    ]);
+  it('governance.yml still fails gate resolution unconditionally when no gate is named', () => {
+    const workflow = readFileSync(join(REPO, '.github', 'workflows', 'governance.yml'), 'utf8');
+    expect(workflow).toContain('This PR declares no gate');
+    expect(workflow).toMatch(/if \[\[ -z "\$gate" \]\]; then[\s\S]*?exit 1/);
   });
 
-  it('forbids CODEOWNERS, the operator-approvals record, and the frozen TDD baseline', () => {
-    const { violations } = checkScope({
-      changedPaths: [
-        '.github/CODEOWNERS',
-        'governance/operator-approvals/2026-09-11.md',
-        'docs/architecture/TDD.md',
-      ],
-      allowed: ALLOWED_PATHS,
-      forbidden: FORBIDDEN_PATHS,
-    });
-    expect(violations).toEqual([
-      { path: '.github/CODEOWNERS', pattern: '.github/CODEOWNERS' },
-      {
-        path: 'governance/operator-approvals/2026-09-11.md',
-        pattern: 'governance/operator-approvals/**',
-      },
-      { path: 'docs/architecture/TDD.md', pattern: 'docs/architecture/TDD.md' },
-    ]);
+  it('the manifest-hash step is no longer conditional on the gate NOT being NONE', () => {
+    const workflow = readFileSync(join(REPO, '.github', 'workflows', 'governance.yml'), 'utf8');
+    // Before this fix: `if: steps.gate.outputs.gate != 'NONE'` guarded this step. Its removal
+    // means the hash check now runs for every resolved gate unconditionally.
+    const hashStepIndex = workflow.indexOf(
+      'Verify manifest hash against operator-controlled state',
+    );
+    const nextStepIndex = workflow.indexOf('Check changed paths against the verified scope');
+    const hashStepBlock = workflow.slice(hashStepIndex, nextStepIndex);
+    expect(hashStepBlock).not.toMatch(/if:\s*steps\.gate\.outputs\.gate/);
   });
 
-  it('allows an ordinary evidence/docs path through the vacuous "**", warning surfaced', () => {
-    const { violations, vacuous } = checkScope({
-      changedPaths: ['scripts/probes/cloudflare-free-cpu/RESULTS.md', 'core/DECISION_LOG.md'],
-      allowed: ALLOWED_PATHS,
-      forbidden: FORBIDDEN_PATHS,
-    });
-    expect(violations).toEqual([]);
-    expect(vacuous).toEqual(['**']);
-  });
-});
-
-describe('run', () => {
-  const ENV = { BASE_SHA: 'aaaa', HEAD_SHA: 'bbbb' };
-
-  function invoke({ env = ENV, changed = [], listChangedPaths } = {}) {
-    const out = [];
-    const err = [];
-    const code = run({
-      env,
-      cwd: '/repo',
-      listChangedPaths: listChangedPaths ?? (() => changed),
-      log: (m) => out.push(m),
-      logError: (m) => err.push(m),
-    });
-    return { code, out: out.join('\n'), err: err.join('\n') };
-  }
-
-  it('exits 0 on an evidence-only diff', () => {
-    const { code, out } = invoke({ changed: ['scripts/probes/cloudflare-free-cpu/RESULTS.md'] });
-    expect(code).toBe(0);
-    expect(out).toContain('within the ungated floor');
-  });
-
-  it('exits 1 on a diff that edits the enforcement workflow', () => {
-    const { code, err } = invoke({ changed: ['.github/workflows/governance.yml'] });
-    expect(code).toBe(1);
-    expect(err).toContain('.github/workflows/governance.yml');
-  });
-
-  it('exits 1 on a diff that edits a gate manifest', () => {
-    const { code, err } = invoke({ changed: ['governance/gate-manifests/g2.yaml'] });
-    expect(code).toBe(1);
-    expect(err).toContain('governance/gate-manifests/g2.yaml');
-  });
-
-  it('exits 1 when a required environment variable is missing', () => {
-    for (const name of ['BASE_SHA', 'HEAD_SHA']) {
-      const env = { ...ENV, [name]: '' };
-      const { code, err } = invoke({ env, changed: ['README.md'] });
-      expect(code, `${name} missing must fail`).toBe(1);
-      expect(err).toContain(name);
-    }
-  });
-
-  it('exits 1 when listing the changed paths fails, instead of reporting an empty diff', () => {
-    const { code, err } = invoke({
-      listChangedPaths: () => {
-        throw new Error('not a git repository');
-      },
-    });
-    expect(code).toBe(1);
-    expect(err).toContain('could not list the changed paths');
-  });
-
-  it('warns, and still passes, because the floor is deliberately allow-everything', () => {
-    const { code, out } = invoke({ changed: ['anything/at/all.ts'] });
-    expect(code).toBe(0);
-    expect(out).toContain('::warning::');
-  });
-
-  it('exits 0 on an empty diff', () => {
-    expect(invoke({ changed: [] }).code).toBe(0);
+  it('the scope step always runs check-gate-scope.mjs, with no branch for a floor script', () => {
+    const workflow = readFileSync(join(REPO, '.github', 'workflows', 'governance.yml'), 'utf8');
+    const scopeStepIndex = workflow.indexOf('Check changed paths against the verified scope');
+    const scopeStepBlock = workflow.slice(scopeStepIndex);
+    expect(scopeStepBlock).toContain('check-gate-scope.mjs');
+    expect(scopeStepBlock).not.toContain('check-floor-scope.mjs');
+    expect(scopeStepBlock).not.toMatch(/if \[\[ "\$GATE" == "NONE" \]\]/);
   });
 });

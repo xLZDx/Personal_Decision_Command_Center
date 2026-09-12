@@ -12,8 +12,10 @@ becomes binding only once the operator adopts/commits the actual file here, and 
 hash against operator-controlled protected state outside the implementer's writable branch (G0
 item O designs that mechanism).
 
-No manifest exists yet — G0 has no manifest of its own by design (it is the readiness gate that
-produces the manifest mechanism for G1 onward).
+`g1.yaml` exists and is adopted (`GATE_MANIFEST_APPROVED_HASH_G1` set by the operator 2026-09-11,
+matching this file's committed bytes). G0 never had a manifest of its own by design — it is the
+readiness gate that produced this manifest mechanism for G1 onward, so there is nothing to author
+until a gate exists to scope.
 
 ## Accepted file format
 
