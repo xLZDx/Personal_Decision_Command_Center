@@ -180,8 +180,19 @@ sent to GPT-PM. Full verification record: `reports/G2_external_audit_verificatio
 
 ## Status
 
-Proposal stage. Nothing in `packages/`, `services/`, or `infra/migrations/` has been created or
-modified as a result of this document. Awaiting GPT-PM review of §2 (reconciler schema resolution),
-§4 (services/resolver scope), §5's two open items (devices table, provenance DAG hop depth), and
-§7's three additionally-verified defects (provenance fail-open, D1 telegram+ALLOW gap,
-idempotencyKey MESSAGE_UPDATED collision) before implementation begins.
+**2026-09-12: GPT-PM returned `VERDICT: BLOCKER`.** Full ruling in `core/DECISION_LOG.md`'s
+"Rosetta plan GO obtained and executed; GPT-PM returns BLOCKER on the G2 proposal" entry. Summary:
+§2's proposed pure-`processing_outbox` reconciler schema is rejected (must stay joined against
+`ingest_events.state`, index-covered, proven via `EXPLAIN QUERY PLAN`); §3's attempt-cap remedy is
+rejected (DLQ transition must be atomic with the failing processing transaction, not a separate
+reconciler claim); a new BLOCKER was found that none of the four agents or the audit caught
+(stale-`PROCESSING` recovery is unspecified -- no processing lease/claim-expiry protocol exists
+anywhere in this repo); plus 4 MAJORs (devices table drop, provenance fail-open needs discriminated
+node schemas not just a `!== 'ALLOW'` flip, telegram+ALLOW needs structural composite-FK
+enforcement, idempotency fix needs a contract/migration change) and one entirely new MAJOR
+(`ProvenanceValueSchema` doesn't match the frozen TDD's `ProvenanceValue<T>` shape). §4 and the
+provenance-DAG and budget-counter/routing-hints/CPU-measurement recommendations were confirmed.
+
+**Nothing in `packages/`, `services/`, or `infra/migrations/` has been created or modified.**
+**G2 implementation must not start** until a revised proposal addresses all 3 BLOCKERs and 4 MAJORs
+above and receives a fresh GPT-PM ruling under a new Rosetta plan/GO.

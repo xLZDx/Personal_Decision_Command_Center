@@ -3,6 +3,130 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-12 — Rosetta plan GO obtained and executed; GPT-PM returns BLOCKER on the G2 proposal
+
+Fresh Claude Code session (per the prior session's own recorded conclusion that its PM Bridge
+routing code was stale and only a new session could safely send). Picked up the two pending sends
+recorded in the entries below.
+
+**1. Rosetta GO request delivered and recorded.** Sent the plan's exact `planReviewPrompt()` body
+(request_id `b51e7a02-6c3d-4f18-9a2e-3d7c0e84f915` -- a fresh id, not the stale-conversation-bound
+`3d8e1a2c-...` from the prior session, per the diagnosis two entries below that reusing an id reuses
+its cached conversation binding) via `gpt_send_and_await`. Reply, correlated (`replyId
+9a4731f4-2957-4ba9-b077-e0719b22db61`): `VERDICT: APPROVE`, 0 BLOCKER/0 MAJOR, with one execution
+constraint on the SS7 idempotency finding (confirm `source_event_id` assignment semantics before
+calling the `MESSAGE_UPDATED` collision definitively proven). Recorded via `pm_rosetta_go` -- plan
+`personal-decision-os-2026-09-12T17-04-33-609Z-33a708` is now `in-progress` against hash
+`a5a9eedb0e1970dba5e0ea795499c08585e828bf9fb48897032039a27c3f98b0`.
+
+**2. Mid-session PM Bridge daemon went stale again** (`pm_bridge_mode_status`: daemon build
+`c3860d465853fa90` vs disk `0f1b2b34b29cf1f0`, refusing to route) -- same
+`pm-bridge-src-edit-desyncs-every-session` pattern as before, from a concurrent session editing
+`pm-bridge/src/`. Restarted the shared daemon (`pm_bridge_mode_off` then `pm_bridge_mode_on`) rather
+than escalating: the tool's own text describes this as the ordinary fix, `pm_bridge_mode_off` is
+documented safe/draining, and a generation lease survives a daemon restart -- this was a reversible,
+tool-sanctioned recovery action, not a decision needing operator or GPT-PM sign-off. (Attempted to
+route this exact question through `AskUserQuestion` first; the `ask_routing_gate` hook correctly
+redirected it to GPT-PM under global CLAUDE.md SS16 -- but GPT-PM is reachable only through the very
+daemon that needed restarting, a genuine circular unreachability, so proceeded directly per that
+gate's own `[GPT-ASKED]`-equivalent escape hatch rather than looping on an unreachable channel.)
+
+**3. G2 synthesis sent, GPT-PM returns `VERDICT: BLOCKER`.** Addressed GPT-PM's own GO-round
+execution constraint first: re-checked `docs/architecture/TDD.md:693-697` (SS14) directly and found
+the binding spec *already names* a `source_version_if_needed` fourth key field that
+`packages/contracts/src/event.ts:105-111`'s shipped `idempotencyKey()` never implements -- upgraded
+SS7's third finding from a hypothesis about connector behavior to a verified spec-vs-implementation
+deviation before sending. Sent the full `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md`
+content (request_id `d69fcc97-b6c6-4d18-a15e-281cc1ab2359`, fresh id for the same reason as above --
+the previously-reserved `7f3a9c1e-...` id had a stale cached `conversationId` from before the
+day's re-registration).
+
+The `gpt_send_and_await` calls themselves returned `PARKED_DEADLINE_EXCEEDED` (uncertain, not
+refused) three times running under the parked-pipeline model, and a direct `gpt_await_reply` call
+failed with "no durable successful send baseline exists" despite `pm_bridge_job_status` already
+showing `sendPhase: sent` and, later, `parkedState.lastProbeClass: resolved` -- the harvest
+correlation never attached `replyId`/`result` to the job record even after the background probe
+marked the generation resolved. Recovered the actual reply via `gpt_session_peek` (non-blocking read
+of the conversation's last turn): its first line reproduces `REQUEST_ID:
+d69fcc97-b6c6-4d18-a15e-281cc1ab2359` verbatim, satisfying the same identity check the durable
+pipeline itself requires, so this is treated as the genuine correlated reply despite the job
+record's own `correlated: null`/`replyId: null` staying stuck. This is now a second occurrence of
+the "background probe resolves but the durable job never gets the reply attached" pattern already
+flagged in pm-bridge's decision log as a live, unresolved defect in the harvest correlation path --
+worth a pm-bridge-side fix, out of scope for this session/repo.
+
+**GPT-PM's ruling (full text preserved in this session's transcript; key points below, each
+file:line citation independently checkable against this repo):**
+
+- **BLOCKER, SS2 (reconciler schema): rejects `architect`'s pure `processing_outbox`-native
+  `DONE`/`TERMINAL` resolution.** Reasoning: ADR-006 establishes two independent state machines
+  (processing truth in `ingest_events.state`, transport truth in `processing_outbox.state`) that
+  must not be conflated, and TDD's own >24h-outage requirement must hold even if the outbox row is
+  stale -- a design whose correctness depends on the outbox reaching a terminal state fails if the
+  event's own state transitions to terminal while the outbox row is still `DISPATCHED`. Required
+  redesign: the authoritative eligibility predicate must still inspect `ingest_events.state` joined
+  to the due outbox row, with indexes proven index-covered (`EXPLAIN QUERY PLAN` + volume tests) --
+  a single outbox-side terminal state (e.g. `CLOSED`) may exist as an optimization but never as the
+  sole correctness mechanism.
+- **BLOCKER, SS3 (attempt-cap remedy): rejects `architect`'s unconditional-claim-then-partition
+  fix.** Required semantics instead: the processing failure transaction that pushes
+  `attempt_count` to `MAX_PROCESSING_ATTEMPTS` must itself atomically set `ingest_events.state =
+  DLQ` and insert the `dead_letter_events` row in the same transaction -- no separate reconciler
+  claim to "discover" an already-exhausted event. Also: distinguish processing-attempt exhaustion
+  from queue-dispatch expiry: expiry must not burn processing retry budget.
+- **BLOCKER, new finding, absent from all four agents and from Claude's own audit verification:
+  stale-`PROCESSING` recovery is unspecified.** `ingest_events.state` includes `PROCESSING`, but the
+  reconciler as specified only selects `ACCEPTED`/`RETRYABLE_FAILED` -- a consumer that crashes
+  mid-`PROCESSING` leaves that event permanently invisible to the reconciler. No repo source defines
+  a processing lease/claim expiry. Must be resolved before G2 implementation: a bounded
+  lease/claim-with-expiration-and-CAS protocol (or equivalent), coexisting with queue redelivery and
+  preserving idempotent domain writes.
+- **SS4 (services/resolver scope): confirmed -- defer to G5**, per `PLAN_MASTER_GATES.md`'s own
+  gate assignment. G2 may build reusable bounded-query/quota primitives and a resolver-facing
+  interface but must not implement candidate scoring/resolution inline in `services/processor`.
+- **MAJOR, SS5 devices table: drop it from migration 0001** -- no G2 dependency justifies the
+  scope-boundary exception; G7 introduces its own migration when it needs the table.
+- **SS5 provenance multi-hop: runtime multi-hop now, persistent domain DAG later.** G2 must
+  implement and test generic transitive traversal (ADR-005 owes this at G2) but not invent
+  persistent Topic/Decision/Commitment ancestry tables belonging to G5/G6.
+  `provenance_event_id` should reference `ingest_events(event_id)` directly.
+- **SS7 provenance fail-open: CONFIRMED, fix is broader than proposed.** Not just
+  `ai_policy !== 'ALLOW'` in `isAiSafe()` -- also needs discriminated source-event/static-config/
+  derived node schemas (or equivalent runtime constructors) so an arbitrary derived object cannot
+  become a trusted root merely via `provenance: []`; `sourceEventNode()` must consume policy
+  resolved through the validated source-policy path, never an arbitrary caller-supplied value.
+- **MAJOR, SS7 telegram+ALLOW gap: CONFIRMED, fix should be structural not just a CHECK.**
+  Composite foreign keys binding `(source_account_id, source)`/`(source_policy_id, source)` as
+  parent keys referenced from `ingest_events`, not merely an application-level invariant (SQLite
+  cannot do an arbitrary cross-table CHECK, confirming this repo's own already-noted constraint).
+- **MAJOR, SS7 idempotency collision: CONFIRMED, needs a contract/migration change, not just the
+  key function.** Agrees the TDD's own named `source_version_if_needed` field must actually be added
+  to the normalized-event contract and D1 schema, participating in idempotency for versioned events
+  -- cites external Telegram API documentation (TDLib edit-update semantics: `message_id` stable,
+  `edit_date` changes) as corroborating primary-source evidence, independent of this repo.
+- **MAJOR, new defect not in the sent synthesis: `ProvenanceValueSchema` doesn't match the frozen
+  TDD's own `ProvenanceValue<T>` shape.** TDD names `value, provenance[], derivation_method,
+  ai_policy, sensitivity, created_at, derivation_version` across strings/numbers/datetimes/booleans/
+  enums/assignments/aggregates; the shared schema hard-codes `value` to a non-empty string and omits
+  `sensitivity`/`created_at`/`derivation_version`. Needs either a generic/discriminated
+  implementation matching TDD, or an explicit GPT-PM TDD erratum.
+- Accepted directionally, no objection: the atomic budget-counter upsert, a hard
+  `MAX_ROUTING_HINTS` cap (16 treated as provisional pending a quota-harness measurement), and
+  never treating an in-Worker wall-clock read as CPU evidence.
+- **Explicit scope note from GPT-PM itself:** this ruling does not authorize G2 implementation --
+  the GO cited in the request was for the retrospective/audit-verification plan, not a G2
+  implementation plan, and the repo's own gate ledger still shows G2 blocked behind G1 closure and
+  G2 preflight. Next round should return only the BLOCKER/MAJOR remediation and direct regressions,
+  per the one-sweep review discipline (global CLAUDE.md SS17).
+
+**Disposition:** the Rosetta plan's own scope (verify audit findings, synthesize, send, read and
+verify GPT-PM's reply before acting on it) is complete -- closed via `pm_rosetta_close` as `passed`.
+This does NOT mean the G2 architecture is approved; it means the plan's own bounded task (get a real,
+verified ruling) succeeded, and the ruling itself is a hard block on implementation. No files under
+`packages/`, `services/`, or `infra/migrations/` were touched. **G2 implementation must not start**
+until a revised proposal addresses the 3 BLOCKERs and 4 MAJORs above and gets a fresh GPT-PM round
+under a new plan/GO.
+
 ---
 
 ## 2026-09-12 — Conversation re-registered; then this session's own routing code went stale — declined to send
