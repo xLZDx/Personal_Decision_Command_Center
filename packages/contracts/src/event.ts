@@ -14,7 +14,15 @@ import { ProvenanceValueSchema, SourceSchema } from './provenance.js';
  * 2. The telegram/ai_policy refinement below -- see its own comment.
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
+
+/**
+ * G2 fix: an unbounded routing_hints array has no defined cost ceiling against the D1/quota
+ * budget this gate is explicitly bound by (each hint is its own row in
+ * ingest_event_routing_hints). 16 is a deliberately generous cap for MVP1's actual connectors
+ * (Gmail/Telegram), not a measured production ceiling -- revisit if a real connector needs more.
+ */
+export const MAX_ROUTING_HINTS = 16;
 
 export const EVENT_TYPES = ['MESSAGE_CREATED', 'MESSAGE_UPDATED', 'MESSAGE_DELETED'] as const;
 export const EventTypeSchema = z.enum(EVENT_TYPES);
@@ -37,6 +45,22 @@ export const ContentLocatorSchema = z
 
 export type ContentLocator = z.infer<typeof ContentLocatorSchema>;
 
+/**
+ * G2 fix (M4, closed across 2 rounds): a source-reported revision/version marker for the event's
+ * underlying content, mandatory for MESSAGE_UPDATED so idempotencyKey() can distinguish distinct
+ * edits of the same source event instead of colliding them onto one idempotency key. Uses a
+ * NON-MUTATING predicate rather than `.trim().min(1)`: Zod's `.trim()` is a string TRANSFORM that
+ * would silently alter the parsed value, which would then diverge from the ORIGINAL string used
+ * for storage/idempotency identity. Whitespace-only ("", " ", "\t") is rejected without changing
+ * a legitimately padded-but-real revision string.
+ */
+export const SourceVersionSchema = z
+  .string()
+  .refine((v) => v.trim().length > 0, {
+    message: 'source_version must not be empty or whitespace-only',
+  })
+  .nullable();
+
 const NormalizedEventBaseSchema = z
   .object({
     event_id: z.string().uuid(),
@@ -54,10 +78,12 @@ const NormalizedEventBaseSchema = z
      */
     received_at: z.string().datetime({ offset: true }),
     content_locator: ContentLocatorSchema,
-    routing_hints: z.array(ProvenanceValueSchema),
+    routing_hints: z.array(ProvenanceValueSchema).max(MAX_ROUTING_HINTS),
     source_policy_id: z.string().min(1),
     trace_id: z.string().min(1),
     schema_version: z.literal(SCHEMA_VERSION),
+    /** Nullable at the type level; MESSAGE_UPDATED's own superRefine below makes it mandatory. */
+    source_version: SourceVersionSchema,
   })
   .strict();
 
@@ -75,19 +101,30 @@ const NormalizedEventBaseSchema = z
  * (ADR-005, G2). Defence in depth -- do not let this check's existence justify weakening that one.
  */
 export const NormalizedEventSchema = NormalizedEventBaseSchema.superRefine((event, ctx) => {
-  if (event.source !== 'telegram') return;
+  if (event.source === 'telegram') {
+    event.routing_hints.forEach((hint, index) => {
+      if (hint.ai_policy === 'ALLOW') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['routing_hints', index, 'ai_policy'],
+          message:
+            'Telegram-sourced routing hints are always AI_DENY (INV-03/INV-04); ' +
+            'an ALLOW here means provenance was lost upstream.',
+        });
+      }
+    });
+  }
 
-  event.routing_hints.forEach((hint, index) => {
-    if (hint.ai_policy === 'ALLOW') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['routing_hints', index, 'ai_policy'],
-        message:
-          'Telegram-sourced routing hints are always AI_DENY (INV-03/INV-04); ' +
-          'an ALLOW here means provenance was lost upstream.',
-      });
-    }
-  });
+  // G2 fix (M4): MESSAGE_UPDATED structurally requires a non-null source_version, so
+  // idempotencyKey() has a real revision marker to distinguish distinct edits of the same source
+  // event -- not merely a documented convention a connector could silently skip.
+  if (event.event_type === 'MESSAGE_UPDATED' && event.source_version === null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['source_version'],
+      message: 'MESSAGE_UPDATED requires a non-null source_version to remain idempotent.',
+    });
+  }
 });
 
 export type NormalizedEvent = z.infer<typeof NormalizedEventBaseSchema>;
@@ -101,11 +138,25 @@ export type NormalizedEvent = z.infer<typeof NormalizedEventBaseSchema>;
  * a field can contain it. With a space, ("a b", "c") and ("a", "b c") both render as "a b c", so
  * two distinct source events would share one key and one of them would be silently dropped as a
  * duplicate. Provider ids are opaque strings -- assume nothing about their alphabet.
+ *
+ * G2 fix (M4): a 4th component, source_version, so a MESSAGE_UPDATED submission of a genuinely
+ * new revision gets a DIFFERENT idempotency key than the original MESSAGE_CREATED/prior revision,
+ * instead of colliding on (account, source_event_id, event_type) alone. A null source_version
+ * (MESSAGE_CREATED/MESSAGE_DELETED) is length-prefixed as the empty string, matching every other
+ * component's own length-prefix discipline.
  */
 export function idempotencyKey(
-  event: Pick<NormalizedEvent, 'source_account_id' | 'source_event_id' | 'event_type'>,
+  event: Pick<
+    NormalizedEvent,
+    'source_account_id' | 'source_event_id' | 'event_type' | 'source_version'
+  >,
 ): string {
-  return [event.source_account_id, event.source_event_id, event.event_type]
+  return [
+    event.source_account_id,
+    event.source_event_id,
+    event.event_type,
+    event.source_version ?? '',
+  ]
     .map((part) => `${part.length}:${part}`)
     .join('');
 }

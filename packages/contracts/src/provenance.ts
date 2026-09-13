@@ -37,19 +37,57 @@ export const AiPolicySchema = z.enum(AI_POLICIES);
 export type AiPolicy = z.infer<typeof AiPolicySchema>;
 
 /**
- * A single content-derived value, carrying the evidence that produced it.
- *
- * `provenance` holds source-event ids; an empty array is rejected because a value with no
- * recorded ancestry cannot be shown to be AI-safe, and silently treating "no ancestors" as
- * "no restricted ancestors" is exactly the fail-open the composition rule forbids.
+ * G2 V3 fix (GPT-PM MAJOR M5, Round 3): the TDD lists `sensitivity` as a normal, non-optional
+ * member of `ProvenanceValue<T>`, but its VALUE SET is not ratified anywhere -- so this is a
+ * required, non-empty opaque string, not an invented LOW/MEDIUM/HIGH enum. A closed vocabulary is
+ * a separate, later decision GPT-PM explicitly declined to make on this project's behalf.
  */
-export const ProvenanceValueSchema = z
-  .object({
-    value: z.string().min(1),
-    provenance: z.array(z.string().min(1)).min(1),
-    derivation_method: DerivationMethodSchema,
-    ai_policy: AiPolicySchema,
-  })
-  .strict();
+export const SensitivitySchema = z.string().min(1);
+export type Sensitivity = z.infer<typeof SensitivitySchema>;
 
-export type ProvenanceValue = z.infer<typeof ProvenanceValueSchema>;
+/**
+ * G2 V3 fix (GPT-PM MAJOR M5, Round 2): `provenance` is unconditionally non-empty EXCEPT for a
+ * STATIC_CONFIG-derived value, which is structurally licensed to have zero ancestors -- matching
+ * packages/provenance's StaticConfigNodeSchema exactly, not merely by convention.
+ */
+export function provenanceValueSchema<T extends z.ZodTypeAny>(valueSchema: T) {
+  return z
+    .object({
+      value: valueSchema,
+      provenance: z.array(z.string().min(1)),
+      derivation_method: DerivationMethodSchema,
+      ai_policy: AiPolicySchema,
+      sensitivity: SensitivitySchema,
+      created_at: z.string().datetime({ offset: true }),
+      derivation_version: z.number().int().positive(),
+    })
+    .strict()
+    .superRefine((v, ctx) => {
+      if (v.derivation_method !== 'STATIC_CONFIG' && v.provenance.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['provenance'],
+          message:
+            'Non-STATIC_CONFIG values must carry at least one provenance id; only a ' +
+            'STATIC_CONFIG-derived value may be a genuine zero-ancestor root.',
+        });
+      }
+    });
+}
+
+export const StringProvenanceValueSchema = provenanceValueSchema(z.string().min(1));
+export type StringProvenanceValue = z.infer<typeof StringProvenanceValueSchema>;
+
+export const NumberProvenanceValueSchema = provenanceValueSchema(z.number());
+export const DatetimeProvenanceValueSchema = provenanceValueSchema(
+  z.string().datetime({ offset: true }),
+);
+export const BooleanProvenanceValueSchema = provenanceValueSchema(z.boolean());
+
+export function enumProvenanceValueSchema<T extends [string, ...string[]]>(values: T) {
+  return provenanceValueSchema(z.enum(values));
+}
+
+/** Kept for callers that only need the legacy string-only shape without importing the factory. */
+export const ProvenanceValueSchema = StringProvenanceValueSchema;
+export type ProvenanceValue = StringProvenanceValue;

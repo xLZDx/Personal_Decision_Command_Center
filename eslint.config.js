@@ -30,13 +30,43 @@ export default [
       // usual way it gets there. Probe scripts are ignored above; they log by design.
       'no-console': 'error',
 
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
     },
   },
   {
     files: ['**/tests/**/*.ts'],
     rules: {
       'no-console': 'off',
+    },
+  },
+  {
+    // G2: domain/service code runs identically under Node (tests) and the Cloudflare Workers
+    // runtime (production) -- both provide these Web Platform globals ambiently, with no import
+    // needed. Deliberately NOT including `process` here: Workers has no such global, so relying on
+    // it in this code would be a real portability bug the previous packages never had a chance to
+    // introduce (they used none of these runtime APIs at all).
+    files: ['packages/domain/**/*.ts', 'services/**/*.ts'],
+    languageOptions: {
+      globals: {
+        crypto: 'readonly',
+        TextEncoder: 'readonly',
+        URL: 'readonly',
+      },
+    },
+  },
+  {
+    // Test-only tooling: Node-only globals are fine here since this package never ships to Workers.
+    files: ['packages/testkit/**/*.ts'],
+    languageOptions: {
+      globals: {
+        crypto: 'readonly',
+        TextEncoder: 'readonly',
+        URL: 'readonly',
+        process: 'readonly',
+      },
     },
   },
   {

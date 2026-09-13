@@ -1,0 +1,43 @@
+export { isUniqueConstraintError } from './errors.js';
+
+export { ingestEvent } from './ingest.js';
+export type { IngestOutcome } from './ingest.js';
+
+export { shouldMoveToDlq, moveToDlq, moveToRetryableFailed } from './transitions.js';
+export type { LeaseFence, FailureContext, RetryableFailureContext } from './transitions.js';
+
+export { claimLease, renewLease, completeProcessing, failProcessing } from './lease.js';
+export type {
+  ClaimOptions,
+  ClaimResult,
+  HeartbeatOptions,
+  CompleteOptions,
+  FailOptions,
+  FailResult,
+} from './lease.js';
+
+export { recoverStaleLeases } from './lease-recovery.js';
+export type { RecoverStaleLeasesOptions, RecoveredLease } from './lease-recovery.js';
+
+export { HARD_BUDGET_CEILING, reserveBudget } from './budget.js';
+export type { ReserveBudgetOptions, ReserveBudgetResult } from './budget.js';
+
+export { reconcileDispatch } from './reconciler.js';
+export type { ReconcileDispatchOptions, ReconcileDispatchResult } from './reconciler.js';
+
+export {
+  verifyHmacSignature,
+  signHmac,
+  canonicalSigningPayload,
+  sha256Hex,
+  isTimestampWithinWindow,
+} from './auth/hmac.js';
+export { reserveNonce, cleanupExpiredNonces } from './auth/nonce.js';
+export type { ReserveNonceOptions } from './auth/nonce.js';
+export { lookupSigningKeyStatus } from './auth/keys.js';
+export type { SigningKeyLookupOptions, SigningKeyStatus } from './auth/keys.js';
+export { authenticateIngestRequest } from './auth/authenticate.js';
+export type {
+  AuthenticateIngestRequestOptions,
+  AuthenticateIngestRequestResult,
+} from './auth/authenticate.js';

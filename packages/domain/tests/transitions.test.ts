@@ -1,0 +1,207 @@
+import { describe, expect, it } from 'vitest';
+import { createTestD1, loadG2Schema, seedBaselineAccounts, seedEvent } from '@pdos/testkit';
+
+import { moveToDlq, moveToRetryableFailed, shouldMoveToDlq } from '../src/transitions.js';
+
+const MAX_ATTEMPTS = 5;
+
+describe('shouldMoveToDlq', () => {
+  it('is true for PERMANENT_FAILURE regardless of attempt count', () => {
+    expect(shouldMoveToDlq('PERMANENT_FAILURE', 1, MAX_ATTEMPTS)).toBe(true);
+  });
+  it('is false for RETRYABLE_FAILURE below the cap', () => {
+    expect(shouldMoveToDlq('RETRYABLE_FAILURE', 2, MAX_ATTEMPTS)).toBe(false);
+  });
+  it('is true for RETRYABLE_FAILURE at the cap', () => {
+    expect(shouldMoveToDlq('RETRYABLE_FAILURE', MAX_ATTEMPTS, MAX_ATTEMPTS)).toBe(true);
+  });
+});
+
+async function setupProcessingEvent(eventId: string, attemptCount: number, token = 'token-A') {
+  const db = createTestD1(loadG2Schema());
+  const accounts = await seedBaselineAccounts(db);
+  await seedEvent(db, accounts, {
+    eventId,
+    state: 'PROCESSING',
+    attemptCount,
+    leaseOwner: 'worker-1',
+    leaseToken: token,
+    leaseExpiresAt: '2026-09-13T00:02:00.000Z',
+  });
+  await db
+    .prepare(
+      'INSERT INTO processing_outbox (event_id, state, dispatch_count, next_attempt_at, dispatched_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    .bind(
+      eventId,
+      'DISPATCHED',
+      1,
+      '2026-09-13T00:00:00.000Z',
+      '2026-09-13T00:00:00.000Z',
+      '2026-09-13T00:00:00.000Z',
+    )
+    .run();
+  await db
+    .prepare(
+      'INSERT INTO processing_attempts (attempt_id, event_id, attempt_number, started_at, processor_version, trace_id) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    .bind('attempt-1', eventId, attemptCount, '2026-09-13T00:00:00.000Z', 'proc-v1', 'trace-1')
+    .run();
+  return db;
+}
+
+describe('moveToDlq', () => {
+  it('transitions the event to DLQ, closes the outbox, writes exactly one dead_letter_events row', async () => {
+    const db = await setupProcessingEvent('ev-1', 5);
+    const ok = await moveToDlq(db, {
+      eventId: 'ev-1',
+      fence: { token: 'token-A' },
+      now: '2026-09-13T00:03:00.000Z',
+      errorClass: 'TimeoutError',
+      errorCode: 'E_TIMEOUT',
+      processorVersion: 'proc-v1',
+      traceId: 'trace-1',
+    });
+    expect(ok).toBe(true);
+
+    const event = await db
+      .prepare('SELECT state, processing_lease_token FROM ingest_events WHERE event_id = ?')
+      .bind('ev-1')
+      .first<{ state: string; processing_lease_token: string | null }>();
+    expect(event).toEqual({ state: 'DLQ', processing_lease_token: null });
+
+    const outbox = await db
+      .prepare('SELECT state FROM processing_outbox WHERE event_id = ?')
+      .bind('ev-1')
+      .first<{ state: string }>();
+    expect(outbox?.state).toBe('CLOSED');
+
+    const dlqRows = await db
+      .prepare('SELECT COUNT(*) as n FROM dead_letter_events WHERE event_id = ?')
+      .bind('ev-1')
+      .first<{ n: number }>();
+    expect(dlqRows?.n).toBe(1);
+
+    const attempt = await db
+      .prepare('SELECT outcome, finished_at FROM processing_attempts WHERE event_id = ?')
+      .bind('ev-1')
+      .first<{ outcome: string; finished_at: string }>();
+    expect(attempt?.outcome).toBe('PERMANENT_FAILURE');
+    expect(attempt?.finished_at).not.toBeNull();
+  });
+
+  it('returns false and makes no change when the fenced token does not match (lost race)', async () => {
+    const db = await setupProcessingEvent('ev-2', 5, 'token-REAL');
+    const ok = await moveToDlq(db, {
+      eventId: 'ev-2',
+      fence: { token: 'token-STALE' },
+      now: '2026-09-13T00:03:00.000Z',
+      errorClass: 'TimeoutError',
+      errorCode: 'E_TIMEOUT',
+      processorVersion: 'proc-v1',
+      traceId: 'trace-1',
+    });
+    expect(ok).toBe(false);
+
+    const event = await db
+      .prepare('SELECT state FROM ingest_events WHERE event_id = ?')
+      .bind('ev-2')
+      .first<{ state: string }>();
+    expect(event?.state).toBe('PROCESSING');
+  });
+
+  it('produces exactly one dead_letter_events row under a concurrent replay racing the same event', async () => {
+    const db = await setupProcessingEvent('ev-3', 5);
+    const call = () =>
+      moveToDlq(db, {
+        eventId: 'ev-3',
+        fence: { token: 'token-A' },
+        now: '2026-09-13T00:03:00.000Z',
+        errorClass: 'TimeoutError',
+        errorCode: 'E_TIMEOUT',
+        processorVersion: 'proc-v1',
+        traceId: 'trace-1',
+      });
+
+    // Two "concurrent" attempts against the SAME fence -- the test D1 shim serializes writers just
+    // like real D1 does, so this proves the self-conditioning NOT EXISTS guard, not a race outcome
+    // that depends on timing.
+    const [first, second] = await Promise.all([call(), call()]);
+    expect([first, second].filter(Boolean)).toHaveLength(1);
+
+    const dlqRows = await db
+      .prepare('SELECT COUNT(*) as n FROM dead_letter_events WHERE event_id = ?')
+      .bind('ev-3')
+      .first<{ n: number }>();
+    expect(dlqRows?.n).toBe(1);
+  });
+
+  it('requireExpiredAsOf fences against a lease renewed after the token was observed', async () => {
+    const db = await setupProcessingEvent('ev-4', 5, 'token-A');
+    // Simulate the live processor's own heartbeat extending the lease PAST "now" -- same token,
+    // later expiry -- between when the sweep observed the row and when it mutates.
+    await db
+      .prepare('UPDATE ingest_events SET processing_lease_expires_at = ? WHERE event_id = ?')
+      .bind('2026-09-13T00:10:00.000Z', 'ev-4')
+      .run();
+
+    const ok = await moveToDlq(db, {
+      eventId: 'ev-4',
+      fence: { token: 'token-A', requireExpiredAsOf: '2026-09-13T00:03:00.000Z' },
+      now: '2026-09-13T00:03:00.000Z',
+      errorClass: 'LEASE_EXPIRED',
+      errorCode: 'STALE_LEASE_RECOVERY_AT_CAP',
+      processorVersion: 'sweep',
+      traceId: 'trace-1',
+    });
+    expect(ok).toBe(false);
+
+    const event = await db
+      .prepare('SELECT state FROM ingest_events WHERE event_id = ?')
+      .bind('ev-4')
+      .first<{ state: string }>();
+    expect(event?.state).toBe('PROCESSING');
+  });
+});
+
+describe('moveToRetryableFailed', () => {
+  it('transitions to RETRYABLE_FAILED, reopens the outbox to RETRY_PENDING, clears the lease', async () => {
+    const db = await setupProcessingEvent('ev-5', 2);
+    const ok = await moveToRetryableFailed(db, {
+      eventId: 'ev-5',
+      fence: { token: 'token-A' },
+      now: '2026-09-13T00:03:00.000Z',
+      nextAttemptAt: '2026-09-13T00:05:00.000Z',
+      errorClass: 'NetworkError',
+      errorCode: 'E_NET',
+    });
+    expect(ok).toBe(true);
+
+    const event = await db
+      .prepare(
+        'SELECT state, processing_lease_token, processing_lease_expires_at FROM ingest_events WHERE event_id = ?',
+      )
+      .bind('ev-5')
+      .first<{
+        state: string;
+        processing_lease_token: string | null;
+        processing_lease_expires_at: string | null;
+      }>();
+    expect(event).toEqual({
+      state: 'RETRYABLE_FAILED',
+      processing_lease_token: null,
+      processing_lease_expires_at: null,
+    });
+
+    const outbox = await db
+      .prepare('SELECT state, next_attempt_at FROM processing_outbox WHERE event_id = ?')
+      .bind('ev-5')
+      .first<{ state: string; next_attempt_at: string }>();
+    expect(outbox).toEqual({ state: 'RETRY_PENDING', next_attempt_at: '2026-09-13T00:05:00.000Z' });
+
+    const dlqRows = await db
+      .prepare('SELECT COUNT(*) as n FROM dead_letter_events')
+      .first<{ n: number }>();
+    expect(dlqRows?.n).toBe(0);
+  });
+});

@@ -3,6 +3,86 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G2 implementation, checkpoint 1: contracts + provenance + domain + testkit, 148
+new tests, all green
+
+**Context.** Operator gave a standing, explicit, broad authorization to proceed autonomously
+through G6's completion without returning for routine confirmation (verbatim: "полностью
+автономно до конца МВП1... не трогай меня"), continuing to record every manifest/approval/PR/push.
+This entry is the first substantive implementation checkpoint under that authorization, on branch
+`gate/g2-implementation` (base `origin/main` @ `714874fef3bdb09e9b3075f4621c4f4d32178954`, the
+merged `manifest-proposal/g2` commit), under the approved Rosetta plan
+`personal-decision-os-2026-09-13T06-29-26-148Z-20280d` (hash
+`94031e52732abc334c102e2ec625474119978ce81c31e22d8d36ac114c72990f`).
+
+**What was built, in dependency order:**
+- `infra/migrations/0001_ingest_outbox.sql` — the 13-table G2 schema (rewritten per the plan's own
+  5 review rounds; see the entries below for the specific fixes), verified by actually applying it
+  to a real SQLite engine.
+- `packages/contracts` — `provenance.ts` (generic `provenanceValueSchema<T>` factory, required
+  `sensitivity`), `event.ts` (`SCHEMA_VERSION` 4, `MAX_ROUTING_HINTS`, non-mutating
+  `SourceVersionSchema`, `source_version` folded into `idempotencyKey()`).
+- `packages/provenance` — `dag.ts` rewritten to a discriminated-union `ProvenanceNodeSchema`
+  (`SOURCE_EVENT`/`STATIC_CONFIG`/`DERIVED`), a `safeParse`-validated `isAiSafe` with an explicit
+  `ai_policy !== 'ALLOW'` fail-closed check (not `!== 'DENY'`), and `sourceEventNode` resolving
+  `ai_policy` from a `SourcePolicyLookup` with a `event.source` vs. resolved-policy `source`
+  cross-check. New `source-policy.ts` (`SourcePolicyRecordSchema`/`SourcePolicyLookup`).
+- **New `packages/testkit`** — a D1Database-shaped adapter over `node:sqlite`
+  (`createTestD1`/`loadG2Schema`), since Miniflare/wrangler are not installed in this repo (a
+  deliberate scope decision, not an oversight: G2's own scope is the domain logic, not the
+  Cloudflare deploy tooling). Two non-obvious fixes needed to make the shim behave like real D1:
+  (1) `node:sqlite` cannot be statically `import`ed under vitest/vite (Vite's builtin-module list
+  predates it) — resolved via `process.getBuiltinModule('node:sqlite')`, saved as memory
+  `vitest-vite-lacks-node-sqlite-builtin.md`; (2) `batch()` must serialize concurrent calls the way
+  real D1's single-writer model does, or two calls issued without awaiting each other throw
+  "cannot start a transaction within a transaction" — fixed with a FIFO promise-chain queue inside
+  `createTestD1`, verified by the concurrent-replay tests below actually exercising it.
+- **New `packages/domain`** — the actual G2 pipeline logic: `ingest.ts` (idempotent insert via a
+  single D1 `batch()`, UNIQUE-constraint collision on `idempotency_key` resolved to an
+  `ALREADY_ACCEPTED` no-op rather than an error); `transitions.ts` (`moveToDlq`/
+  `moveToRetryableFailed`, the ONE shared atomic primitive used by both the live processor's own
+  failure path and the cron stale-lease-recovery sweep — the DLQ write self-conditions on
+  `ingest_events`' CURRENT state plus a `NOT EXISTS` guard on `dead_letter_events`' own PRIMARY KEY,
+  so a concurrent replay produces exactly one record regardless of which caller's fenced UPDATE
+  actually won); `lease.ts` (claim issues a fresh token and never reuses one; heartbeat renews
+  expiry WITHOUT rotating the token, matching the schema's own documented behavior; complete/fail
+  are token-only fenced since the live processor holds a currently-valid lease by definition);
+  `lease-recovery.ts` (the sweep fences on BOTH the observed token AND a live re-check of
+  `processing_lease_expires_at <= now` — the Round-4 BLOCKER fix: a token-only fence would let a
+  sweep steal a lease a live heartbeat had just legitimately renewed); `budget.ts` (the
+  self-bootstrapping atomic UPSERT reservation, cap validated against the schema's absolute 2500
+  ceiling before ever touching D1); `reconciler.ts` (the HARD_ZERO dispatch loop — budget is
+  reserved and the outbox row marked DISPATCHED BEFORE any real Queue send would happen, and once
+  budget is exhausted every remaining fetched candidate this cycle is marked `BUDGET_DEFERRED`, not
+  silently skipped); `auth/{hmac,nonce,keys,authenticate}.ts` (the generic HMAC ingest-boundary —
+  Web Crypto `crypto.subtle`, atomic nonce reservation via `ON CONFLICT DO NOTHING` against
+  `ingest_nonces`' own composite PRIMARY KEY, metadata-only key-version lookup, and an orchestrator
+  that deliberately checks key validity and the signature BEFORE reserving the nonce, so a garbage-
+  signed replay of an intercepted timestamp+nonce pair can never burn the real sender's nonce).
+- `eslint.config.js` — added scoped `globals` blocks for `packages/domain/**`+`services/**`
+  (`crypto`/`TextEncoder`/`URL` — Web Platform APIs identical under Node and Workers) and
+  `packages/testkit/**` (same plus `process`, Node-only since this package never ships to Workers);
+  added `varsIgnorePattern`/`ignoreRestSiblings` to `no-unused-vars` for the rest-sibling-omission
+  destructuring pattern used in `event.test.ts`. First gate to write actual runtime code, so the
+  first to need these — not scope creep, a genuine prior gap with nothing to exercise it yet.
+
+**Verification:** `npx tsc --noEmit` clean; `npx eslint .` clean; `npx prettier --check` clean for
+every file this checkpoint touched (a handful of pre-existing, untouched governance/ADR markdown
+files remain non-conforming from before this branch — confirmed via `git status` showing zero
+diff on them — left alone rather than reformatted, since reformatting `governance/gate-manifests/
+g2.yaml` specifically would change its hash against the already-set `GATE_MANIFEST_APPROVED_HASH_G2`
+repo variable); full `npx vitest run` — 256/256 tests passing across the whole repo (148 new this
+checkpoint: 41 domain, 33 auth, 6 testkit self-tests, 19+5 provenance, 39+16 contracts, plus the
+pre-existing 108 governance-policy tests untouched and still green).
+
+**Not yet done** (tracked, not forgotten): `services/ingest`, `services/processor`, their
+`infra/cloudflare/**` wrangler configs; the resilience/quota/integration vitest suites translating
+every scratch-validated and GPT-PM-mandated regression into an executed, mutation-proven test;
+`npm run verify`'s full pipeline (format/lint/typecheck/test — each already verified individually
+above, not yet run as the single combined command); the internal specialist review
+(`database-reviewer`/`security-reviewer`/`type-design-analyzer`) required before this goes to
+GPT-PM per §17's sequencing; then the GPT-PM gate-level review itself.
+
 ## 2026-09-12/13 — G2 Revision 2: 3-agent redesign, executably validated, Rosetta plan revised
 after GPT-PM's own plan-level BLOCKER, GO obtained, V2 proposal sent
 
