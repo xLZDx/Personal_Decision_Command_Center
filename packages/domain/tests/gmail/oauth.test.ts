@@ -1,5 +1,6 @@
 /* global crypto, TextEncoder, btoa */
 import { describe, expect, it } from 'vitest';
+import type { D1Database } from '@cloudflare/workers-types';
 import { createTestD1, loadG3Schema, seedBaselineAccounts, FIXTURE_NOW } from '@pdos/testkit';
 
 import { importKek, decryptRefreshToken } from '../../src/gmail/crypto.js';
@@ -503,6 +504,112 @@ describe('disconnectGmailAccount', () => {
         .bind(accounts.gmailAccountId)
         .first();
       expect(row).toBeNull();
+    },
+  );
+
+  it(
+    "GPT-PM round-1 MAJOR #1: a concurrent reconnect racing between disconnect's initial SELECT " +
+      'and its local DELETE is NOT destroyed -- disconnect reports SUPERSEDED_BY_RECONNECT and the ' +
+      'freshly-reconnected credential survives intact',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-1',
+        codeVerifier: 'verifier-1',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      // Simulate the race: a reconnect lands while disconnect is mid-flight, inside its own
+      // revokeToken call (which runs strictly after disconnect's initial SELECT of the OLD row).
+      const client = fakeGoogleClient({
+        revokeToken: async () => {
+          await connectGmailAccount(
+            db,
+            kek,
+            fakeGoogleClient({
+              exchangeCode: async () => ({
+                refreshToken: '1//concurrent-reconnect-token',
+                gmailEmail: 'owner@example.com',
+              }),
+            }),
+            {
+              sourceAccountId: accounts.gmailAccountId,
+              code: 'auth-code-2',
+              codeVerifier: 'verifier-2',
+              collectionMode: 'PUSH',
+              kekVersion: KEK_VERSION,
+              now: FIXTURE_NOW,
+            },
+          );
+        },
+      });
+
+      const result = await disconnectGmailAccount(db, kek, client, {
+        sourceAccountId: accounts.gmailAccountId,
+      });
+      expect(result).toEqual({ outcome: 'SUPERSEDED_BY_RECONNECT' });
+
+      const row = await db
+        .prepare(
+          'SELECT encrypted_refresh_token, refresh_token_iv FROM gmail_connections WHERE source_account_id = ?',
+        )
+        .bind(accounts.gmailAccountId)
+        .first<{ encrypted_refresh_token: string; refresh_token_iv: string }>();
+      expect(row).not.toBeNull();
+
+      const decrypted = await decryptRefreshToken(
+        kek,
+        { ciphertext: row!.encrypted_refresh_token, iv: row!.refresh_token_iv },
+        { gmailAccountId: accounts.gmailAccountId, kekVersion: KEK_VERSION },
+      );
+      expect(decrypted).toBe('1//concurrent-reconnect-token');
+    },
+  );
+
+  it(
+    'GPT-PM round-1 MAJOR #2: the connection delete and the oauth_flows clear are ONE atomic ' +
+      'db.batch() -- when the batch itself fails, NEITHER takes effect, so a retry is never stuck ' +
+      'seeing a half-cleaned-up state',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      await createOAuthFlow(db, { state: 'stray-flow', codeVerifier: 'v', now: FIXTURE_NOW });
+
+      const batchFailure = new Error('D1 batch transport failure');
+      const failingBatchDb: D1Database = {
+        prepare: (sql: string) => db.prepare(sql),
+        batch: async () => {
+          throw batchFailure;
+        },
+      } as unknown as D1Database;
+
+      await expect(
+        disconnectGmailAccount(failingBatchDb, kek, fakeGoogleClient(), {
+          sourceAccountId: accounts.gmailAccountId,
+        }),
+      ).rejects.toThrow(batchFailure);
+
+      const row = await db
+        .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
+        .bind(accounts.gmailAccountId)
+        .first();
+      expect(row).not.toBeNull();
+
+      const flow = await db
+        .prepare('SELECT 1 FROM oauth_flows WHERE state = ?')
+        .bind('stray-flow')
+        .first();
+      expect(flow).not.toBeNull();
     },
   );
 });

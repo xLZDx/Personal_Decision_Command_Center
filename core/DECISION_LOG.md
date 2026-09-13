@@ -57,11 +57,45 @@ exactly the boundary test fail. All reverted after confirmation, full suite re-g
 **Verification.** Full repo suite: 399/399 tests passing (33 files, 18 in `oauth.test.ts`).
 `npm run typecheck`/`npm run lint` both clean. `prettier --write` applied.
 
-**How to apply.** Checkpoint 4 is closed pending GPT-PM's own gate-review round on this diff.
-Remaining G3 checkpoints: cursor/history-list sync + normalization (§2.2/§2.3), quota limiter wiring
-(§2.9), drill-down endpoints (§2.8), and the `services/gmail-connector` Worker itself (§2.1) — which
-MUST resolve the correct `kek: CryptoKey` for a given row's `kek_version` from a key ring rather than
-passing a single default key, per the tracked risk documented above and in `oauth.ts`'s own doc
+**GPT-PM gate review, round 1: `VERDICT: MAJOR`, 0 BLOCKER / 2 MAJOR**, correlated to exact head
+`bd2993f` (full SHA `bd2993f995c29c0912ed185b127c4db6fd53fe82`). Both findings verified against
+source before remediating. **MAJOR #1**: `disconnectGmailAccount`'s final `DELETE FROM
+gmail_connections WHERE source_account_id = ?` was not fenced against the exact row read at the
+top — a concurrent `connectGmailAccount` reconnect racing between the initial `SELECT` and this
+`DELETE` (e.g. during the `stopWatch`/`revokeToken` network round-trips) would `ON CONFLICT ... DO
+UPDATE` a fresh credential into the row, which the unfenced `DELETE` would then destroy while
+reporting a misleading `DISCONNECTED`. **MAJOR #2**: the connection-row delete and the `oauth_flows`
+clear ran as two independent statements — a failure of the second left the connection row already
+gone, so a retry would return `NOT_CONNECTED` and never reach `oauth_flows` cleanup again, leaving
+stale flow state until its own TTL.
+
+**Fix, verified by mutation** (same discipline as every prior checkpoint): fenced the connection
+`DELETE` on the exact `(encrypted_refresh_token, refresh_token_iv, kek_version)` tuple read at the
+top — matching `transitions.ts`'s own "compare against the value actually observed" fencing
+discipline — with a zero-rows-changed outcome now reported as a new `SUPERSEDED_BY_RECONNECT`
+result rather than a false `DISCONNECTED`; combined the connection delete and `oauth_flows` clear
+into one `db.batch()` call, the same atomic-multi-statement pattern `lease.ts`'s
+`completeProcessing`/`transitions.ts`'s `moveToDlq` already use, so a batch failure now leaves
+neither statement's effect in place. Added and mutation-verified two new tests: a concurrent-
+reconnect race test (a `revokeToken` mock that itself calls `connectGmailAccount` mid-disconnect,
+proving the fresh credential survives and is reported `SUPERSEDED_BY_RECONNECT`) and a
+batch-atomicity test (a stub `D1Database` whose `.batch` always throws, proving neither the
+connection row nor `oauth_flows` change when the atomic batch itself fails) — confirmed each fails
+exactly the reverted behavior (an unfenced `DELETE`; two separate `.run()` calls) and nothing else.
+Did not attempt a "failure injected into only the second statement of a real batch" test, since D1's
+own batch is atomic by platform design (no such partial-failure state can occur) and no other
+function in this codebase (`completeProcessing`, `moveToDlq`) constructs one either — the stub-batch
+test above is the meaningful equivalent this codebase's own convention already uses.
+
+**Verification.** Full repo suite: 401/401 tests passing (33 files, 20 in `oauth.test.ts`).
+`npm run typecheck`/`npm run lint` both clean. `prettier --write` applied.
+
+**How to apply.** Checkpoint 4 round-1 remediation is committed, awaiting GPT-PM's round-2
+verification (scoped only to these two findings and any direct regression, per §17). Remaining G3
+checkpoints after closure: cursor/history-list sync + normalization (§2.2/§2.3), quota limiter
+wiring (§2.9), drill-down endpoints (§2.8), and the `services/gmail-connector` Worker itself (§2.1)
+— which MUST resolve the correct `kek: CryptoKey` for a given row's `kek_version` from a key ring
+rather than passing a single default key, per the tracked risk documented in `oauth.ts`'s own doc
 comment.
 
 ## 2026-09-13 — G3 implementation checkpoint 3: KEK crypto (`packages/domain/src/gmail/crypto.ts`)

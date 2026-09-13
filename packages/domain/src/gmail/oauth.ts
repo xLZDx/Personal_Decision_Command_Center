@@ -171,7 +171,9 @@ export async function connectGmailAccount(
 }
 
 export type DisconnectGmailAccountResult =
-  { outcome: 'DISCONNECTED' } | { outcome: 'NOT_CONNECTED' };
+  | { outcome: 'DISCONNECTED' }
+  | { outcome: 'NOT_CONNECTED' }
+  | { outcome: 'SUPERSEDED_BY_RECONNECT' };
 
 /**
  * `POST /oauth/disconnect` (proposal §2.5). Order matters, and is the actual property under test
@@ -198,6 +200,27 @@ export type DisconnectGmailAccountResult =
  * Worker checkpoint that supplies the real `kek` argument MUST resolve the exact key for
  * `row.kek_version`, not a single default, or this exact permanent-stuck-row failure mode becomes
  * live.
+ *
+ * **CAS-fenced local finalization** (GPT-PM round-1 MAJOR #1 on this checkpoint): the row read at
+ * the top is NOT re-read before the final `DELETE` -- a concurrent `connectGmailAccount` reconnect
+ * for the SAME account, racing between this function's own SELECT and its local cleanup, would
+ * `ON CONFLICT ... DO UPDATE` a fresh credential (new ciphertext/IV/`kek_version`) into the row
+ * before this function's unfenced `DELETE FROM gmail_connections WHERE source_account_id = ?` ran --
+ * destroying the freshly-reconnected credential while reporting a misleading `DISCONNECTED`. Fixed
+ * by fencing the DELETE on the EXACT `(encrypted_refresh_token, refresh_token_iv, kek_version)`
+ * tuple read at the top, the same "compare against the value actually observed, not just the key"
+ * discipline `transitions.ts`'s own fenced UPDATEs use -- zero rows changed means a concurrent
+ * reconnect won the race, reported as `SUPERSEDED_BY_RECONNECT` rather than a false `DISCONNECTED`.
+ * The already-revoked old token is harmless either way (`revokeToken` already ran against T1, which
+ * is dead at Google regardless of what happens locally); what this closes is deleting the WRONG
+ * (newer) row.
+ *
+ * **Atomic local cleanup** (GPT-PM round-1 MAJOR #2): the fenced connection delete and the
+ * `oauth_flows` clear run in one `db.batch()` (the same atomic-multi-statement pattern
+ * `lease.ts`'s `completeProcessing`/`transitions.ts`'s `moveToDlq` already use) rather than as two
+ * independent statements -- a failure of the second statement no longer leaves the connection row
+ * already gone (which would make a retry return `NOT_CONNECTED` and never reach `oauth_flows`
+ * cleanup again) while stale OAuth flow state survives until its own TTL.
  *
  * `oauth_flows` has no account-scoping column (its PK is `state` alone) -- this project's MVP1
  * scope is single-operator/single-account, so "cancels any in-flight `oauth_flows` row for that
@@ -231,11 +254,26 @@ export async function disconnectGmailAccount(
   );
   await googleClient.revokeToken(refreshToken);
 
-  await db
-    .prepare('DELETE FROM gmail_connections WHERE source_account_id = ?')
-    .bind(opts.sourceAccountId)
-    .run();
-  await db.prepare('DELETE FROM oauth_flows').run();
+  const results = await db.batch([
+    db
+      .prepare(
+        `DELETE FROM gmail_connections
+         WHERE source_account_id = ? AND encrypted_refresh_token = ? AND refresh_token_iv = ? AND kek_version = ?`,
+      )
+      .bind(
+        opts.sourceAccountId,
+        row.encrypted_refresh_token,
+        row.refresh_token_iv,
+        row.kek_version,
+      ),
+    db.prepare('DELETE FROM oauth_flows'),
+  ]);
+  const deleteResult = results[0];
+  if (deleteResult === undefined || deleteResult.meta.changes === 0) {
+    // A concurrent reconnect upserted a new row between our SELECT and this DELETE -- the row that
+    // exists now is NOT the one we just revoked, so deleting it would destroy a live credential.
+    return { outcome: 'SUPERSEDED_BY_RECONNECT' };
+  }
 
   return { outcome: 'DISCONNECTED' };
 }
