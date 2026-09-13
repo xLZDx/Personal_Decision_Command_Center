@@ -3,6 +3,64 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 Gmail Connector architecture proposal APPROVEd (GPT-PM round 6, `VERDICT: APPROVE`)
+
+**Decision.** `governance/plans/G3_GMAIL_CONNECTOR_PROPOSAL.md` reached V6 after six full GPT-PM
+review rounds, each following project §17's one-sweep discipline (a full adversarial sweep, one
+remediation batch, one verification round, repeated only for genuine regressions the remediation
+itself introduced): round 1 (4 BLOCKER + 5 MAJOR on V1) → V2; round 2 (3 BLOCKER + 4 MAJOR on V2,
+confirming V2 closed all 9 round-1 findings) → V3; round 3 (2 BLOCKER + 3 MAJOR on V3, confirming
+V3 closed all 7 round-2 findings) → V4; round 4 (0 BLOCKER + 3 MAJOR on V4, confirming V4 closed
+both round-3 BLOCKERs) → V5; round 5 (0 BLOCKER + 3 MAJOR on V5, each a residual gap in V5's own
+round-4 fixes, not a new area) → V6; round 6 returned `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR
+(`reviewInputHash 69600224b6d3f33e208a193cd2a98fb4d83cec741cbd0a09c26abef9c8da921b`,
+`replyId 1fbabbb0-9846-445c-b76b-01223874630b`, `correlated: true`).
+
+**What the review actually forced, evidence-verified before each remediation per §3/§23 (not
+accepted on GPT-PM's word alone)**: the Gmail connector's ingress identity is literally `gmail`
+(matching `services/ingest/src/handler.ts:121`'s URL-derived `connectorId`, using the
+already-declared `GMAIL_V1_HMAC_SECRET`), never a bypass of the existing `/ingest/<source>` HTTP
+boundary; the `history.list` cursor is frozen across an entire paginated traversal, matching
+Google's own documented pagination contract (fetched live); the normalization matrix uses G2's real
+3-value `event_type` enum with a distinct discriminator for label-add vs. label-remove; a real
+`GmailEventProcessor` is fenced by G2's own processing-lease token (required extending
+`services/processor/src/processor.ts`'s `ClaimedEvent`/`handler.ts` to actually pass the token
+through — it was in scope but never wired, confirmed by direct source reading); Pub/Sub push
+delivery never ACKs an unfinished duplicate and is recoverable via an independent scheduled sweep
+using a real per-claim UUID lease token with a three-part CAS fence (`state` + `token` + a fresh
+expiry re-check at mutation time — token-only and even token+expiry fencing both left real ABA
+races, each caught by a separate review round and each verified against G2's own
+`packages/domain/src/transitions.ts`/`lease-recovery.ts` before being accepted as real); the
+sweep's supporting index is a genuine partial index (`WHERE state = 'IN_PROGRESS'`), matching G2's
+own `idx_ingest_events_processing_lease`'s real definition rather than an index sharing only its
+column order; the "AI runs at most once, ever" claim was walked back to what the architecture can
+actually prove (one canonical persisted enrichment row; AI invocation potentially at-least-once
+around one specific crash window, worst-case bounded by `maxAttempts`); and Gmail's per-minute
+quota plus the Workers AI Neuron budget are both enforced via D1-based shared atomic UPSERT
+reservations (mirroring `packages/domain/src/budget.ts`'s existing pattern) rather than in-memory
+counters that cannot hold under Cloudflare's actual multi-isolate execution model — the AI budget
+specifically corrected from a raw invocation count to the platform's real unit (Neurons,
+"10,000/day" per `docs/architecture/EXTERNAL_ASSUMPTIONS.md` §C) only after a dedicated round found
+the invocation-count version could read "within limit" while the real allocation was exhausted.
+
+**Why six rounds, not one**: every round after the first found genuine, source-verifiable defects
+specific to the PREVIOUS round's own remediation (a fresh race the fix itself introduced, a wrong
+resource/unit, a missing piece of an established G2 pattern) — never a re-litigation of an
+already-closed area. Each finding was independently verified against primary source
+(`services/processor/src/processor.ts`, `packages/domain/src/lease.ts`/`lease-recovery.ts`/
+`transitions.ts`/`budget.ts`, `infra/migrations/0001_ingest_outbox.sql`, Google's own Pub/Sub and
+Gmail API documentation, Cloudflare's own Workers-isolate and Workers-AI-Neuron documentation) before
+remediating, per this project's standing "verify before acting on a reviewer's claim" discipline —
+100% of directly-verified claims across all six rounds were confirmed accurate.
+
+**How to apply.** Implementation of G3 (Gmail connector) may now begin against V6's design, per the
+standing autonomous-through-G6 operator authorization already on record for this project. Two
+concrete prerequisites the approved design itself carries forward as G3 checkpoint-1 tasks, not
+silently deferred: (1) ADR-009's still-owed live re-fetch of the selected Workers AI model's
+license/Customer-Content terms; (2) establishing a conservative, deterministic per-call Neuron
+estimate for that same selected model (§2.9) before any AI provider call may reserve against the
+new `gmail_ai_neuron_budget`.
+
 ## 2026-09-13 — PR #23's `verify` CI check failed on real pre-existing formatting debt; fixed
 
 **Decision.** Opening PR #23 triggered this branch's very first real CI run (`gate/g2-implementation`
