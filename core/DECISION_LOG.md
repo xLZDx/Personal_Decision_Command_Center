@@ -98,6 +98,105 @@ wiring (§2.9), drill-down endpoints (§2.8), and the `services/gmail-connector`
 rather than passing a single default key, per the tracked risk documented in `oauth.ts`'s own doc
 comment.
 
+## 2026-09-13 — G3 checkpoint 4 round 2/3: MAJOR #1 re-opened with new evidence (Google revocation
+is project-wide); a genuine rebuttal exchange, conceded; fixed with a disconnect lease (migration
+0003)
+
+**GPT-PM round 2: `VERDICT: MAJOR`, 0 BLOCKER / 1 MAJOR.** Round-1 MAJOR #2 (atomic `db.batch()`)
+confirmed CLOSED, no regression. Round-1 MAJOR #1's CAS fix was found insufficient: the fenced
+`DELETE` correctly protects the *local* `gmail_connections` row, but Google's OAuth revocation is
+documented as project-wide, not scoped to the single token passed to the `/revoke` endpoint — so a
+`connectGmailAccount` reconnect that lands *during* `disconnectGmailAccount`'s `revokeToken` call can
+issue a credential (T2) that the SAME revoke call then invalidates at Google, even though the local
+CAS fencing correctly leaves T2's row untouched. The existing concurrent-reconnect test asserted the
+opposite (T2 survives and is reported `SUPERSEDED_BY_RECONNECT`) — proving locally-correct behavior
+that is, per this claim, actually unsafe at the API level.
+
+**Verification before accepting (§3/§17/§23 — a reviewer's cited claim is a claim to verify, not a
+paraphrase to accept).** First `WebFetch` against
+`https://developers.google.com/identity/protocols/oauth2` seemed to contradict the claim: it states
+"there is currently a limit of 100 refresh tokens per Google Account per OAuth 2.0 client ID... If
+the limit is reached, creating a new refresh token automatically invalidates the oldest refresh token
+without warning" — describing routine multi-token coexistence, not a claim that revoking one token
+invalidates a co-existing different one. Sent a rebuttal citing this apparent contradiction rather
+than either blindly complying or blindly dismissing the finding.
+
+**GPT-PM round 3: `VERDICT: MAJOR` maintained, with the missing exact citation.** Quoted, verbatim,
+from `https://developers.google.com/identity/protocols/oauth2/native-app` (a *different* page than
+the 100-token-limit one, immediately following that page's documented `oauth2.googleapis.com/revoke`
+request), labeled "Key Point": *"Revocation removes all OAuth 2.0 scopes previously granted to a
+project, invalidating any issued access or refresh tokens for all clients registered under that
+project."* Explained the two Google statements are not contradictory: many refresh tokens may coexist
+under ordinary issuance (the 100-token eviction rule), but explicit programmatic revocation is
+documented as revoking the whole project grant — a separate, broader, project-wide mechanism.
+
+**Independently re-verified the exact quote via `WebFetch` against that specific URL, twice.**
+Confirmed genuine — present verbatim on the page GPT-PM named. **Conceded the finding**: my round-3
+rebuttal was based on an incomplete reading that conflated two distinct Google mechanisms (passive
+token-retention limits vs. explicit revocation semantics); GPT-PM's citation, once checked against
+the primary source rather than its paraphrase, settles the question. This is §23's converse applied
+correctly: verify before accepting *and* before rejecting, and update the conclusion when evidence
+actually settles it.
+
+**Fix: a disconnect lease spanning the Google revoke boundary, not just the local DELETE** — new
+migration `infra/migrations/0003_gmail_oauth_disconnect_lock.sql` adds
+`disconnect_lease_token`/`disconnect_lease_expires_at` to `gmail_connections` (the same single-row-
+lease shape as `ingest_events.processing_lease_token`/`processing_lease_expires_at`, migration 0001).
+Migration 0002 is already GPT-PM-APPROVEd for checkpoint 1 and was NOT edited — this went into a new
+file per this project's own established pattern (each checkpoint needing schema changes gets its own
+migration). `packages/testkit/src/schema.ts`'s `loadG3Schema()` now concatenates 0001+0002+0003.
+
+`disconnectGmailAccount` now acquires the lease atomically, BEFORE calling Google, via
+`UPDATE gmail_connections SET disconnect_lease_token = ?, disconnect_lease_expires_at = ? WHERE
+source_account_id = ? AND (disconnect_lease_token IS NULL OR disconnect_lease_expires_at <= ?)
+RETURNING ...` — a fresh random token (reusing `generateRandomToken`) and a 60s
+(`DISCONNECT_LEASE_DURATION_MS`) bound. When this returns no row, a follow-up plain `SELECT`
+distinguishes `NOT_CONNECTED` (no such account) from a new `DISCONNECT_IN_PROGRESS` outcome (another
+disconnect already holds an unexpired lease) — purely for caller reporting, since neither case may
+proceed either way. `connectGmailAccount`'s `ON CONFLICT ... DO UPDATE` gained a
+`WHERE disconnect_lease_token IS NULL OR disconnect_lease_expires_at <= ?` guard: a reconnect racing
+an in-flight disconnect's Google-side revoke window is now refused outright (`DISCONNECT_IN_PROGRESS`,
+`result.meta.changes === 0`) rather than issued and then silently invalidated underneath local state.
+The round-1 CAS fence on the final `DELETE` is kept as defense in depth for the case where the lease
+itself has already expired (e.g. a stalled call past the 60s bound).
+
+**A correctness gap found and fixed during implementation, before any review round**: if
+`disconnectGmailAccount` acquires the lease and then `stopWatch`/decrypt/`revokeToken` throws, the
+lease token/expiry were being left set on the row — a retry immediately afterward (same or nearby
+`now`) would incorrectly see an unexpired lease and return `DISCONNECT_IN_PROGRESS` instead of
+retrying, breaking the retry-safety property checkpoint 4's own round-1 remediation established and
+tested. Fixed by wrapping the post-acquisition steps in `try`/`catch`: on any failure, an `UPDATE
+gmail_connections SET disconnect_lease_token = NULL, disconnect_lease_expires_at = NULL WHERE
+source_account_id = ? AND disconnect_lease_token = ?` (fenced on the exact lease token this call
+acquired, so it can never clobber a different retry's own freshly-acquired lease) releases the lease
+before rethrowing.
+
+**Tests, mutation-verified.** Rewrote the round-1 concurrent-reconnect test: a reconnect attempted
+inside `revokeToken`'s mock now asserts `DISCONNECT_IN_PROGRESS` (refused outright) rather than
+`SUPERSEDED_BY_RECONNECT` (issued-then-discarded) — the new design prevents the race rather than
+merely surviving it. Added: a double-disconnect test (second concurrent `disconnectGmailAccount`
+call refused `DISCONNECT_IN_PROGRESS`), and a lease-bound test (an abandoned lease written directly
+at the schema level blocks a reconnect until, but not past, `DISCONNECT_LEASE_DURATION_MS`). Mutation
+-verified three guards by temporarily weakening each and confirming the intended test(s) fail, then
+reverting: (1) `connectGmailAccount`'s `WHERE` guard replaced with an always-true condition — the new
+race test and the lease-bound test both failed as expected; (2) `disconnectGmailAccount`'s
+lease-acquisition `WHERE` guard replaced with an always-true condition — the new double-disconnect
+test failed as expected; (3) the release-on-failure `UPDATE` in the `catch` block removed — the
+existing (round-1) retry-after-transient-failure test failed as expected, proving that test still
+carries real weight under the new design. All three reverted; full suite re-green.
+
+**Verification.** Full repo suite: 403/403 tests passing (33 files, 22 in `oauth.test.ts`).
+`npm run typecheck`/`npm run lint` both clean. `prettier --write` applied (the new `.sql` migration
+has no prettier parser registered for this project, matching every prior `infra/migrations/*.sql`
+file — not reformatted, consistent with existing convention).
+
+**How to apply.** This round-3/4 remediation is committed and will be sent to GPT-PM for a further
+verification round, scoped to this specific fix and any direct regression it introduces, per §17.
+Checkpoint 4 remains open until that verdict is `APPROVE`. The `DISCONNECT_IN_PROGRESS` outcome is
+new surface any future caller (the `services/gmail-connector` Worker, §2.1) of both
+`connectGmailAccount` and `disconnectGmailAccount` must handle explicitly — e.g. an HTTP endpoint
+should map it to a distinct, retryable-shortly response rather than folding it into a generic error.
+
 ## 2026-09-13 — G3 implementation checkpoint 3: KEK crypto (`packages/domain/src/gmail/crypto.ts`)
 
 **Decision.** Third implementation checkpoint of gate G3, on branch `gate/g3-implementation`: the

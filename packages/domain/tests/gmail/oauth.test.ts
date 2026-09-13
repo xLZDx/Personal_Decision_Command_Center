@@ -12,7 +12,12 @@ import {
   connectGmailAccount,
   disconnectGmailAccount,
 } from '../../src/gmail/oauth.js';
-import type { GoogleOAuthClient, GoogleTokenExchangeResult } from '../../src/gmail/oauth.js';
+import type {
+  GoogleOAuthClient,
+  GoogleTokenExchangeResult,
+  ConnectGmailAccountResult,
+  DisconnectGmailAccountResult,
+} from '../../src/gmail/oauth.js';
 
 async function setup() {
   const db = createTestD1(loadG3Schema());
@@ -350,6 +355,7 @@ describe('disconnectGmailAccount', () => {
 
     const result = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
       sourceAccountId: accounts.gmailAccountId,
+      now: FIXTURE_NOW,
     });
     expect(result).toEqual({ outcome: 'DISCONNECTED' });
 
@@ -370,6 +376,7 @@ describe('disconnectGmailAccount', () => {
 
     const result = await disconnectGmailAccount(db, kek, client, {
       sourceAccountId: accounts.gmailAccountId,
+      now: FIXTURE_NOW,
     });
     expect(result).toEqual({ outcome: 'NOT_CONNECTED' });
     expect(calls).toEqual([]);
@@ -411,7 +418,10 @@ describe('disconnectGmailAccount', () => {
         calls,
       );
 
-      await disconnectGmailAccount(db, kek, client, { sourceAccountId: accounts.gmailAccountId });
+      await disconnectGmailAccount(db, kek, client, {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+      });
 
       expect(calls).toEqual(['stopWatch', 'revokeToken']);
       expect(rowExistedDuringRevoke).toBe(true);
@@ -451,6 +461,7 @@ describe('disconnectGmailAccount', () => {
       await expect(
         disconnectGmailAccount(db, kek, failingClient, {
           sourceAccountId: accounts.gmailAccountId,
+          now: FIXTURE_NOW,
         }),
       ).rejects.toThrow(revokeFails);
 
@@ -491,11 +502,13 @@ describe('disconnectGmailAccount', () => {
       await expect(
         disconnectGmailAccount(db, kek, failingClient, {
           sourceAccountId: accounts.gmailAccountId,
+          now: FIXTURE_NOW,
         }),
       ).rejects.toThrow();
 
       const retryResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
       });
       expect(retryResult).toEqual({ outcome: 'DISCONNECTED' });
 
@@ -508,9 +521,12 @@ describe('disconnectGmailAccount', () => {
   );
 
   it(
-    "GPT-PM round-1 MAJOR #1: a concurrent reconnect racing between disconnect's initial SELECT " +
-      'and its local DELETE is NOT destroyed -- disconnect reports SUPERSEDED_BY_RECONNECT and the ' +
-      'freshly-reconnected credential survives intact',
+    'GPT-PM round-2/round-3 MAJOR (superseding round-1 MAJOR #1): a reconnect attempted DURING ' +
+      "disconnect's own revokeToken call is refused with DISCONNECT_IN_PROGRESS -- Google's " +
+      'revocation is project-wide (developers.google.com/identity/protocols/oauth2/native-app), so ' +
+      'a credential issued while an old token is being revoked can be invalidated by that SAME ' +
+      'revoke; the disconnect lease refuses the write outright instead of letting it be issued and ' +
+      'then silently invalidated underneath local state',
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -523,10 +539,11 @@ describe('disconnectGmailAccount', () => {
       });
 
       // Simulate the race: a reconnect lands while disconnect is mid-flight, inside its own
-      // revokeToken call (which runs strictly after disconnect's initial SELECT of the OLD row).
+      // revokeToken call -- strictly after disconnect's own lease acquisition on the OLD row.
+      let reconnectResult: ConnectGmailAccountResult | null = null;
       const client = fakeGoogleClient({
         revokeToken: async () => {
-          await connectGmailAccount(
+          reconnectResult = await connectGmailAccount(
             db,
             kek,
             fakeGoogleClient({
@@ -549,23 +566,101 @@ describe('disconnectGmailAccount', () => {
 
       const result = await disconnectGmailAccount(db, kek, client, {
         sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
       });
-      expect(result).toEqual({ outcome: 'SUPERSEDED_BY_RECONNECT' });
+
+      expect(reconnectResult).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+      expect(result).toEqual({ outcome: 'DISCONNECTED' });
 
       const row = await db
-        .prepare(
-          'SELECT encrypted_refresh_token, refresh_token_iv FROM gmail_connections WHERE source_account_id = ?',
-        )
+        .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
         .bind(accounts.gmailAccountId)
-        .first<{ encrypted_refresh_token: string; refresh_token_iv: string }>();
-      expect(row).not.toBeNull();
+        .first();
+      expect(row).toBeNull();
+    },
+  );
 
-      const decrypted = await decryptRefreshToken(
-        kek,
-        { ciphertext: row!.encrypted_refresh_token, iv: row!.refresh_token_iv },
-        { gmailAccountId: accounts.gmailAccountId, kekVersion: KEK_VERSION },
-      );
-      expect(decrypted).toBe('1//concurrent-reconnect-token');
+  it(
+    'DISCONNECT_IN_PROGRESS: a second disconnectGmailAccount call for the same account while the ' +
+      'first still holds an unexpired lease is refused rather than double-revoking or ' +
+      'double-deleting',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      let secondResult: DisconnectGmailAccountResult | null = null;
+      const client = fakeGoogleClient({
+        revokeToken: async () => {
+          secondResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+            sourceAccountId: accounts.gmailAccountId,
+            now: FIXTURE_NOW,
+          });
+        },
+      });
+
+      const firstResult = await disconnectGmailAccount(db, kek, client, {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+      });
+
+      expect(secondResult).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+      expect(firstResult).toEqual({ outcome: 'DISCONNECTED' });
+    },
+  );
+
+  it(
+    'lease bound: an abandoned lease (the shape a crashed disconnect that never reached its own ' +
+      'release-on-failure cleanup would leave behind) no longer blocks a reconnect once ' +
+      "DISCONNECT_LEASE_DURATION_MS has elapsed, proving the guard isn't permanent",
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      await db
+        .prepare(
+          'UPDATE gmail_connections SET disconnect_lease_token = ?, disconnect_lease_expires_at = ? WHERE source_account_id = ?',
+        )
+        .bind(
+          'abandoned-lease',
+          new Date(Date.parse(FIXTURE_NOW) + 60_000).toISOString(),
+          accounts.gmailAccountId,
+        )
+        .run();
+
+      const duringLease = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(duringLease).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+
+      const afterExpiry = new Date(Date.parse(FIXTURE_NOW) + 60_001).toISOString();
+      const afterLease = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-3',
+        codeVerifier: 'verifier-3',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: afterExpiry,
+      });
+      expect(afterLease).toEqual({ outcome: 'CONNECTED' });
     },
   );
 
@@ -596,6 +691,7 @@ describe('disconnectGmailAccount', () => {
       await expect(
         disconnectGmailAccount(failingBatchDb, kek, fakeGoogleClient(), {
           sourceAccountId: accounts.gmailAccountId,
+          now: FIXTURE_NOW,
         }),
       ).rejects.toThrow(batchFailure);
 

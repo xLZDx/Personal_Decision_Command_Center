@@ -115,7 +115,10 @@ export interface ConnectGmailAccountOptions {
   now: string;
 }
 
-export type ConnectGmailAccountResult = { outcome: 'CONNECTED' } | { outcome: 'NO_REFRESH_TOKEN' };
+export type ConnectGmailAccountResult =
+  | { outcome: 'CONNECTED' }
+  | { outcome: 'NO_REFRESH_TOKEN' }
+  | { outcome: 'DISCONNECT_IN_PROGRESS' };
 
 /**
  * `GET /oauth/callback`'s post-consumption step (proposal §2.5): exchanges the code, then --
@@ -125,6 +128,15 @@ export type ConnectGmailAccountResult = { outcome: 'CONNECTED' } | { outcome: 'N
  * first-time connect and a reconnect while a connection row still exists (disconnect deletes the
  * row entirely, but a reconnect without an intervening disconnect is also valid per §2.5's
  * `prompt=consent` semantics).
+ *
+ * **`DISCONNECT_IN_PROGRESS` fence** (GPT-PM round-2/round-3 MAJOR on checkpoint 4, verified
+ * against Google's own documentation -- see `disconnectGmailAccount`'s doc comment for the full
+ * evidence): the `ON CONFLICT ... DO UPDATE ... WHERE` clause refuses to write while
+ * `disconnectGmailAccount` holds an active (unexpired) lease on this row. Without this, a reconnect
+ * landing during an unrelated disconnect's Google-side revoke call would issue a credential that
+ * revoke call then invalidates -- Google's revocation is project-wide, not scoped to the single
+ * token passed to the endpoint, so no amount of purely-local fencing on the connect side alone
+ * could close this; the disconnect side must hold an exclusive window instead.
  */
 export async function connectGmailAccount(
   db: D1Database,
@@ -141,7 +153,7 @@ export async function connectGmailAccount(
   };
   const encrypted = await encryptRefreshToken(kek, exchanged.refreshToken, aad);
 
-  await db
+  const result = await db
     .prepare(
       `INSERT INTO gmail_connections
          (source_account_id, gmail_email, encrypted_refresh_token, refresh_token_iv, kek_version,
@@ -153,7 +165,8 @@ export async function connectGmailAccount(
          refresh_token_iv = excluded.refresh_token_iv,
          kek_version = excluded.kek_version,
          collection_mode = excluded.collection_mode,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at
+       WHERE disconnect_lease_token IS NULL OR disconnect_lease_expires_at <= ?`,
     )
     .bind(
       opts.sourceAccountId,
@@ -164,8 +177,11 @@ export async function connectGmailAccount(
       opts.collectionMode,
       opts.now,
       opts.now,
+      opts.now,
     )
     .run();
+
+  if (result.meta.changes === 0) return { outcome: 'DISCONNECT_IN_PROGRESS' };
 
   return { outcome: 'CONNECTED' };
 }
@@ -173,19 +189,26 @@ export async function connectGmailAccount(
 export type DisconnectGmailAccountResult =
   | { outcome: 'DISCONNECTED' }
   | { outcome: 'NOT_CONNECTED' }
-  | { outcome: 'SUPERSEDED_BY_RECONNECT' };
+  | { outcome: 'SUPERSEDED_BY_RECONNECT' }
+  | { outcome: 'DISCONNECT_IN_PROGRESS' };
+
+/** How long a disconnect holds exclusive rights to revoke/finalize this account's connection before
+ *  its lease is considered abandoned (e.g. the Worker instance crashed mid-revoke) and a later
+ *  disconnect or reconnect may proceed. Bounded well above realistic Google API latency but short
+ *  enough that a genuinely abandoned lease does not lock the account out for long. */
+const DISCONNECT_LEASE_DURATION_MS = 60_000;
 
 /**
  * `POST /oauth/disconnect` (proposal §2.5). Order matters, and is the actual property under test
- * (functional-test review, "disconnect ordering"): stop the watch, THEN decrypt+revoke the token,
- * THEN delete the local row, THEN cancel any in-flight OAuth flow. This ordering is the approved
- * design (§2.5's own stated rationale: "a failure between revoke and local delete still leaves the
- * token unusable at Google even if local cleanup is retried later") -- nothing in this function is
- * deleted until every prior step succeeds, so a thrown error at any point (stopWatch, decrypt, or
- * revoke) leaves `gmail_connections` untouched and a retried call is safe and idempotent (`stopWatch`
- * on an already-stopped watch and `revokeToken` on an already-revoked token are expected to be
- * no-ops/idempotent at Google's API, the same assumption G2 already makes about its own retried
- * operations).
+ * (functional-test review, "disconnect ordering"): acquire the disconnect lease, stop the watch,
+ * THEN decrypt+revoke the token, THEN delete the local row, THEN cancel any in-flight OAuth flow.
+ * This ordering is the approved design (§2.5's own stated rationale: "a failure between revoke and
+ * local delete still leaves the token unusable at Google even if local cleanup is retried later")
+ * -- nothing in this function is deleted until every prior step succeeds, so a thrown error at any
+ * point (stopWatch, decrypt, or revoke) leaves `gmail_connections` untouched and a retried call is
+ * safe and idempotent (`stopWatch` on an already-stopped watch and `revokeToken` on an
+ * already-revoked token are expected to be no-ops/idempotent at Google's API, the same assumption
+ * G2 already makes about its own retried operations).
  *
  * **Tracked risk, not a defect in this function** (security review, checkpoint 4): `kek` is a
  * single `CryptoKey` supplied by the caller, while `row.kek_version` records which key-ring version
@@ -201,19 +224,29 @@ export type DisconnectGmailAccountResult =
  * `row.kek_version`, not a single default, or this exact permanent-stuck-row failure mode becomes
  * live.
  *
- * **CAS-fenced local finalization** (GPT-PM round-1 MAJOR #1 on this checkpoint): the row read at
- * the top is NOT re-read before the final `DELETE` -- a concurrent `connectGmailAccount` reconnect
- * for the SAME account, racing between this function's own SELECT and its local cleanup, would
- * `ON CONFLICT ... DO UPDATE` a fresh credential (new ciphertext/IV/`kek_version`) into the row
- * before this function's unfenced `DELETE FROM gmail_connections WHERE source_account_id = ?` ran --
- * destroying the freshly-reconnected credential while reporting a misleading `DISCONNECTED`. Fixed
- * by fencing the DELETE on the EXACT `(encrypted_refresh_token, refresh_token_iv, kek_version)`
- * tuple read at the top, the same "compare against the value actually observed, not just the key"
- * discipline `transitions.ts`'s own fenced UPDATEs use -- zero rows changed means a concurrent
- * reconnect won the race, reported as `SUPERSEDED_BY_RECONNECT` rather than a false `DISCONNECTED`.
- * The already-revoked old token is harmless either way (`revokeToken` already ran against T1, which
- * is dead at Google regardless of what happens locally); what this closes is deleting the WRONG
- * (newer) row.
+ * **Disconnect lease across the Google revoke boundary** (GPT-PM round-2/round-3 MAJOR on this
+ * checkpoint, migration `0003_gmail_oauth_disconnect_lock.sql`): the round-1 CAS fix below protects
+ * only the LOCAL `gmail_connections` row, but Google's revocation is documented as project-wide --
+ * "Revocation removes all OAuth 2.0 scopes previously granted to a project, invalidating any issued
+ * access or refresh tokens for all clients registered under that project"
+ * (developers.google.com/identity/protocols/oauth2/native-app). A reconnect that lands DURING this
+ * function's `revokeToken` call can issue a credential that the SAME revoke call then invalidates,
+ * even though the local row holding it survives untouched. Closed by acquiring an exclusive,
+ * time-bounded lease on this row (`disconnect_lease_token`/`disconnect_lease_expires_at`) in the
+ * SAME atomic `UPDATE ... RETURNING` that reads the row, BEFORE calling Google at all --
+ * `connectGmailAccount`'s own `ON CONFLICT ... DO UPDATE ... WHERE` refuses to write while an
+ * unexpired lease is held, so a reconnect racing the revoke window is refused
+ * (`DISCONNECT_IN_PROGRESS`) rather than silently issued and then invalidated underneath the local
+ * state. `DISCONNECT_LEASE_DURATION_MS` bounds how long a crashed/hung disconnect can block a
+ * reconnect.
+ *
+ * **CAS-fenced local finalization** (GPT-PM round-1 MAJOR #1 on this checkpoint) -- kept as
+ * defense in depth once the lease above has expired (e.g. this function crashed after revoking but
+ * before deleting): the final `DELETE` is fenced on the EXACT
+ * `(encrypted_refresh_token, refresh_token_iv, kek_version)` tuple read when the lease was acquired,
+ * the same "compare against the value actually observed, not just the key" discipline
+ * `transitions.ts`'s own fenced UPDATEs use -- zero rows changed means a reconnect won the race
+ * after the lease lapsed, reported as `SUPERSEDED_BY_RECONNECT` rather than a false `DISCONNECTED`.
  *
  * **Atomic local cleanup** (GPT-PM round-1 MAJOR #2): the fenced connection delete and the
  * `oauth_flows` clear run in one `db.batch()` (the same atomic-multi-statement pattern
@@ -231,49 +264,87 @@ export async function disconnectGmailAccount(
   db: D1Database,
   kek: CryptoKey,
   googleClient: GoogleOAuthClient,
-  opts: { sourceAccountId: string },
+  opts: { sourceAccountId: string; now: string },
 ): Promise<DisconnectGmailAccountResult> {
+  const leaseToken = generateRandomToken();
+  const leaseExpiresAt = new Date(
+    Date.parse(opts.now) + DISCONNECT_LEASE_DURATION_MS,
+  ).toISOString();
+
   const row = await db
     .prepare(
-      'SELECT encrypted_refresh_token, refresh_token_iv, kek_version FROM gmail_connections WHERE source_account_id = ?',
+      `UPDATE gmail_connections
+       SET disconnect_lease_token = ?, disconnect_lease_expires_at = ?
+       WHERE source_account_id = ?
+         AND (disconnect_lease_token IS NULL OR disconnect_lease_expires_at <= ?)
+       RETURNING encrypted_refresh_token, refresh_token_iv, kek_version`,
     )
-    .bind(opts.sourceAccountId)
+    .bind(leaseToken, leaseExpiresAt, opts.sourceAccountId, opts.now)
     .first<{ encrypted_refresh_token: string; refresh_token_iv: string; kek_version: string }>();
-  if (row === null) return { outcome: 'NOT_CONNECTED' };
 
-  await googleClient.stopWatch(opts.sourceAccountId);
-
-  const aad: RefreshTokenAad = {
-    gmailAccountId: opts.sourceAccountId,
-    kekVersion: row.kek_version,
-  };
-  const refreshToken = await decryptRefreshToken(
-    kek,
-    { ciphertext: row.encrypted_refresh_token, iv: row.refresh_token_iv },
-    aad,
-  );
-  await googleClient.revokeToken(refreshToken);
-
-  const results = await db.batch([
-    db
-      .prepare(
-        `DELETE FROM gmail_connections
-         WHERE source_account_id = ? AND encrypted_refresh_token = ? AND refresh_token_iv = ? AND kek_version = ?`,
-      )
-      .bind(
-        opts.sourceAccountId,
-        row.encrypted_refresh_token,
-        row.refresh_token_iv,
-        row.kek_version,
-      ),
-    db.prepare('DELETE FROM oauth_flows'),
-  ]);
-  const deleteResult = results[0];
-  if (deleteResult === undefined || deleteResult.meta.changes === 0) {
-    // A concurrent reconnect upserted a new row between our SELECT and this DELETE -- the row that
-    // exists now is NOT the one we just revoked, so deleting it would destroy a live credential.
-    return { outcome: 'SUPERSEDED_BY_RECONNECT' };
+  if (row === null) {
+    // Either no connection exists at all, or another disconnect already holds an unexpired lease
+    // on it -- distinguish the two purely for the caller's reporting, since neither case may
+    // proceed regardless of which it is.
+    const existing = await db
+      .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
+      .bind(opts.sourceAccountId)
+      .first();
+    return existing === null ? { outcome: 'NOT_CONNECTED' } : { outcome: 'DISCONNECT_IN_PROGRESS' };
   }
 
-  return { outcome: 'DISCONNECTED' };
+  try {
+    await googleClient.stopWatch(opts.sourceAccountId);
+
+    const aad: RefreshTokenAad = {
+      gmailAccountId: opts.sourceAccountId,
+      kekVersion: row.kek_version,
+    };
+    const refreshToken = await decryptRefreshToken(
+      kek,
+      { ciphertext: row.encrypted_refresh_token, iv: row.refresh_token_iv },
+      aad,
+    );
+    await googleClient.revokeToken(refreshToken);
+
+    const results = await db.batch([
+      db
+        .prepare(
+          `DELETE FROM gmail_connections
+           WHERE source_account_id = ? AND encrypted_refresh_token = ? AND refresh_token_iv = ? AND kek_version = ?`,
+        )
+        .bind(
+          opts.sourceAccountId,
+          row.encrypted_refresh_token,
+          row.refresh_token_iv,
+          row.kek_version,
+        ),
+      db.prepare('DELETE FROM oauth_flows'),
+    ]);
+    const deleteResult = results[0];
+    if (deleteResult === undefined || deleteResult.meta.changes === 0) {
+      // Only reachable if the disconnect lease above already expired (e.g. this call stalled past
+      // DISCONNECT_LEASE_DURATION_MS) and a reconnect then won the race and upserted a new row --
+      // the row that exists now is NOT the one we just revoked, so deleting it would destroy a
+      // live credential.
+      return { outcome: 'SUPERSEDED_BY_RECONNECT' };
+    }
+
+    return { outcome: 'DISCONNECTED' };
+  } catch (error) {
+    // Release the lease immediately on any failure (stopWatch/decrypt/revoke/batch) rather than
+    // leaving a retry blocked for the full DISCONNECT_LEASE_DURATION_MS by this failed attempt's
+    // own now-abandoned lease. Fenced on the exact lease token this call acquired, so a retry that
+    // already re-acquired a NEW lease (after this lease's own natural expiry) can never be
+    // clobbered by this cleanup running late.
+    await db
+      .prepare(
+        `UPDATE gmail_connections
+         SET disconnect_lease_token = NULL, disconnect_lease_expires_at = NULL
+         WHERE source_account_id = ? AND disconnect_lease_token = ?`,
+      )
+      .bind(opts.sourceAccountId, leaseToken)
+      .run();
+    throw error;
+  }
 }
