@@ -85,3 +85,23 @@ export type {
 
 export { importKek, encryptRefreshToken, decryptRefreshToken } from './gmail/crypto.js';
 export type { EncryptedRefreshToken, RefreshTokenAad } from './gmail/crypto.js';
+
+export {
+  generateRandomToken,
+  computeCodeChallenge,
+  createOAuthFlow,
+  consumeOAuthFlow,
+  connectGmailAccount,
+  disconnectGmailAccount,
+} from './gmail/oauth.js';
+export type {
+  CreateOAuthFlowOptions,
+  ConsumeOAuthFlowOptions,
+  ConsumeOAuthFlowResult,
+  GoogleOAuthClient,
+  GoogleTokenExchangeResult,
+  CollectionMode,
+  ConnectGmailAccountOptions,
+  ConnectGmailAccountResult,
+  DisconnectGmailAccountResult,
+} from './gmail/oauth.js';

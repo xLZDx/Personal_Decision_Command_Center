@@ -3,6 +3,67 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 implementation checkpoint 4: OAuth lifecycle (`packages/domain/src/gmail/oauth.ts`)
+
+**Decision.** Fourth implementation checkpoint of gate G3, on branch `gate/g3-implementation`: the
+OAuth lifecycle from proposal §2.5 — `generateRandomToken`/`computeCodeChallenge` (RFC 7636 PKCE),
+`createOAuthFlow`/`consumeOAuthFlow` (the `oauth_flows` one-time-consumption table, atomic
+`DELETE ... RETURNING`), `connectGmailAccount` (fail-closed on a missing refresh token, encrypts via
+the checkpoint-3 KEK module, `ON CONFLICT ... DO UPDATE` upsert), `disconnectGmailAccount`
+(stopWatch → decrypt (using the row's own stored `kek_version`) → revoke → delete row → clear
+`oauth_flows`). Google's actual API calls are injected via a `GoogleOAuthClient` interface
+(exchangeCode/revokeToken/stopWatch) so this module's orchestration logic is testable without a real
+network call — the real `fetch`-backed implementation is deferred to the `services/gmail-connector`
+Worker (§2.1), consistent with every prior checkpoint's scope boundary.
+
+**Internal review before GPT-PM (§17), two specialists in parallel** (R2/R3 — auth/orchestration
+logic touching the checkpoint-3 crypto module). A `security-reviewer` found 0 BLOCKER, one MAJOR,
+and two MINOR. MAJOR: `disconnectGmailAccount`'s approved ordering (stopWatch → revoke → delete) has
+a window where `stopWatch` succeeds but the subsequent decrypt or revoke throws, leaving the local
+row present while the watch is already stopped — the reviewer additionally traced a concrete
+permanent-failure sub-case: this checkpoint's `kek: CryptoKey` parameter is a single key supplied by
+the caller, not resolved from a key ring against the row's own `kek_version`, so a future Worker
+checkpoint that naively always imports the newest `GMAIL_KEK_V{n}` (instead of the row's actual
+version) would make every retry fail identically forever. MINOR: the fail-closed check on a missing
+refresh token only tested `=== null`, not a falsy/empty-string response some real Google-client
+implementation might produce; MINOR (no action needed, tracked only): `oauth_flows`'s table-wide
+clear on disconnect is safe only because MVP1 is single-account — already deliberate per the
+proposal's own framing, revisit if a second account is ever added. A `functional-test-reviewer`
+found 0 BLOCKER, one MAJOR, two MINOR. MAJOR: no test exercised `revokeToken` throwing during
+disconnect — a real, named safety property (the module's own doc comment explains why order
+matters) with zero regression coverage, and the exact class of regression a future "don't let a
+flaky Google API block local cleanup" refactor could introduce silently. MINOR: the TTL-expiry test
+only checked a far-future timestamp, not the exact `ageMs === ttlMs` boundary (an off-by-one
+`>` → `>=` regression would pass undetected); MINOR: the one-time-consumption test inferred physical
+row deletion only through `consumeOAuthFlow`'s own second-call report, not an independent `SELECT`.
+
+**Fix, verified by mutation** (same discipline as checkpoints 1-3): tightened the fail-closed check
+to `!exchanged.refreshToken` (rejects `''` too); documented the tracked KEK-mismatch/stuck-row risk
+directly in `disconnectGmailAccount`'s doc comment as an explicit acceptance criterion for the future
+Worker checkpoint (mirrors checkpoint 3's own GPT-PM-endorsed "key-ring resolution is the caller's
+responsibility" framing — chose this over reordering stopWatch/revoke, which would have deviated
+from the proposal's own approved rationale, or adding a force-cleanup/monitoring path, which is
+scope creep beyond §2.5's actual design); added and mutation-verified: a `revokeToken`-throws test
+(asserts rejection, `gmail_connections` row and `oauth_flows` both untouched), a retry-after-
+transient-failure test (proves the ordering is retry-safe, not just fail-closed once — directly
+answers the security reviewer's stuck-row concern for the transient-failure case, leaving only the
+tracked permanent-KEK-mismatch case as a documented future-checkpoint risk), an empty-string
+fail-closed test, a TTL-exact-boundary test, and an independent-`SELECT`-based one-time-consumption
+test. Mutation-verified all four behavioral fixes: (1) swallowing `revokeToken`'s error in a
+try/catch made exactly the two new disconnect-error tests fail; (2) reverting the fail-closed check
+to `=== null` made exactly the empty-string test fail; (3) flipping `>` to `>=` in the TTL check made
+exactly the boundary test fail. All reverted after confirmation, full suite re-green.
+
+**Verification.** Full repo suite: 399/399 tests passing (33 files, 18 in `oauth.test.ts`).
+`npm run typecheck`/`npm run lint` both clean. `prettier --write` applied.
+
+**How to apply.** Checkpoint 4 is closed pending GPT-PM's own gate-review round on this diff.
+Remaining G3 checkpoints: cursor/history-list sync + normalization (§2.2/§2.3), quota limiter wiring
+(§2.9), drill-down endpoints (§2.8), and the `services/gmail-connector` Worker itself (§2.1) — which
+MUST resolve the correct `kek: CryptoKey` for a given row's `kek_version` from a key ring rather than
+passing a single default key, per the tracked risk documented above and in `oauth.ts`'s own doc
+comment.
+
 ## 2026-09-13 — G3 implementation checkpoint 3: KEK crypto (`packages/domain/src/gmail/crypto.ts`)
 
 **Decision.** Third implementation checkpoint of gate G3, on branch `gate/g3-implementation`: the
