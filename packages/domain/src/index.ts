@@ -74,3 +74,11 @@ export type {
   RecoverStalePushDeliveriesOptions,
   RecoveredPushDelivery,
 } from './gmail/push-lease-recovery.js';
+
+export { persistEnrichment, getEnrichment } from './gmail/enrichment.js';
+export type {
+  EnrichmentInput,
+  PersistEnrichmentOptions,
+  PersistEnrichmentResult,
+  Enrichment,
+} from './gmail/enrichment.js';

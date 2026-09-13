@@ -3,6 +3,21 @@ export interface ClaimedEvent {
   eventId: string;
   attemptNumber: number;
   /**
+   * The exact lease token this attempt currently holds (G3 checkpoint 2, GPT-PM round-3 BLOCKER on
+   * the G3 gate review: `ClaimedEvent` previously exposed no way for any `EventProcessor` to fence
+   * a durable write of its own against the CURRENT processing lease, even though the token exists
+   * in `handler.ts` at the exact point this object is constructed -- it was simply never passed
+   * through. Additive and backward-compatible: `noopProcessor` and every existing G2 test that
+   * constructs a `ClaimedEvent` literal keep compiling and passing unchanged, since this is a new
+   * field on an object callers already build, not a signature change to `EventProcessor` itself.
+   * A real processor's own durable writes (e.g. G3's `gmail_source_enrichments`) must condition on
+   * `WHERE ... state = 'PROCESSING' AND processing_lease_token = <this exact value>` -- the same
+   * fence `packages/domain/src/transitions.ts` uses for every one of G2's own terminal mutations --
+   * so a stale claimant that has already lost this lease cannot author a canonical result after the
+   * fact.
+   */
+  leaseToken: string;
+  /**
    * Fires once a heartbeat renewal has lost the fence -- the stale-lease-recovery sweep already
    * reclaimed this lease while `process()` was still running (GPT-PM BLOCKER, G2 gate review: the
    * heartbeat/renewal mechanism existed as a helper but was never wired into the processing

@@ -42,6 +42,39 @@ describe('processMessage', () => {
     expect(event?.state).toBe('PROCESSED');
   });
 
+  it(
+    'G3 checkpoint 2 regression (GPT-PM round-3 BLOCKER on the G3 gate review): the ClaimedEvent ' +
+      'passed to process() carries the EXACT lease token this attempt holds RIGHT NOW, not a ' +
+      'placeholder -- proven by reading the live DB column from inside process() itself, while the ' +
+      'event is still PROCESSING under that token',
+    async () => {
+      const db = await setupAccepted('ev-token');
+      let matchedLiveToken = false;
+      const capturingProcessor: EventProcessor = async (event) => {
+        const live = await db
+          .prepare(
+            "SELECT processing_lease_token FROM ingest_events WHERE event_id = ? AND state = 'PROCESSING'",
+          )
+          .bind('ev-token')
+          .first<{ processing_lease_token: string }>();
+        matchedLiveToken =
+          live !== null &&
+          live.processing_lease_token === event.leaseToken &&
+          event.leaseToken !== '';
+        return { outcome: 'SUCCESS' };
+      };
+
+      await processMessage(db, {
+        eventId: 'ev-token',
+        workerId: 'worker-1',
+        now: NOW,
+        process: capturingProcessor,
+      });
+
+      expect(matchedLiveToken).toBe(true);
+    },
+  );
+
   it('defaults to the no-op processor (always SUCCESS) when none is injected', async () => {
     const db = await setupAccepted('ev-2');
     const result = await processMessage(db, { eventId: 'ev-2', workerId: 'worker-1', now: NOW });

@@ -158,6 +158,7 @@ export async function processMessage(
     outcome = await process({
       eventId: opts.eventId,
       attemptNumber: claim.attemptNumber,
+      leaseToken: claim.token,
       leaseLost: leaseLostController.signal,
     });
   } catch (error) {

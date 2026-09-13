@@ -54,7 +54,14 @@ CREATE TABLE oauth_flows (
 -- rather than authoring the canonical result after losing its fence (GPT-PM round-3 BLOCKER).
 -- status='NO_CONTENT_DELETED' is the explicit marker for a MESSAGE_DELETED event that completes
 -- with zero Gmail API calls and zero AI invocation (proposal §2.3/§2.4) -- summary/extracted_json
--- are NULL in that case, never a placeholder value.
+-- are NULL in that case, never a placeholder value. The CHECK below is a CASE, not a bare
+-- equivalence (database review, G3 checkpoint 2): a plain
+-- `(status = 'NO_CONTENT_DELETED') = (all three IS NULL)` only forces the NO_CONTENT_DELETED side
+-- airtight -- it would still accept a COMPLETE row with just ONE of the three fields populated,
+-- which the CURRENT sole writer (packages/domain/src/gmail/enrichment.ts) can never produce (its
+-- discriminated union type makes that a compile error), but the schema itself is the backstop for
+-- any FUTURE writer that doesn't go through that typed entry point (e.g. a backfill script) --
+-- MUST stay airtight on both branches, not just one.
 CREATE TABLE gmail_source_enrichments (
   event_id TEXT PRIMARY KEY REFERENCES ingest_events(event_id),
   status TEXT NOT NULL CHECK (status IN ('COMPLETE', 'NO_CONTENT_DELETED')),
@@ -62,7 +69,12 @@ CREATE TABLE gmail_source_enrichments (
   extracted_json TEXT,
   model_id TEXT,
   created_at TEXT NOT NULL,
-  CHECK ((status = 'NO_CONTENT_DELETED') = (summary IS NULL AND extracted_json IS NULL AND model_id IS NULL))
+  CHECK (
+    CASE status
+      WHEN 'NO_CONTENT_DELETED' THEN summary IS NULL AND extracted_json IS NULL AND model_id IS NULL
+      ELSE summary IS NOT NULL AND extracted_json IS NOT NULL AND model_id IS NOT NULL
+    END
+  )
 );
 
 -- gmail_push_deliveries: Pub/Sub push replay suppression as a REAL fenced lease -- token, CAS

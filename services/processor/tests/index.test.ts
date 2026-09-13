@@ -16,7 +16,12 @@ import { noopProcessor } from '../src/processor.js';
 describe('noopProcessor', () => {
   it('always reports SUCCESS', async () => {
     await expect(
-      noopProcessor({ eventId: 'x', attemptNumber: 1, leaseLost: new AbortController().signal }),
+      noopProcessor({
+        eventId: 'x',
+        attemptNumber: 1,
+        leaseToken: 'token-x',
+        leaseLost: new AbortController().signal,
+      }),
     ).resolves.toEqual({
       outcome: 'SUCCESS',
     });

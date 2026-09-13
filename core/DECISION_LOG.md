@@ -3,6 +3,73 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 implementation checkpoint 2: `ClaimedEvent.leaseToken` extension + lease-fenced enrichment persistence
+
+**Decision.** Second implementation checkpoint of gate G3, on branch `gate/g3-implementation`: (1)
+extended `services/processor/src/processor.ts`'s `ClaimedEvent` interface with a new required
+`leaseToken: string` field, threaded through from `handler.ts`'s existing `claim.token` — additive
+and backward-compatible (no existing `EventProcessor` signature changed, only a new field on an
+object callers already construct); this closes the exact gap the G3 gate review's own round-3
+BLOCKER identified (the token existed in `handler.ts` at construction time but was never passed
+through, so no `EventProcessor` had any way to fence a durable write against the CURRENT lease);
+(2) `packages/domain/src/gmail/enrichment.ts` — `persistEnrichment`/`getEnrichment`, the proposal
+§2.4 AI-extraction pipeline's durable, idempotent result store, lease-fenced via
+`INSERT ... SELECT ... WHERE EXISTS (SELECT 1 FROM ingest_events WHERE event_id = ? AND
+state = 'PROCESSING' AND processing_lease_token = ?)` — the same "zero rows, not an exception" ABA
+protection `transitions.ts`'s fenced UPDATEs already use for G2's own terminal mutations, adapted to
+an INSERT since this is a first-write, not a state transition.
+
+**Internal review before GPT-PM (§17), two specialists in parallel.** A `database-reviewer` found 0
+BLOCKER/MAJOR and one MINOR: `gmail_source_enrichments`'s original CHECK constraint
+(`(status = 'NO_CONTENT_DELETED') = (all three IS NULL)`) was a bare equivalence that only forced
+the `NO_CONTENT_DELETED` side airtight, leaving a `COMPLETE` row with only one of the three content
+fields populated schema-valid — not exploitable through the current sole writer (the TS
+discriminated union makes that a compile error) but a weak backstop for any future writer that
+bypasses the typed entry point — fixed by tightening to a `CASE status WHEN 'NO_CONTENT_DELETED'
+THEN ... ELSE ... END` form, airtight on both branches. A `functional-test-reviewer` found three
+real gaps and one optional improvement: (1) MAJOR — the "LEASE_LOST: ABA scenario" test couldn't
+actually distinguish a token+state fence from a token-only fence, since every fixture correlated
+token mismatch with state; (2) MAJOR — the "ALREADY_PERSISTED" test couldn't prove the
+`isUniqueConstraintError` catch was narrowly scoped rather than a catch-all; (3) MINOR — the
+"NO_CONTENT_DELETED... satisfying the schema CHECK" test never actually exercised the DB-level
+CHECK (the TS type prevents ever reaching a violating code path); (4) MINOR/optional — no concurrent
+variant of `ALREADY_PERSISTED`, unlike §2.9's established `Promise.all` concurrency-testing rigor.
+
+**Not blind compliance on finding (1) — repository evidence corrected the reviewer's own suggested
+fixture**, per §17's explicit "challenges GPT-PM when repository evidence proves a recommendation
+wrong" discipline applied here to an internal reviewer instead: read migration 0001's actual CHECK
+constraints (`(state = 'PROCESSING') = (processing_lease_expires_at IS NOT NULL)` and
+`(processing_lease_token IS NULL) = (processing_lease_expires_at IS NULL)`) and determined that a
+"matching token, wrong state" fixture is **structurally impossible** in this schema — a
+non-PROCESSING row's `processing_lease_token` is always NULL by the schema's own guarantee, so a
+real non-null token can never coincide with a non-PROCESSING state. Wrote a new test that proves
+this impossibility directly (attempts the "impossible" seed, asserts it throws `CHECK constraint
+failed`) instead of attempting an unconstructable fixture, and documented in the test's own title why
+`state = 'PROCESSING'` stays in the fence SQL for explicitness/parity with G2 despite this.
+
+**Fix, verified by mutation** (same discipline as checkpoint 1): added the negative-error-path test
+for finding (2) (a stub `D1Database` whose `run()` throws a synthetic non-UNIQUE error, asserting
+`persistEnrichment` re-throws rather than returning `ALREADY_PERSISTED`); added the raw-SQL
+CHECK-bypass test for finding (3) (a direct `INSERT` with `status='COMPLETE'` but only `summary`
+populated); added the concurrent `Promise.all` variant for (4). For the database-reviewer's
+CHECK-tightening fix: temporarily reverted the migration's CHECK back to the old bare-equivalence
+form and reran `enrichment.test.ts` — confirmed exactly the new raw-SQL CHECK-bypass test (and no
+other) failed (`promise resolved ... instead of rejecting`) — then restored the tightened `CASE`
+form and reran, confirming all 10 tests green again.
+
+**Verification.** Full repo suite: 369/369 tests passing (31 files, +10 net from checkpoint 1: the
+new `enrichment.test.ts`'s 10 tests plus edits to existing `index.test.ts`/`handler.test.ts`
+fixtures for the new `leaseToken` field). `npm run typecheck`/`npm run lint` both clean.
+`prettier --write` applied to every touched file.
+
+**How to apply.** Checkpoint 2 is closed pending GPT-PM's own gate-review round on this diff (to
+follow before continuing to the next checkpoint, per §17's "internal review before GPT-PM" and
+"one sweep" discipline). Remaining G3 checkpoints per the APPROVEd V6 design: KEK crypto (§2.7),
+OAuth lifecycle (§2.5), cursor/history-list sync + normalization (§2.2/§2.3), quota limiter wiring
+(schema exists from checkpoint 1, no reservation-function code yet, §2.9), drill-down endpoints
+(§2.8), and the `services/gmail-connector` Worker itself with the `/ingest/gmail` service-binding
+call (§2.1).
+
 ## 2026-09-13 — G3 implementation checkpoint 1: Pub/Sub push-delivery lease/fence + migration 0002
 
 **Decision.** First implementation checkpoint of gate G3, on branch `gate/g3-implementation`:
