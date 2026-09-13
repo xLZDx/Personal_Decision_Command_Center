@@ -3,6 +3,34 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 6 APPROVED: GPT-PM round 2 closes all five MAJORs (0/0/0)
+
+**Verdict:** `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR, bounded exactly to the five
+round-1 findings plus direct remediation regressions. Correlated review of
+`07c43c3...2d8a1ba`: `reviewInputHash 27ba7a6d21d516a734d0bd8de5a8b2ddec469d64ad3c9127366f3e3e99d48714`,
+`reviewRequestId 7d0d97ac-984f-4cd5-a647-e96e10b50289`,
+`replyId 9a4edb51-f460-4eab-b749-a066ce511786`. Receipt is durable in PM Bridge's receipt store;
+the full reply was returned by the round-2 `review.js` invocation in this session.
+
+GPT-PM explicitly confirmed each item closed: reservation-scoped reconciliation is exactly once
+for negative/positive deltas and concurrent duplicates; the raw total is unclamped and produces
+9,950 in both orders for its own prior counterexample; rate and daily partition keys are derived
+internally from validated instants at the correct UTC boundary; the 3,000-per-fixed-bucket design
+mathematically enforces the real 6,000-per-trailing-60-second bound and its 50% throughput tradeoff
+is accepted; and migration 0010's trigger-backed reservation INSERT/reconciliation UPDATE have no
+application/process crash seam between ledger and aggregate mutation. Closing sentence:
+"I found no direct remediation regression strong enough to withhold approval. Checkpoint 6 does
+not need Round 3 on the evidence in this remediation."
+
+**Local evidence at approved head:** quota 43/43; full repository 503/503; typecheck, ESLint,
+touched-file formatting, `git diff --check`, and secret scan green. The optional gate-closure
+mutation harness was also run: its baseline and every mutation that applied were killed, but three
+old mutations reported `ANCHOR MISSING` in untouched `packages/contracts/src/event.ts` and
+`packages/contracts/src/provenance.ts`. Those textual anchors were already stale at `07c43c3`; this
+checkpoint did not alter those files or the mutation harness, and does not expand its quota-
+primitive remediation scope to rewrite governance tooling. The condition is recorded rather than
+misreported as a green mutation run; G3 gate closure must resolve/re-authorize it if still present.
+
 ## 2026-09-14 — G3 checkpoint 6, GPT-PM round 1: 5 MAJOR remediated as one coherent quota-ledger change; ready for bounded round 2 verification
 
 **GPT-PM round 1 verdict:** `VERDICT: MAJOR`, 0 BLOCKER / 5 MAJOR, correlated to commit
