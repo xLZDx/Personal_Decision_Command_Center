@@ -146,62 +146,71 @@ export interface RetryableFailureContext {
  * and the stale-lease-recovery sweep, same shape as `moveToDlq` but with no durable side-table
  * write, since a non-terminal outcome needs no operational record beyond the state itself.
  *
- * Structurally DIFFERENT from `moveToDlq` in one deliberate way (GPT-PM MAJOR, G2 gate review):
- * the fenced `ingest_events` transition runs FIRST, alone, and its own `meta.changes` is checked
- * BEFORE the outbox/audit statements are even issued -- a LOSER returns `false` immediately,
- * touching nothing else. `moveToDlq` can safely batch all four statements together because every
- * concurrent DLQ caller writes an equivalent terminal outcome (the outbox CLOSE is idempotent, and
- * the `dead_letter_events` INSERT's own `NOT EXISTS` guard makes it "first writer wins," so a loser
- * clobbering nothing DLQ-specific). This function cannot rely on the same idempotency: its outbox
- * UPDATE carries a caller-specific `nextAttemptAt` (a live processor's real per-attempt backoff vs.
- * the sweep's own "retry immediately"), which VARIES between callers. Batching it behind only a
- * "current state is RETRYABLE_FAILED" guard (as the DLQ primitive's own siblings do) let a LOSING
- * caller's statement still match and overwrite the WINNING caller's chosen `nextAttemptAt` --
- * concretely: live processor wins, sets a real backoff; the stale sweep's own batch runs next,
- * its statement 1 loses the fence (0 rows) but its outbox statement still matched "state is
- * RETRYABLE_FAILED" and clobbered the winner's backoff with the sweep's own `now`. Checking the
- * transition's own result before ever building the follow-up statements closes that: once
- * `ingest_events.state` is no longer 'PROCESSING', no OTHER caller of this same function can still
- * be "in the running" for it (their own statement 1 would need `state = 'PROCESSING'`, no longer
- * true), so the outbox/audit statements below only ever run for the confirmed, sole winner.
+ * BLOCKER fix (GPT-PM, G2 gate review round 2): an EARLIER version of this function ran the fenced
+ * `ingest_events` transition as its own standalone `.run()`, checked `meta.changes`, and only THEN
+ * issued the outbox/audit statements in a separate `db.batch()`. That created a genuine await gap
+ * between the two: once the standalone transition committed (event RETRYABLE_FAILED, lease
+ * cleared) but BEFORE the follow-up batch had run, `processing_outbox.state` was STILL
+ * `DISPATCHED` -- exactly the state `claimLease`'s own new DISPATCHED-required rule treats as
+ * claimable. A delayed/duplicate Queue redelivery landing in that gap could claim attempt N+1
+ * immediately, bypassing the backoff this whole function exists to enforce, and — if it also
+ * incremented `processing_attempt_count` before the audit statement below ran — could cause that
+ * audit UPDATE to close out the WRONG attempt's row (selecting the now-current, higher attempt
+ * number).
+ *
+ * Fixed by making this genuinely one atomic `db.batch()` again (matching `moveToDlq`'s own
+ * shape), but reordered so the outbox/audit statements run FIRST, each independently re-fenced via
+ * `EXISTS (... state = 'PROCESSING' AND <same fence>)` against `ingest_events` — which still
+ * reads the PRE-transition row, because neither of those two statements touches `ingest_events`
+ * itself. The actual authoritative `ingest_events` transition runs LAST, in the same batch/
+ * transaction. A loser's fence fails for all three statements at once (nothing to touch, matching
+ * `moveToDlq`'s own "first writer wins" idempotency), and a winner's three statements commit
+ * together or not at all -- there is no window between "the event is no longer claimable" and "the
+ * backoff is durable" for anything else to land in.
  */
 export async function moveToRetryableFailed(
   db: D1Database,
   ctx: RetryableFailureContext,
 ): Promise<boolean> {
   const { sql: fenceSql, params: fenceParams } = fenceClause(ctx.fence);
-  const transition = await db
-    .prepare(
-      `UPDATE ingest_events SET state = 'RETRYABLE_FAILED',
-         first_failed_at = COALESCE(first_failed_at, ?),
-         processing_lease_owner = NULL, processing_lease_token = NULL, processing_lease_expires_at = NULL
-       WHERE event_id = ? AND state = 'PROCESSING' AND ${fenceSql}`,
-    )
-    .bind(ctx.now, ctx.eventId, ...fenceParams)
-    .run();
-  if (transition.meta.changes !== 1) return false;
+  const stillProcessingFenced = `EXISTS (
+    SELECT 1 FROM ingest_events e WHERE e.event_id = ? AND e.state = 'PROCESSING' AND ${fenceSql}
+  )`;
 
-  await db.batch([
+  const results = await db.batch([
     db
       .prepare(
-        // No longer needs to re-verify ingest_events' own state (the standalone transition above
-        // already proved THIS call won it, and no concurrent caller of this function can still be
-        // racing for the same event once state has left PROCESSING) -- state <> 'CLOSED' remains
-        // for defense-in-depth consistency with every sibling terminal-transition statement in this
-        // file, against an unrelated code path closing the outbox in the same narrow window.
         `UPDATE processing_outbox SET state = 'RETRY_PENDING', next_attempt_at = ?, updated_at = ?
-         WHERE event_id = ? AND state <> 'CLOSED'`,
+         WHERE event_id = ? AND state <> 'CLOSED' AND ${stillProcessingFenced}`,
       )
-      .bind(ctx.nextAttemptAt, ctx.now, ctx.eventId),
+      .bind(ctx.nextAttemptAt, ctx.now, ctx.eventId, ctx.eventId, ...fenceParams),
     db
       .prepare(
         `UPDATE processing_attempts SET finished_at = ?, outcome = 'RETRYABLE_FAILURE',
            error_class = ?, error_code = ?
          WHERE event_id = ?
            AND attempt_number = (SELECT processing_attempt_count FROM ingest_events WHERE event_id = ?)
-           AND finished_at IS NULL`,
+           AND finished_at IS NULL
+           AND ${stillProcessingFenced}`,
       )
-      .bind(ctx.now, ctx.errorClass, ctx.errorCode, ctx.eventId, ctx.eventId),
+      .bind(
+        ctx.now,
+        ctx.errorClass,
+        ctx.errorCode,
+        ctx.eventId,
+        ctx.eventId,
+        ctx.eventId,
+        ...fenceParams,
+      ),
+    db
+      .prepare(
+        `UPDATE ingest_events SET state = 'RETRYABLE_FAILED',
+           first_failed_at = COALESCE(first_failed_at, ?),
+           processing_lease_owner = NULL, processing_lease_token = NULL, processing_lease_expires_at = NULL
+         WHERE event_id = ? AND state = 'PROCESSING' AND ${fenceSql}`,
+      )
+      .bind(ctx.now, ctx.eventId, ...fenceParams),
   ]);
-  return true;
+  const transition = results[2];
+  return transition !== undefined && transition.meta.changes === 1;
 }

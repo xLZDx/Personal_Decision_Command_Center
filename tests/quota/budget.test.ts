@@ -39,7 +39,10 @@ import type { ProcessorEnv } from '@pdos/processor-service';
  * estimate, not a claim about real D1 billing quantities. `Analytics datapoints/event` is reported
  * as 0 rather than estimated: G2 has no Analytics Engine binding anywhere in its own scope --
  * inventing a plausible-looking non-zero number here would be exactly the kind of unverified claim
- * project rules forbid.
+ * project rules forbid. `Queue ops/event` counts the producer write, the consumer's own read/pull
+ * of the message, and its ack/delete separately (TDD §16.3: "a normal message commonly consumes
+ * write + read + delete operations") -- an earlier version of this harness counted only the
+ * producer send and understated the real metric roughly 3x (GPT-PM MAJOR, G2 gate review round 2).
  */
 
 type OpKind = 'read' | 'write';
@@ -182,10 +185,17 @@ async function runBudgetSimulation(eventCount: number): Promise<BudgetResult> {
   });
   const db = wrapCountingD1(rawDb, counts);
 
-  let queueOps = 0;
+  // MAJOR fix (GPT-PM, G2 gate review round 2): TDD §16.3 states plainly that "a normal message
+  // commonly consumes write + read + delete operations" -- counting only the producer's send()
+  // undercounts the real metric by roughly 3x. `writes` = producer sends; `reads` = the consumer
+  // batch's own delivery/pull of each message; `deletes` = each message's own ack (Cloudflare
+  // deletes a message from the queue on ack). All three are estimates, stated as such -- the exact
+  // internal operation count for a Cloudflare Queue delivery is not something this offline harness
+  // can observe.
+  const queueOps = { writes: 0, reads: 0, deletes: 0 };
   const queuedMessages: QueuePayload[] = [];
   const send = async (message: QueuePayload): Promise<void> => {
-    queueOps++;
+    queueOps.writes++;
     queuedMessages.push(message);
   };
   const env: IngestEnv = {
@@ -220,14 +230,21 @@ async function runBudgetSimulation(eventCount: number): Promise<BudgetResult> {
 
   const processorEnv: ProcessorEnv = { DB: db };
   const batch = {
-    messages: queuedMessages.map((body, idx) => ({
-      id: `m${idx}`,
-      timestamp: new Date(),
-      body,
-      attempts: 1,
-      retry: () => undefined,
-      ack: () => undefined,
-    })),
+    // Each message being handed to the consumer at all is the "read"/pull side of the queue op
+    // triad; each message's own `ack()` call below is the "delete" side.
+    messages: queuedMessages.map((body, idx) => {
+      queueOps.reads++;
+      return {
+        id: `m${idx}`,
+        timestamp: new Date(),
+        body,
+        attempts: 1,
+        retry: () => undefined,
+        ack: () => {
+          queueOps.deletes++;
+        },
+      };
+    }),
     queue: 'ingest-dispatch',
     metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
     retryAll: () => undefined,
@@ -240,11 +257,13 @@ async function runBudgetSimulation(eventCount: number): Promise<BudgetResult> {
     .first<{ n: number }>();
   const processedCount = processed?.n ?? 0;
 
+  const totalQueueOps = queueOps.writes + queueOps.reads + queueOps.deletes;
+
   return {
     eventCount,
     d1WritesPerEvent: counts.write / eventCount,
     d1ReadsPerEvent: counts.read / eventCount,
-    queueOpsPerEvent: queueOps / eventCount,
+    queueOpsPerEvent: totalQueueOps / eventCount,
     analyticsDatapointsPerEvent: 0,
     httpRequestsPerEvent: httpRequests / eventCount,
     cronTicks,
@@ -263,8 +282,14 @@ describe('G2 quota budget (TDD §35/§71: 200-event/day and 1000-event/day D1/Qu
       // harness exercises (the failure/redispatch paths are covered by packages/domain's own
       // reconciler/lease test suites, not duplicated here).
       expect(result.httpRequestsPerEvent).toBe(1);
-      // Exactly 1 Queue send per event under normal (non-redispatch) operation.
-      expect(result.queueOpsPerEvent).toBe(1);
+      // TDD §16.3: "a normal message commonly consumes write + read + delete operations" -- 1
+      // producer send + 1 consumer read/pull + 1 ack/delete, under normal (non-redispatch)
+      // operation.
+      expect(result.queueOpsPerEvent).toBe(3);
+      // Free Queues include 10,000 operations/day (TDD §16.3) -- both mandatory volumes stay well
+      // inside that with real margin, using this estimate rather than the previously-undercounted
+      // 1/event figure.
+      expect(result.queueOpsPerEvent * eventCount).toBeLessThan(10_000);
       expect(result.analyticsDatapointsPerEvent).toBe(0);
       // Sanity bounds, not tight assertions: a regression that multiplied D1 traffic per event
       // (e.g. an N+1 query newly introduced somewhere in the pipeline) should fail this long

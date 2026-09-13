@@ -7,6 +7,7 @@ import {
   shouldMoveToDlq,
   type LeaseFence,
 } from '../src/transitions.js';
+import { claimLease } from '../src/lease.js';
 
 const MAX_ATTEMPTS = 5;
 
@@ -287,5 +288,43 @@ describe('moveToRetryableFailed', () => {
       .bind('ev-race-backoff')
       .first<{ next_attempt_at: string }>();
     expect(outbox?.next_attempt_at).toBe('2026-09-13T00:08:00.000Z');
+  });
+
+  it('BLOCKER regression (GPT-PM, G2 gate review round 2): the outbox move to RETRY_PENDING is atomic with the ingest_events transition -- no window where a duplicate delivery could claim attempt N+1 before the backoff is durable', async () => {
+    const db = await setupProcessingEvent('ev-atomic-retry', 1, 'token-A');
+    // Also mark this event's dispatch as authorized (claimLease's own DISPATCHED-required rule) --
+    // setupProcessingEvent's own outbox row already starts DISPATCHED.
+    const ok = await moveToRetryableFailed(db, {
+      eventId: 'ev-atomic-retry',
+      fence: { kind: 'LIVE', token: 'token-A' },
+      now: '2026-09-13T00:03:00.000Z',
+      nextAttemptAt: '2026-09-13T00:08:00.000Z',
+      errorClass: 'NetworkError',
+      errorCode: 'E_NET',
+    });
+    expect(ok).toBe(true);
+
+    // Before the fix, this was reachable in the window between the standalone ingest_events
+    // transition committing and the follow-up outbox batch running: the outbox row was still
+    // DISPATCHED, and claimLease's DISPATCHED-required rule let a delayed/duplicate delivery claim
+    // attempt N+1 immediately, bypassing the backoff this call just set. With the fix, the outbox
+    // move to RETRY_PENDING commits in the SAME transaction as the ingest_events transition, so
+    // there is no intermediate state for this claim attempt to observe.
+    const duplicateClaim = await claimLease(db, {
+      eventId: 'ev-atomic-retry',
+      workerId: 'worker-2',
+      leaseDurationMs: 60_000,
+      now: '2026-09-13T00:03:01.000Z',
+      processorVersion: 'proc-v1',
+      traceId: 'trace-1',
+      maxAttempts: 5,
+    });
+    expect(duplicateClaim.claimed).toBe(false);
+
+    const outbox = await db
+      .prepare('SELECT state FROM processing_outbox WHERE event_id = ?')
+      .bind('ev-atomic-retry')
+      .first<{ state: string }>();
+    expect(outbox?.state).toBe('RETRY_PENDING');
   });
 });

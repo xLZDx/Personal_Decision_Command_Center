@@ -73,12 +73,26 @@ function startHeartbeat(params: {
     timer = setTimeout(() => {
       void (async () => {
         if (stopped) return;
-        const renewed = await renewLease(params.db, {
-          eventId: params.eventId,
-          token: params.token,
-          now: params.nowFn(),
-          leaseDurationMs: params.leaseDurationMs,
-        });
+        // MAJOR fix (GPT-PM, G2 gate review round 2): a transient D1/runtime error from
+        // `renewLease` itself (not merely a fenced "false") previously propagated as an unhandled
+        // rejection inside this fire-and-forget tick, AND `onLost()` was never called -- so the
+        // lease's real safety contract (leaseLost fires whenever renewal cannot be PROVEN to have
+        // succeeded) silently didn't hold for this failure mode. "Cannot prove renewal" is treated
+        // exactly like "renewal reported false": stop scheduling and signal lease loss, never keep
+        // running under a lease this call could not actually confirm.
+        let renewed: boolean;
+        try {
+          renewed = await renewLease(params.db, {
+            eventId: params.eventId,
+            token: params.token,
+            now: params.nowFn(),
+            leaseDurationMs: params.leaseDurationMs,
+          });
+        } catch {
+          if (stopped) return;
+          params.onLost();
+          return;
+        }
         if (stopped) return;
         if (!renewed) {
           params.onLost();

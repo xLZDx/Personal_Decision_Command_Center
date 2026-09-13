@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import {
   createTestD1,
   loadG2Schema,
@@ -273,6 +274,78 @@ describe('processMessage heartbeat (GPT-PM BLOCKER, G2 gate review)', () => {
     const event = await db
       .prepare('SELECT state FROM ingest_events WHERE event_id = ?')
       .bind('ev-hb-2')
+      .first<{ state: string }>();
+    expect(event?.state).toBe('RETRYABLE_FAILED');
+  });
+
+  it('a transient D1 error during heartbeat renewal is caught, signals leaseLost, and produces no unhandled rejection (GPT-PM MAJOR, round 2)', async () => {
+    vi.useFakeTimers();
+    const rawDb = await setupAccepted('ev-hb-3');
+    // Wraps the real db so the ONE statement `renewLease` issues throws, simulating a transient
+    // D1/runtime error -- everything else (claimLease, failProcessing) passes through untouched.
+    const throwingDb: D1Database = {
+      prepare(sql: string): D1PreparedStatement {
+        if (sql.includes('SET processing_lease_expires_at = ?')) {
+          return {
+            bind(): D1PreparedStatement {
+              return this as unknown as D1PreparedStatement;
+            },
+            async run(): Promise<never> {
+              throw new Error('simulated transient D1 error');
+            },
+          } as unknown as D1PreparedStatement;
+        }
+        return rawDb.prepare(sql);
+      },
+      batch: rawDb.batch.bind(rawDb),
+      exec: rawDb.exec.bind(rawDb),
+      withSession: rawDb.withSession.bind(rawDb),
+      dump: rawDb.dump.bind(rawDb),
+    } as D1Database;
+
+    let leaseLostSeen = false;
+    let resolveAborted!: () => void;
+    const abortedSignal = new Promise<void>((resolve) => {
+      resolveAborted = resolve;
+    });
+    const cooperativeProcessor: EventProcessor = (event) =>
+      new Promise((resolve) => {
+        event.leaseLost.addEventListener('abort', () => {
+          leaseLostSeen = true;
+          resolveAborted();
+          resolve({
+            outcome: 'RETRYABLE_FAILURE',
+            errorClass: 'Aborted',
+            errorCode: 'E_LEASE_LOST',
+          });
+        });
+      });
+
+    const resultPromise = processMessage(throwingDb, {
+      eventId: 'ev-hb-3',
+      workerId: 'worker-1',
+      now: NOW,
+      leaseDurationMs: 1000,
+      heartbeatIntervalMs: 500,
+      heartbeatNow: () => new Date(Date.parse(NOW) + 500).toISOString(),
+      process: cooperativeProcessor,
+    });
+
+    // Vitest fails the run on any unhandled rejection -- this assertion is really "the heartbeat's
+    // renewal error was caught", proven by the whole test completing at all, not just by this line.
+    await vi.advanceTimersByTimeAsync(500);
+    await abortedSignal;
+    expect(leaseLostSeen).toBe(true);
+
+    const result = await resultPromise;
+    // Unlike the sweep-reclaim scenario above, nothing else ever actually touched the lease -- only
+    // the RENEWAL attempt failed. The original token/state are untouched, so the eventual
+    // failProcessing call (with the original claim's token) succeeds normally.
+    expect(result).toEqual({ claimed: true, transitioned: true, movedToDlq: false });
+
+    const event = await rawDb
+      .prepare('SELECT state FROM ingest_events WHERE event_id = ?')
+      .bind('ev-hb-3')
       .first<{ state: string }>();
     expect(event?.state).toBe('RETRYABLE_FAILED');
   });

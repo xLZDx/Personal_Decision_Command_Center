@@ -3,6 +3,85 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G2 implementation, checkpoint 5: GPT-PM gate review round 2 (1 BLOCKER + 3 MAJOR,
+all scoped to checkpoint-4's own remediation), 334 tests, all green
+
+**Context.** Checkpoint 4's diff (`git diff b690ebf...HEAD`, the exact remediation round 1
+requested) went to GPT-PM for round 2 verification, scoped per §17 to "the reported fixes plus
+regressions directly caused by that remediation." GPT-PM returned `VERDICT: BLOCKER` with 1 BLOCKER
++ 3 MAJOR, all genuinely within that scope (real regressions introduced by checkpoint 4's own
+fixes, or gaps in checkpoint 4's own new evidence) — confirmed real by direct source inspection
+before remediating, per §3/§23.
+
+**BLOCKER, verified and fixed:**
+- **The retry-failure remediation's own "loser touches nothing" restructuring reintroduced the
+  exact race it was meant to prevent.** `moveToRetryableFailed` ran the fenced `ingest_events`
+  transition as a standalone `.run()`, checked its own `meta.changes`, and only THEN issued the
+  outbox/audit statements in a separate `db.batch()`. That created a genuine await gap: once the
+  standalone transition committed (event `RETRYABLE_FAILED`, lease cleared) but before the
+  follow-up batch ran, `processing_outbox.state` was still `DISPATCHED` — exactly the state
+  checkpoint 4's own new `claimLease` rule treats as claimable. A delayed/duplicate Queue
+  redelivery landing in that gap could claim attempt N+1 immediately, bypassing the backoff this
+  function exists to enforce, and — if it also incremented `processing_attempt_count` before the
+  audit statement ran — could cause that statement to close out the WRONG attempt's row. Fixed by
+  making the whole transition one atomic `db.batch()` again (matching `moveToDlq`'s own shape),
+  reordered so the outbox/audit statements run FIRST, each independently re-fenced via
+  `EXISTS (... state = 'PROCESSING' AND <same fence>)` against the still-untouched `ingest_events`
+  row; the authoritative `ingest_events` transition runs LAST in the same batch. A loser's fence
+  now fails for all three statements at once — nothing to touch — and a winner's three statements
+  commit together or not at all, closing the window entirely rather than narrowing it. Regression
+  test added (`packages/domain/tests/transitions.test.ts`) proving a duplicate `claimLease`
+  attempt immediately after a `moveToRetryableFailed` call is rejected because the outbox is
+  already `RETRY_PENDING`, never observably still `DISPATCHED`.
+
+**MAJORs, verified and fixed:**
+- **Heartbeat renewal had no error handling for a D1 call that THROWS, as opposed to returning
+  `false`.** `startHeartbeat`'s fire-and-forget tick directly awaited `renewLease` with no
+  try/catch; a transient D1/runtime error rejected the detached async function with no controlled
+  handling, `onLost()` was never called, and no further heartbeat was scheduled — silently breaking
+  the "leaseLost fires whenever renewal cannot be proven to have succeeded" contract for exactly
+  the failure mode most likely in production. Fixed: the renewal call is now wrapped in try/catch;
+  "cannot prove renewal" (an exception) is treated identically to "renewal reported false" — signal
+  lease loss and stop scheduling. Regression test added
+  (`services/processor/tests/handler.test.ts`) using a db wrapper that makes only the renewal
+  statement throw, proving `leaseLost` fires, no unhandled rejection occurs, and the eventual
+  completion behaves correctly (the lease itself was never actually reclaimed by anything else, so
+  the stale worker's own completion legitimately succeeds).
+- **The mandatory quota test undercounted Queue ops/event by roughly 3x.** TDD §16.3 states
+  plainly that "a normal message commonly consumes write + read + delete operations," but the
+  harness counted only the producer's `send()`, asserting `queueOpsPerEvent === 1`. Fixed to model
+  and count the producer write, the consumer's own read/pull of each message, and its ack/delete
+  separately (`tests/quota/budget.test.ts`), now asserting `queueOpsPerEvent === 3` and that the
+  resulting daily total stays under Free Queues' 10,000 operations/day ceiling for both mandatory
+  volumes.
+- **Round-1 regression evidence was still incomplete for three of checkpoint 4's own fixes** — the
+  reviewer's own standard ("would the cited test actually fail if the fix were reverted") was not
+  met for: (a) the 413 body-size cap had zero test coverage of the 413 path itself; (b) the
+  redispatch regression proved only that the outbox row is remarked DISPATCHED, stopping short of
+  Queue consumption/PROCESSED; (c) nothing would fail if `cleanupExpiredNonces`'s call from
+  `handleScheduled` were removed. Fixed with four new tests: an active-key oversized-body test
+  expecting 413 (`services/ingest/tests/handler.test.ts`); a companion test proving the request
+  body is never even read (`ReadableStream.locked` stays `false`) when the cheap pre-body check
+  fails first; a scheduled-handler nonce-cleanup assertion seeding a stale nonce directly and
+  confirming it is purged; and a new end-to-end integration test
+  (`tests/integration/redispatch-recovery.test.ts`) proving a lost dispatch (`Queue.send()` throws
+  right after the D1 dispatch transition commits) is redispatched once the redispatch-due window
+  elapses and reaches `PROCESSED` through the real Queue consumer.
+
+**Verification:** `npx tsc --build --force`, `npx eslint .` both clean repo-wide; `npx prettier
+--check .` clean for every file this checkpoint touched (the same 6 pre-existing, untouched
+governance/ADR/plan documents remain non-conforming, unchanged); full `npx vitest run` —
+334/334 passing across the whole repo (6 new this checkpoint: 1 atomic-retry-transition BLOCKER
+regression, 1 heartbeat-throws MAJOR regression, 2 body-cap/never-read MAJOR regressions, 1
+nonce-cleanup-wiring MAJOR regression, 1 end-to-end redispatch-to-PROCESSED integration test —
+plus the pre-existing 328 from checkpoint 4). Manifest scope re-verified by hand against
+`governance/gate-manifests/g2.yaml`'s `allowed_paths`/`forbidden_paths` for every changed path
+(all under `packages/domain/**`, `services/processor/**`, `services/ingest/**`, `tests/quota/**`,
+`tests/integration/**`).
+
+**Not yet done:** GPT-PM round 3 (verification of this remediation, per §17 — nothing else in
+scope unless a genuine regression from this batch surfaces).
+
 ## 2026-09-13 — G2 implementation, checkpoint 4: GPT-PM gate review round 1 (5 BLOCKER + 10 MAJOR),
 one-sweep remediation batch, 328 tests, all green
 

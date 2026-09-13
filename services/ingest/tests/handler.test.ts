@@ -1,4 +1,4 @@
-/* global Request, Headers */
+/* global Request, Headers, ReadableStream, TextEncoder, RequestInit */
 import { describe, expect, it, vi } from 'vitest';
 import {
   createTestD1,
@@ -7,7 +7,7 @@ import {
   seedSigningKey,
   TEST_HMAC_SECRET,
 } from '@pdos/testkit';
-import { canonicalSigningPayload, sha256Hex, signHmac } from '@pdos/domain';
+import { canonicalSigningPayload, reserveNonce, sha256Hex, signHmac } from '@pdos/domain';
 import { SCHEMA_VERSION } from '@pdos/contracts';
 
 import { handleIngestRequest, handleScheduled } from '../src/handler.js';
@@ -212,6 +212,58 @@ describe('handleIngestRequest', () => {
     const body = (await second.json()) as { status: string };
     expect(body.status).toBe('ALREADY_ACCEPTED');
   });
+
+  it('413s an oversized body from an otherwise-authenticated (active key, in-window timestamp) caller, before signature verification (G2 gate review MAJOR)', async () => {
+    const { env } = await setupEnv();
+    const timestamp = NOW;
+    const request = new Request('https://ingest.example/ingest/gmail', {
+      method: 'POST',
+      headers: new Headers({
+        'x-signature': 'irrelevant-never-checked',
+        'x-timestamp': timestamp,
+        'x-nonce': 'nonce-oversized',
+        'x-key-version': 'v1',
+      }),
+      // 70,000 bytes > MAX_INGEST_BODY_BYTES (64 * 1024) -- an active key and an in-window
+      // timestamp are enough to clear checkKeyAndTimestamp, so this is rejected purely on size.
+      body: 'x'.repeat(70_000),
+    });
+    const response = await handleIngestRequest(request, env, NOW);
+    expect(response.status).toBe(413);
+    const responseBody = (await response.json()) as { error: string };
+    expect(responseBody.error).toBe('BODY_TOO_LARGE');
+  });
+
+  it('never reads the request body when the cheap pre-body check fails (security fix, G2 gate review MAJOR)', async () => {
+    const { env } = await setupEnv();
+    // A stream never becomes `locked` until something actually calls `getReader()` on it -- `pull`
+    // itself is not a usable signal here, since the Streams spec invokes it once on construction to
+    // fill the queue up to the default high-water mark, regardless of whether anything ever reads
+    // from the stream. `locked` is the correct proxy for "this body was actually consumed."
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode('{}'));
+        controller.close();
+      },
+    });
+    const request = new Request('https://ingest.example/ingest/gmail', {
+      method: 'POST',
+      headers: new Headers({
+        'x-signature': 'irrelevant',
+        'x-timestamp': NOW,
+        'x-nonce': 'nonce-untouched',
+        // v99 has no matching ingest_signing_keys row -- checkKeyAndTimestamp rejects it as
+        // UNKNOWN_KEY before this handler ever reaches the body.
+        'x-key-version': 'v99',
+      }),
+      body,
+      duplex: 'half',
+    } as RequestInit);
+
+    const response = await handleIngestRequest(request, env, NOW);
+    expect(response.status).toBe(401);
+    expect(body.locked).toBe(false);
+  });
 });
 
 describe('handleScheduled', () => {
@@ -262,5 +314,24 @@ describe('handleScheduled', () => {
     expect(result.sendFailures).toHaveLength(1);
     expect(result.dispatch.dispatched).toContain(result.sendFailures[0]);
     expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('wires cleanupExpiredNonces into the scheduled handler (G2 gate review MAJOR)', async () => {
+    const { env } = await setupEnv();
+    await reserveNonce(env.DB, {
+      connectorId: 'gmail',
+      keyVersion: 'v1',
+      nonce: 'stale-nonce',
+      now: '2026-09-13T00:00:00.000Z',
+    });
+
+    // Default HMAC_TIMESTAMP_WINDOW_MS is 300_000ms (5 min); cleanupExpiredNonces purges past
+    // 2x that window (10 min) -- see packages/domain/src/auth/nonce.ts's own rationale.
+    await handleScheduled(env, '2026-09-13T00:11:00.000Z');
+
+    const row = await env.DB.prepare('SELECT nonce FROM ingest_nonces WHERE nonce = ?')
+      .bind('stale-nonce')
+      .first();
+    expect(row).toBeNull();
   });
 });
