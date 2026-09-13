@@ -1,0 +1,302 @@
+# OPERATOR-DIRECTED, IMPLEMENTER-AUTHORED G2 MANIFEST CANDIDATE.
+#
+# This file has no governance authority merely because it exists on main.
+# Its scope becomes authoritative only after the operator reviews these exact
+# committed bytes and sets GATE_MANIFEST_APPROVED_HASH_G2 to their matching
+# SHA-256.
+#
+# THE CI-REPORTED HASH IS PROVIDED TO AVOID BYTE / LINE-ENDING MISTAKES.
+# IT IS NOT A SUBSTITUTE FOR READING THIS MANIFEST.
+#
+# .github/workflows/governance.yml prints this file's actual sha256 (via
+# scripts/verify/check-manifest-proposal.mjs, the manifest-proposal/g<N> path)
+# when the approval variable is unset. Setting that printed value without
+# reading what follows approves the paths below sight-unseen.
+#
+# ---------------------------------------------------------------------------
+# WHY AN IMPLEMENTER WROTE THE OPERATOR'S DOCUMENT
+#
+# Same authority split as g1.yaml (see that file's own header for the full
+# GPT-PM ruling this mirrors): the operator delegated GO-level authoring and
+# autonomous execution through MVP1 ("план меняется ГО делать все до конца...
+# тоесть ГО закончить мвп 1 автономно автаризирую", 2026-09-13, recorded in
+# core/DECISION_LOG.md), but GPT-PM's prior ruling on G1 -- that the approving
+# half (setting the hash) is not delegable, because a party that both authors
+# and installs its own binding hash proves nothing about scope authority
+# (NM3) -- was never narrowed to G1 specifically. It is a property of the
+# mechanism, not of one gate, and this manifest treats it as still binding
+# until GPT-PM or the operator says otherwise for G2 by name.
+#
+# ---------------------------------------------------------------------------
+# HOW THIS DIFFERS FROM g1.yaml'S BOOTSTRAP
+#
+# g1.yaml was committed directly to main before branch protection existed.
+# main is now ruleset-protected, so this candidate reaches main through the
+# manifest-proposal/g2 branch bootstrap path (scripts/verify/
+# check-manifest-proposal.mjs), added specifically to close that gap during
+# G1's own second closure review. This is the first real use of that
+# mechanism for a genuinely new gate (as opposed to the amendment path, which
+# is untested by any live PR at all as of this writing).
+#
+# Per global CLAUDE.md §24 (narrowed 2026-09-12: the authority-surface
+# carve-out for governance/gate-manifests/** PRs was removed by explicit
+# operator instruction), Claude may merge the manifest-proposal/g2 PR itself
+# once GPT-PM returns a genuine, correlated VERDICT: APPROVE on its exact
+# head and required checks are green -- but that merge only ever makes THIS
+# CANDIDATE visible on main. It does not, and cannot, set the approval hash.
+# That step has no PR to ride on; it is a repository-variable change only the
+# operator makes, by design.
+#
+# ---------------------------------------------------------------------------
+
+status:
+  - OPERATOR_DIRECTED_IMPLEMENTER_AUTHORED_CANDIDATE_AWAITING_OPERATOR_REVIEW_AND_HASH
+
+authored_by: Claude (implementer), at the operator's explicit written direction
+authored_on: 2026-09-13
+authoring_delegated_by: operator (@xLZDx)
+approval_reserved_to: operator (@xLZDx), via GATE_MANIFEST_APPROVED_HASH_G2
+reviewer_ruling: GPT-PM, Option A precedent from G1 (see that manifest's header), treated as
+  continuing to apply absent a G2-specific ruling to the contrary
+
+gate: G2
+branch: gate/g2-implementation
+
+plan_id: pdos-g2-architecture-v3-2026-09-13
+
+# ---------------------------------------------------------------------------
+# PLAN PROVENANCE, pinned to immutable objects (same discipline as g1.yaml,
+# after that file's own correction: HEAD moves, a commit+blob pair does not).
+#
+#   git cat-file -p 86417c4:governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V3.md | sha256sum
+#
+# This is the GPT-PM VERDICT: APPROVE (0 BLOCKER/0 MAJOR) architecture
+# document -- the third revision, after Round 1 (3 BLOCKER + 4 MAJOR) and
+# Round 2 (2 BLOCKER + 2 MAJOR) were each fully remediated and re-reviewed.
+# Full ruling history: core/DECISION_LOG.md, entries dated 2026-09-12/13.
+# ---------------------------------------------------------------------------
+plan_source_commit: 86417c420bc2c47a13513d237c9a811171db84a4
+plan_source_blob: 0ceac9b0ca38832ffdc1d50319f1f0af7250f97b
+plan_source_bytes: 14501
+plan_hash: fe2bb23775b4230387ba13d269916ab77643bb81fba386d89aad67b2c255fd18
+
+approved_scope: >-
+  G2 implementation scope -- D1 schema, provenance primitives, durable
+  ingest/outbox pipeline, Queue reconciler/DLQ with a fenced processing
+  lease, and the soft-budget guard -- on branch gate/g2-implementation,
+  exactly as specified in G2_PIPELINE_ARCHITECTURE_PROPOSAL_V3.md (pinned
+  above) and nothing beyond it. This scope is authoritative only while
+  GATE_MANIFEST_APPROVED_HASH_G2 matches the SHA-256 of these exact committed
+  bytes; absent that match the Governance check fails closed and G2 has no
+  enforced scope at all.
+
+# ---------------------------------------------------------------------------
+# allowed_paths
+#
+# Derived from V3's own §2-§5 (the exact DDL/SQL/TypeScript already
+# executably validated in a scratch harness) and the TDD's canonical repo
+# layout (docs/architecture/TDD.md:2319-2381). Every entry is justified
+# below. Segment-bounded grammar, per scripts/verify/check-gate-scope.mjs:
+# `*` matches within one path segment, `**` is a whole segment, no bare `**`.
+# ---------------------------------------------------------------------------
+
+allowed_paths:
+  # The D1 schema itself. Not yet applied to any live D1 instance (confirmed
+  # by database-reviewer's own read during the architecture round) -- edited
+  # in place, not superseded by a 0002 migration, per that same finding.
+  - infra/migrations/0001_ingest_outbox.sql
+
+  # The connector-neutral contracts V3 changes: source_version (idempotency),
+  # MAX_ROUTING_HINTS, the generic provenanceValueSchema<T> factory and its
+  # concrete instantiations, the MESSAGE_UPDATED superRefine.
+  - packages/contracts/src/*.ts
+  - packages/contracts/tests/*.ts
+
+  # The provenance DAG: fail-closed isAiSafe, discriminated node schemas
+  # (SourceEventNode/StaticConfigNode/DerivedNode), sourceEventNode()'s
+  # corrected source_policies resolution.
+  - packages/provenance/src/*.ts
+  - packages/provenance/tests/*.ts
+
+  # New per the canonical layout and V3's design: SQL builders / D1 batch
+  # helpers for the reconciler and processor transition protocol described
+  # in V3 §2-§3. Does not exist yet -- this gate creates it.
+  - packages/domain/**
+
+  # New: shared test fixtures for the ingest/outbox/DLQ pipeline, per the
+  # canonical layout's packages/testkit entry.
+  - packages/testkit/**
+
+  # New: the ingest Worker (fetch handler for connector-submitted events, and
+  # the scheduled handler running the Phase 1 lease-sweep + Phase 2
+  # reconciler dispatch described in V3 §3).
+  - services/ingest/**
+
+  # New: the Queue consumer Worker implementing the claim CAS and the four
+  # fenced outcome transitions (SUCCESS/RETRYABLE_FAILED/DLQ) from V3 §2-§3.
+  - services/processor/**
+
+  # Cloudflare bindings/config for the two new Workers (D1, Queue, Cron
+  # Trigger) -- wrangler configuration lives here per the canonical layout's
+  # infra/cloudflare entry, not inside each service directory.
+  - infra/cloudflare/**
+
+  # New/updated automated tests proving the invariants this gate's own
+  # executable scratch validation already demonstrated ad hoc: FK/CHECK
+  # enforcement, EXPLAIN QUERY PLAN index coverage, the ABA lease-fencing
+  # regression, the four processor-transition scenarios, the idempotency
+  # behavioral matrix.
+  - tests/unit/**
+  - tests/contract/**
+  - tests/integration/**
+  - tests/resilience/**
+  - tests/quota/**
+  - tests/fixtures/**
+
+  # The G2-owned ADR gets an addendum recording the lease-token/heartbeat
+  # protocol and the processing/transport column split -- not a rewrite, an
+  # addition, per that ADR's own amendment convention (see ADR-006 itself).
+  - core/adr/ADR-006-durable-ingest-outbox.md
+
+  # Durable decisions: this gate's own record, already three rounds deep.
+  - core/DECISION_LOG.md
+
+  # The gate ledger's own G2 row moves from BLOCKED to whatever this gate's
+  # real status becomes as work lands.
+  - core/PLAN_MASTER_GATES.md
+
+  # This gate's own proposal documents may still gain a closure-status
+  # update once implementation is verified against them.
+  - governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md
+  - governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V2.md
+  - governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL_V3.md
+
+  # The closure report. Does not exist yet.
+  - governance/G2_CLOSURE_REPORT.md
+
+  # Independent-review artifacts this gate's own review round produces.
+  - governance/reviews/**
+
+  # Errata for any concrete detail V3 records as a deliberate deviation from
+  # a TDD passage's literal wording (e.g. the lease-renewal/heartbeat
+  # mechanism in place of a single fixed TTL) -- never an invariant amendment.
+  - docs/architecture/TDD_ERRATA.md
+
+  # The mandated report pair for this gate's closure.
+  - reports/*.html
+
+  # This gate's own guard scripts, if V3's DoD needs a new executable check
+  # (e.g. an EXPLAIN QUERY PLAN assertion harness) beyond what npm test
+  # already runs.
+  - scripts/verify/*.mjs
+
+  # Toolchain touches expected if the two new Workers need their own
+  # package.json/tsconfig entries under the existing workspaces glob.
+  - package.json
+  - package-lock.json
+
+# ---------------------------------------------------------------------------
+# forbidden_paths
+#
+# Same class as g1.yaml's: touching one would be the implementer granting
+# itself authority, not merely working outside scope.
+# ---------------------------------------------------------------------------
+
+forbidden_paths:
+  # INV-28, identical reasoning to g1.yaml: a gate PR carrying its own
+  # authorizing manifest would validate a diff against a file that same diff
+  # had just written. This candidate reaches main via manifest-proposal/g2,
+  # a branch whose own check requires it to touch exactly one file -- this
+  # one -- and nothing else, so it can never appear inside gate/g2-
+  # implementation's own diff either.
+  - governance/gate-manifests/**/*.yaml
+  - governance/gate-manifests/**/*.yml
+
+  # The operator's own record of what they approved.
+  - governance/operator-approvals/**
+
+  # The frozen architecture baseline. TDD_ERRATA.md exists so a concrete
+  # detail can be corrected without amending this file.
+  - docs/architecture/TDD.md
+
+  # CI/governance machinery itself -- not a G2 deliverable, and touching it
+  # from inside a gated PR is exactly the self-modification class G1's own
+  # closure review found and fixed.
+  - .github/**
+  - .github/CODEOWNERS
+
+# ---------------------------------------------------------------------------
+# The fields below are part of the manifest shape described in
+# ./README.md. The checker reads allowed_paths and forbidden_paths and
+# NOTHING ELSE. These are documentation for a human reviewer, not enforcement.
+# ---------------------------------------------------------------------------
+
+required_tests:
+  - npm run verify
+
+required_reviewers:
+  - operator (@xLZDx)
+  - GPT-PM
+
+policy_sensitive_files:
+  - infra/migrations/0001_ingest_outbox.sql
+  - packages/contracts/src/provenance.ts
+  - packages/provenance/src/dag.ts
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY EXCLUDED, and why
+#
+#   services/api/**, services/resolver/**, services/decision/**,
+#   services/notification/**, services/reporting/**,
+#   services/content-request-broker/**   Later gates' own services. G2's own
+#                                        architecture round explicitly noted
+#                                        services/resolver is deferred to G5.
+#
+#   connectors/**                       G3 (Gmail) and G4 (Telegram) own
+#                                        these; G2 has no connector.
+#
+#   packages/policy/**, packages/telemetry/**   Not touched by any V3 design
+#                                        decision; if a later G2 sub-round
+#                                        needs them, that is a scope change.
+#
+#   host/**                             G8's backup-agent / content-gateway.
+#
+#   packages/gate-manifests/README.md, governance/plans/G1_*, governance/
+#   plans/G0_PLAN.md                    G1/G0 are separate, closed/closing
+#                                        gates; G2 does not amend their record.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS MANIFEST CANNOT DO, EVEN ONCE ITS HASH IS APPROVED
+#
+# Identical limitations to g1.yaml's own list (path-direction blindness, the
+# implementer-controlled gate label, plan_hash not being CI-enforced,
+# pull_request-only coverage, and the credential-model note that the
+# separation described here is procedural, not technical). Not repeated in
+# full here -- see g1.yaml's own header for the complete text, which applies
+# to this file unchanged.
+#
+# ---------------------------------------------------------------------------
+# WHAT REMAINS, AND WHOSE ACTION EACH ONE IS
+#
+#   1. operator   Read this file, in particular allowed_paths and
+#                 forbidden_paths above. Narrowing scope is always safe;
+#                 widening it is the thing to be suspicious of.
+#   2. operator   If adopting it, set the repository variable
+#                 GATE_MANIFEST_APPROVED_HASH_G2 to the SHA-256 of these
+#                 exact committed bytes (the value governance.yml prints as
+#                 `actual:` on the manifest-proposal/g2 PR -- computed from
+#                 the LF bytes the runner checks out).
+#   3. operator   Set the repository variable GATE_ACTIVE=G2 once ready for
+#                 G2 implementation PRs to resolve against this manifest.
+#                 Until then, no PR labeled Gate: G2 can pass gate
+#                 resolution at all, regardless of this file's hash.
+#   4. Claude     May merge the manifest-proposal/g2 PR itself once GPT-PM
+#                 returns VERDICT: APPROVE on its exact head and required
+#                 checks are green (global CLAUDE.md §24, post-2026-09-12
+#                 removal of the authority-surface carve-out) -- but per (2)
+#                 and (3) above, that merge alone authorizes nothing.
+#
+# Step 2 is what makes any of this real. Until it is done the Governance
+# check fails closed at the hash step for any G2-labeled PR, and G2 has no
+# enforced scope -- which is the correct behaviour.
+# ---------------------------------------------------------------------------
