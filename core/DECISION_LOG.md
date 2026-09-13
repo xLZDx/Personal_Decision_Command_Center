@@ -3,6 +3,79 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G2 implementation, checkpoint 6: GPT-PM gate review round 3 (0 BLOCKER + 1 MAJOR,
+scoped to checkpoint-5's own regression test), 337 tests, all green
+
+**Context.** Checkpoint 5's diff (`git diff e1013e9...HEAD`, the exact remediation round 2
+requested) went to GPT-PM for round 3 verification, scoped per §17 to "the round-2 reported fixes
+plus any regression directly caused by that remediation." GPT-PM returned `VERDICT: MAJOR` with 0
+BLOCKER + 1 MAJOR — a genuine, narrowly-scoped defect in checkpoint 5's own regression test for the
+BLOCKER, not a new production bug — confirmed real by direct source inspection before remediating,
+per §3/§23.
+
+**MAJOR, verified and fixed:**
+- **Checkpoint 5's regression test for the atomic-retry BLOCKER proved an outcome, not the specific
+  fix.** The test (`ev-atomic-retry` in `packages/domain/tests/transitions.test.ts`) awaited
+  `moveToRetryableFailed` to full completion, then called `claimLease` and asserted it was rejected
+  because the outbox was already `RETRY_PENDING`. GPT-PM's own reviewer standard — "verify each
+  cited regression would actually fail if the fix it claims to guard were reverted" — was not met:
+  under checkpoint-4's OWN broken two-step implementation (`transition.run()` awaited to completion,
+  THEN a separate `db.batch()` for outbox/audit), the duplicate `claimLease` call in the test still
+  runs only after BOTH steps have already finished, so it would ALSO observe `RETRY_PENDING` and
+  ALSO be rejected — under either implementation. The test never forces the vulnerable interval
+  between the standalone transition and the follow-up batch to actually exist at the moment of the
+  duplicate claim; it merely confirms the end state is correct, which both implementations produce.
+  Verified directly against the source: `moveToRetryableFailed` at
+  `packages/domain/src/transitions.ts` never exposes a standalone `.run()` for the `ingest_events`
+  transition in the current code — the whole thing is one `db.batch()` — so the only way to
+  distinguish it from the old code is to make the "old code" comparison explicit and probe for the
+  intermediate window's actual existence, not just the final outcome.
+
+  Fixed exactly to GPT-PM's own specified required change (quoted from the round-3 reply): built an
+  instrumented D1 wrapper, `wrapDbForRetryRaceProbe`, that intercepts `.prepare(sql)` for the SQL
+  statement containing `"SET state = 'RETRYABLE_FAILED'"` and fires a caller-supplied probe callback
+  immediately after that statement's own STANDALONE `.run()` completes — critically, the wrapper
+  forwards `runRawForBatch()` (the method the testkit's D1 shim uses internally when a statement
+  executes as part of `db.batch()`) straight to the real bound statement with no interception, so
+  the probe fires ONLY if the SQL statement is ever executed as a standalone `.run()`, never when
+  it executes only inside a batch. Reconstructed `oldBrokenMoveToRetryableFailed` — a literal copy
+  of checkpoint-4's own pre-round-2 two-step logic (standalone fenced transition, then a separate
+  `db.batch()` for outbox/audit) — purely as a local test fixture, not production code. Two new
+  tests replace the inadequate one:
+  1. Running the CURRENT implementation through the probe: `standaloneRunObserved` stays `false`
+     and the probe's injected duplicate-claim attempt never runs at all — proving the current code
+     provides no such hook/window for a duplicate claim to land in.
+  2. Running the reconstructed OLD BROKEN implementation through the exact SAME probe:
+     `standaloneRunObserved` becomes `true` and the injected duplicate `claimLease` attempt
+     genuinely succeeds (`claimed: true`) in that window — proving the probe is a real
+     mutation-testing harness that distinguishes the two implementations, not a vacuous check that
+     would pass regardless of which code it ran against.
+
+  Also added, per the second half of GPT-PM's required change: a crash-mid-batch rollback proof.
+  A separate db wrapper makes the audit statement (matched by its literal
+  `"outcome = 'RETRYABLE_FAILURE'"` text) throw when executed inside `db.batch()`. The test asserts
+  `moveToRetryableFailed(...)` rejects, and — critically — that NO partial commit occurred: the
+  event is still `PROCESSING` with its original lease token intact, the outbox row is still
+  `DISPATCHED`, and the audit row's `finished_at` is still `null`. This proves D1's real batch
+  semantics (all-or-nothing within one transaction, replicated faithfully by the testkit shim) hold
+  for this specific statement ordering, closing the other failure mode GPT-PM named (a crash between
+  the standalone transition and the follow-up batch, which cannot happen at all now that there is
+  only one batch).
+
+**Verification:** `npx tsc --build --force`, `npx eslint .` both clean repo-wide; `npx prettier
+--check .` clean for `packages/domain/tests/transitions.test.ts` (the same 6 pre-existing, untouched
+governance/ADR/plan documents remain non-conforming, unchanged); full `npx vitest run` — 337/337
+passing across the whole repo (3 new this checkpoint, replacing the 1 inadequate `ev-atomic-retry`
+test: 2 probe-distinguishes-implementations tests, 1 crash-mid-batch no-partial-commit test — net
++2 over checkpoint 5's 334). Manifest scope re-verified by hand against
+`governance/gate-manifests/g2.yaml`'s `allowed_paths`/`forbidden_paths`: the only changed path is
+`packages/domain/tests/transitions.test.ts`, squarely inside `packages/domain/**`.
+
+**Not yet done:** GPT-PM round 4 (verification of this remediation, per §17 — nothing else in scope
+unless a genuine regression from this batch surfaces).
+
+---
+
 ## 2026-09-13 — G2 implementation, checkpoint 5: GPT-PM gate review round 2 (1 BLOCKER + 3 MAJOR,
 all scoped to checkpoint-4's own remediation), 334 tests, all green
 

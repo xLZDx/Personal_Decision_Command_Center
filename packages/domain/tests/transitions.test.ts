@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { D1Database, D1PreparedStatement, D1Result } from '@cloudflare/workers-types';
 import { createTestD1, loadG2Schema, seedBaselineAccounts, seedEvent } from '@pdos/testkit';
 
 import {
@@ -6,6 +7,7 @@ import {
   moveToRetryableFailed,
   shouldMoveToDlq,
   type LeaseFence,
+  type RetryableFailureContext,
 } from '../src/transitions.js';
 import { claimLease } from '../src/lease.js';
 
@@ -290,10 +292,8 @@ describe('moveToRetryableFailed', () => {
     expect(outbox?.next_attempt_at).toBe('2026-09-13T00:08:00.000Z');
   });
 
-  it('BLOCKER regression (GPT-PM, G2 gate review round 2): the outbox move to RETRY_PENDING is atomic with the ingest_events transition -- no window where a duplicate delivery could claim attempt N+1 before the backoff is durable', async () => {
+  it('BLOCKER regression (GPT-PM, G2 gate review round 2): a duplicate claim immediately after moveToRetryableFailed resolves is rejected because the outbox is already RETRY_PENDING', async () => {
     const db = await setupProcessingEvent('ev-atomic-retry', 1, 'token-A');
-    // Also mark this event's dispatch as authorized (claimLease's own DISPATCHED-required rule) --
-    // setupProcessingEvent's own outbox row already starts DISPATCHED.
     const ok = await moveToRetryableFailed(db, {
       eventId: 'ev-atomic-retry',
       fence: { kind: 'LIVE', token: 'token-A' },
@@ -304,12 +304,6 @@ describe('moveToRetryableFailed', () => {
     });
     expect(ok).toBe(true);
 
-    // Before the fix, this was reachable in the window between the standalone ingest_events
-    // transition committing and the follow-up outbox batch running: the outbox row was still
-    // DISPATCHED, and claimLease's DISPATCHED-required rule let a delayed/duplicate delivery claim
-    // attempt N+1 immediately, bypassing the backoff this call just set. With the fix, the outbox
-    // move to RETRY_PENDING commits in the SAME transaction as the ingest_events transition, so
-    // there is no intermediate state for this claim attempt to observe.
     const duplicateClaim = await claimLease(db, {
       eventId: 'ev-atomic-retry',
       workerId: 'worker-2',
@@ -326,5 +320,216 @@ describe('moveToRetryableFailed', () => {
       .bind('ev-atomic-retry')
       .first<{ state: string }>();
     expect(outbox?.state).toBe('RETRY_PENDING');
+  });
+
+  /**
+   * GPT-PM MAJOR, round 3: the post-hoc test above proves the OUTCOME but not the FIX -- it awaits
+   * `moveToRetryableFailed` to full completion before ever calling `claimLease`, so the checkpoint-4
+   * BROKEN two-step implementation (standalone `ingest_events` `.run()`, THEN a separate
+   * `db.batch()`) would ALSO have already finished both steps by the time the duplicate claim runs,
+   * passing this same assertion for the wrong reason. The genuinely vulnerable window only existed
+   * BETWEEN those two steps, never observable after the function returns either way.
+   *
+   * This probe distinguishes the two implementations directly: it wraps the db so that calling
+   * `.run()` STANDALONE (not via `db.batch()`) on the `ingest_events -> RETRYABLE_FAILED` statement
+   * triggers an injected duplicate-claim attempt immediately afterward, in what would be exactly the
+   * broken implementation's own vulnerable gap. The CURRENT implementation issues this statement
+   * only inside one `db.batch()` call (never as a standalone `.run()`), so this hook never fires at
+   * all against it. `oldBrokenMoveToRetryableFailed` below is a literal copy of checkpoint-4's own
+   * pre-round-2 code, run through the SAME probe, to prove the probe is not vacuous: it actually
+   * catches the exact regression it is named for.
+   */
+  function wrapDbForRetryRaceProbe(
+    db: D1Database,
+    onStandaloneTransitionRun: () => Promise<void>,
+  ): D1Database {
+    const TRANSITION_MARKER = "SET state = 'RETRYABLE_FAILED'";
+    return {
+      prepare(sql: string): D1PreparedStatement {
+        const real = db.prepare(sql);
+        if (!sql.includes(TRANSITION_MARKER)) return real;
+        return {
+          bind(...args: unknown[]): D1PreparedStatement {
+            const boundReal = real.bind(...args);
+            const boundRealBatchable = boundReal as unknown as {
+              runRawForBatch: () => D1Result<unknown>;
+            };
+            return {
+              async run<T>(): Promise<D1Result<T>> {
+                // Only a STANDALONE call reaches this method at all -- a statement handed to
+                // `db.batch()` is executed via the shim's own internal `runRawForBatch`, never
+                // this public `run()` (packages/testkit/src/d1.ts).
+                const result = await boundReal.run<T>();
+                await onStandaloneTransitionRun();
+                return result;
+              },
+              runRawForBatch<T>(): D1Result<T> {
+                return boundRealBatchable.runRawForBatch() as D1Result<T>;
+              },
+              first: boundReal.first.bind(boundReal),
+              all: boundReal.all.bind(boundReal),
+              raw: boundReal.raw.bind(boundReal),
+            } as unknown as D1PreparedStatement;
+          },
+        } as unknown as D1PreparedStatement;
+      },
+      batch: db.batch.bind(db),
+      exec: db.exec.bind(db),
+      withSession: db.withSession.bind(db),
+      dump: db.dump.bind(db),
+    } as D1Database;
+  }
+
+  /** Literal copy of checkpoint-4's own pre-round-2 `moveToRetryableFailed` -- the exact code the
+   *  round-2 BLOCKER was filed against. LIVE-fence only, matching every test call site above. */
+  async function oldBrokenMoveToRetryableFailed(
+    db: D1Database,
+    ctx: RetryableFailureContext & { fence: { kind: 'LIVE'; token: string } },
+  ): Promise<boolean> {
+    const transition = await db
+      .prepare(
+        `UPDATE ingest_events SET state = 'RETRYABLE_FAILED',
+           first_failed_at = COALESCE(first_failed_at, ?),
+           processing_lease_owner = NULL, processing_lease_token = NULL, processing_lease_expires_at = NULL
+         WHERE event_id = ? AND state = 'PROCESSING' AND processing_lease_token = ?`,
+      )
+      .bind(ctx.now, ctx.eventId, ctx.fence.token)
+      .run();
+    if (transition.meta.changes !== 1) return false;
+
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE processing_outbox SET state = 'RETRY_PENDING', next_attempt_at = ?, updated_at = ?
+           WHERE event_id = ? AND state <> 'CLOSED'`,
+        )
+        .bind(ctx.nextAttemptAt, ctx.now, ctx.eventId),
+      db
+        .prepare(
+          `UPDATE processing_attempts SET finished_at = ?, outcome = 'RETRYABLE_FAILURE',
+             error_class = ?, error_code = ?
+           WHERE event_id = ?
+             AND attempt_number = (SELECT processing_attempt_count FROM ingest_events WHERE event_id = ?)
+             AND finished_at IS NULL`,
+        )
+        .bind(ctx.now, ctx.errorClass, ctx.errorCode, ctx.eventId, ctx.eventId),
+    ]);
+    return true;
+  }
+
+  it('BLOCKER regression, hardened (GPT-PM round 3): the current implementation never exposes the standalone-run hook, so the probe observes no vulnerable window', async () => {
+    const db = await setupProcessingEvent('ev-probe-current', 1, 'token-A');
+    let standaloneRunObserved = false;
+    let duringWindowClaim: { claimed: boolean } | undefined;
+    const probedDb = wrapDbForRetryRaceProbe(db, async () => {
+      standaloneRunObserved = true;
+      duringWindowClaim = await claimLease(db, {
+        eventId: 'ev-probe-current',
+        workerId: 'worker-2',
+        leaseDurationMs: 60_000,
+        now: '2026-09-13T00:03:00.500Z',
+        processorVersion: 'proc-v1',
+        traceId: 'trace-1',
+        maxAttempts: 5,
+      });
+    });
+
+    const ok = await moveToRetryableFailed(probedDb, {
+      eventId: 'ev-probe-current',
+      fence: { kind: 'LIVE', token: 'token-A' },
+      now: '2026-09-13T00:03:00.000Z',
+      nextAttemptAt: '2026-09-13T00:08:00.000Z',
+      errorClass: 'NetworkError',
+      errorCode: 'E_NET',
+    });
+    expect(ok).toBe(true);
+    expect(standaloneRunObserved).toBe(false);
+    expect(duringWindowClaim).toBeUndefined();
+  });
+
+  it('BLOCKER regression, hardened (GPT-PM round 3): the SAME probe against the pre-round-2 broken implementation DOES catch the vulnerable window (proves the probe is not vacuous)', async () => {
+    const db = await setupProcessingEvent('ev-probe-old', 1, 'token-A');
+    let standaloneRunObserved = false;
+    let duringWindowClaim: { claimed: boolean } | undefined;
+    const probedDb = wrapDbForRetryRaceProbe(db, async () => {
+      standaloneRunObserved = true;
+      duringWindowClaim = await claimLease(db, {
+        eventId: 'ev-probe-old',
+        workerId: 'worker-2',
+        leaseDurationMs: 60_000,
+        now: '2026-09-13T00:03:00.500Z',
+        processorVersion: 'proc-v1',
+        traceId: 'trace-1',
+        maxAttempts: 5,
+      });
+    });
+
+    const ok = await oldBrokenMoveToRetryableFailed(probedDb, {
+      eventId: 'ev-probe-old',
+      fence: { kind: 'LIVE', token: 'token-A' },
+      now: '2026-09-13T00:03:00.000Z',
+      nextAttemptAt: '2026-09-13T00:08:00.000Z',
+      errorClass: 'NetworkError',
+      errorCode: 'E_NET',
+    });
+    expect(ok).toBe(true);
+    expect(standaloneRunObserved).toBe(true);
+    // The exact bug: a duplicate claim landing in the gap between the two steps succeeds.
+    expect(duringWindowClaim?.claimed).toBe(true);
+  });
+
+  it('BLOCKER regression, crash-between-steps proof (GPT-PM round 3): a mid-batch D1 failure rolls back the whole transaction -- no partial commit', async () => {
+    const db = await setupProcessingEvent('ev-crash-mid-batch', 2, 'token-A');
+    // Throws only when the audit-row statement (uniquely identified by its literal
+    // `outcome = 'RETRYABLE_FAILURE'`) is executed as part of a `db.batch()` -- simulating a D1
+    // failure partway through the transaction this function's own atomicity depends on.
+    const throwingDb: D1Database = {
+      prepare(sql: string): D1PreparedStatement {
+        const real = db.prepare(sql);
+        if (!sql.includes("outcome = 'RETRYABLE_FAILURE'")) return real;
+        return {
+          bind(): D1PreparedStatement {
+            return {
+              runRawForBatch(): never {
+                throw new Error('simulated mid-batch D1 failure');
+              },
+            } as unknown as D1PreparedStatement;
+          },
+        } as unknown as D1PreparedStatement;
+      },
+      batch: db.batch.bind(db),
+      exec: db.exec.bind(db),
+      withSession: db.withSession.bind(db),
+      dump: db.dump.bind(db),
+    } as D1Database;
+
+    await expect(
+      moveToRetryableFailed(throwingDb, {
+        eventId: 'ev-crash-mid-batch',
+        fence: { kind: 'LIVE', token: 'token-A' },
+        now: '2026-09-13T00:03:00.000Z',
+        nextAttemptAt: '2026-09-13T00:08:00.000Z',
+        errorClass: 'NetworkError',
+        errorCode: 'E_NET',
+      }),
+    ).rejects.toThrow();
+
+    const event = await db
+      .prepare('SELECT state, processing_lease_token FROM ingest_events WHERE event_id = ?')
+      .bind('ev-crash-mid-batch')
+      .first<{ state: string; processing_lease_token: string | null }>();
+    expect(event).toEqual({ state: 'PROCESSING', processing_lease_token: 'token-A' });
+
+    const outbox = await db
+      .prepare('SELECT state FROM processing_outbox WHERE event_id = ?')
+      .bind('ev-crash-mid-batch')
+      .first<{ state: string }>();
+    expect(outbox?.state).toBe('DISPATCHED');
+
+    const attempt = await db
+      .prepare('SELECT finished_at FROM processing_attempts WHERE event_id = ?')
+      .bind('ev-crash-mid-batch')
+      .first<{ finished_at: string | null }>();
+    expect(attempt?.finished_at).toBeNull();
   });
 });
