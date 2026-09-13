@@ -270,6 +270,91 @@ assume GitHub-connector visibility exists for this branch without checking.
 **How to apply.** This fix is committed. Sent to GPT-PM for round 5 verification, scoped to these
 two findings and any direct regression, per §17. Checkpoint 4 remains open until `VERDICT: APPROVE`.
 
+## 2026-09-13 — G3 checkpoint 4 round 5: GPT-PM rejected the timeout-release fix as still unsafe;
+replaced with real lease-renewal (heartbeat), matching `lease.ts`'s own established pattern
+
+**GPT-PM round 5: `VERDICT: MAJOR`, 0 BLOCKER / 1 MAJOR / 0 MINOR**, reviewing commit `3a4176c`
+(round 4's timeout-based fix). The round-4 MINOR (`DISCONNECT_IN_PROGRESS` documentation) is
+CLOSED — confirmed correct. The MAJOR was NOT closed, and GPT-PM's reasoning is correct: round 4's
+`Promise.race` against a client-side timeout stops THIS function from awaiting the Google call, but
+does not cancel the actual outbound HTTP request — `revokeToken` may still complete on Google's
+servers AFTER this function already released the lease and declared failure, so a reconnect landing
+in that window could still be issued a credential the (still-running) revoke later invalidates.
+This is exactly the round-2/3 race, not a narrower residual case as the round-4 entry (above)
+characterized it — releasing exclusivity because a client got impatient waiting is not the same as
+releasing it because the operation actually finished. GPT-PM cited Google's own documentation that
+revocation "can take time to become fully effective after a successful response" as further
+reinforcement that client-side promise timing is not a valid proxy for the revocation boundary.
+
+**Verified this reasoning against the actual code before accepting it** (§3/§17/§23): confirmed
+`withTimeout`'s `Promise.race` genuinely does nothing to the underlying `googleClient.revokeToken`
+call itself — `GoogleOAuthClient` has no `AbortSignal`/cancellation parameter anywhere in its
+interface, so there was never any mechanism by which "the timeout fired" could stop the real
+network operation. The round-4 entry's own doc comment had already flagged this as a "residual
+risk" — GPT-PM's correction is that it is not residual at all; it is the SAME race, just requiring
+a slow-rather-than-instant Google response to trigger. Accepted without a rebuttal round: the
+finding is straightforwardly correct once the actual cancellation semantics (or absence of them)
+are checked.
+
+**Fix: real lease renewal, the same pattern `packages/domain/src/lease.ts`'s `claimLease`/
+`renewLease` already establishes for the queue-processing lease** (`processing_lease_token`/
+`processing_lease_expires_at`, migration 0001) — a token-fenced heartbeat that keeps re-extending
+the lease's expiry for as long as the holder is genuinely still working, rather than a fixed
+expiry the holder either beats or doesn't. New `startLeaseHeartbeat()` in `oauth.ts`: while
+`disconnectGmailAccount`'s critical section (stopWatch → decrypt → revoke → the fenced local
+batch) runs, a background renewal (real `setInterval`, default `DEFAULT_LEASE_HEARTBEAT_INTERVAL_MS
+= 20_000`, comfortably below `DISCONNECT_LEASE_DURATION_MS = 60_000`) re-extends
+`disconnect_lease_expires_at`, fenced on the exact `leaseToken` this call holds. The critical
+section now races against `heartbeat.failure` — a promise that resolves NEVER on its own and
+rejects ONLY on proof of an actual lost fence (a renewal write matches zero rows, meaning some
+other process's token is now on the row). This is a materially different use of `Promise.race`
+than round 4's: losing this race reflects real, already-happened evidence of lost exclusivity, not
+a guess about elapsed time, so acting on it (release + fail) is safe in exactly the way round 4's
+elapsed-time race was not.
+
+Renewal timestamps stay consistent with the module's `opts.now`-string convention: each tick
+computes `Date.parse(opts.now) + realElapsedMsSinceAcquisition + leaseDurationMs`, so the renewed
+expiry remains directly comparable against whatever `now` a concurrent `connectGmailAccount`/
+`disconnectGmailAccount` call supplies (production `now` is always `new Date().toISOString()`, so
+this tracks real time there natively). A tick already in flight is skipped rather than overlapped,
+so a slow renewal write can never pile up concurrent writes against the same row.
+
+**Explicit, accepted design boundary, stated rather than hidden**: if the injected
+`GoogleOAuthClient`'s `revokeToken` NEVER settles at all (neither resolves nor rejects — a
+completely hung connection, not merely a slow one), `disconnectGmailAccount`'s own returned promise
+never settles either. This is intentional, per GPT-PM's own stated requirement ("do not release
+exclusivity merely because the caller stopped awaiting the external operation") — bounding how long
+an entire disconnect REQUEST may take is the calling Worker's platform-level concern (its own
+request timeout, retry/idempotency semantics against an already-safe, already-idempotent
+`disconnectGmailAccount`), not something this domain primitive should achieve by unsafely giving up
+its exclusivity early. `googleOperationTimeoutMs`/`DEFAULT_GOOGLE_OPERATION_TIMEOUT_MS`/
+`withTimeout` (round 4's mechanism) are removed entirely, not merely superseded — keeping them
+alongside real renewal would silently reintroduce the exact unsafe release path GPT-PM just
+rejected.
+
+**Test, mutation-verified.** Replaced round 4's "hung revokeToken + timeout" test with the decisive
+regression GPT-PM asked for: `revokeToken` genuinely delays 300ms (real time, not mocked away)
+under an artificially small `leaseDurationMs: 100`/`leaseHeartbeatIntervalMs: 15` (test-only
+overrides on the new `DisconnectGmailAccountOptions` fields); a reconnect attempted at real+180ms
+(past the ORIGINAL 100ms nominal duration, well before the 300ms revoke resolves) is asserted
+`DISCONNECT_IN_PROGRESS`, not `CONNECTED` — proving renewal, not a lucky race, keeps the lease
+alive; the original `disconnectGmailAccount` call is then awaited and asserted `DISCONNECTED`; a
+further reconnect afterward is asserted `CONNECTED`, proving full recovery once the operation
+genuinely settles. Mutation-verified by temporarily hardcoding the heartbeat interval to
+effectively never fire within the test window (999,999ms): the new test then failed with the
+reconnect wrongly succeeding (`CONNECTED` instead of the expected `DISCONNECT_IN_PROGRESS`),
+confirming the test actually depends on renewal happening, not merely on the mock's own timing.
+Reverted after confirmation.
+
+**Verification.** Full repo suite: 404/404 tests passing (33 files, 23 in `oauth.test.ts`).
+`npm run typecheck`/`npm run lint` both clean. `prettier --write` applied (no changes needed).
+
+**How to apply.** This fix is committed. Sent to GPT-PM for round 6 verification, scoped to this
+one finding and any direct regression, per §17. Checkpoint 4 remains open until `VERDICT: APPROVE`.
+The `DisconnectGmailAccountOptions.leaseDurationMs`/`leaseHeartbeatIntervalMs` fields exist purely
+as a test escape hatch (documented as such in their own doc comments) — a future reviewer or
+caller should not treat them as production tuning knobs without a reason to revisit the defaults.
+
 ## 2026-09-13 — G3 implementation checkpoint 3: KEK crypto (`packages/domain/src/gmail/crypto.ts`)
 
 **Decision.** Third implementation checkpoint of gate G3, on branch `gate/g3-implementation`: the

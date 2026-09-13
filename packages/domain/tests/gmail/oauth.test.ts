@@ -1,4 +1,4 @@
-/* global crypto, TextEncoder, btoa */
+/* global crypto, TextEncoder, btoa, setTimeout */
 import { describe, expect, it } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
 import { createTestD1, loadG3Schema, seedBaselineAccounts, FIXTURE_NOW } from '@pdos/testkit';
@@ -665,11 +665,11 @@ describe('disconnectGmailAccount', () => {
   );
 
   it(
-    'GPT-PM round-4 MAJOR: a hung revokeToken call is bounded by googleOperationTimeoutMs (well ' +
-      'below DISCONNECT_LEASE_DURATION_MS) -- the attempt fails and releases its lease long before ' +
-      "the lease's own nominal 60s expiry, so a Google call that never returns does not silently " +
-      'reopen the project-wide-revocation race by leaving the lease held past any bound a reconnect ' +
-      'would actually wait out',
+    'GPT-PM round-5 MAJOR (superseding round-4): a revokeToken call still genuinely running past ' +
+      "the lease's ORIGINAL nominal duration keeps the lease alive via renewal -- a reconnect " +
+      'attempted after that original duration has elapsed is still refused, and only succeeds once ' +
+      'the slow-but-real disconnect has actually finished, never merely because a client-side clock ' +
+      'ran out',
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -681,31 +681,54 @@ describe('disconnectGmailAccount', () => {
         now: FIXTURE_NOW,
       });
 
-      const hangingClient = fakeGoogleClient({
-        revokeToken: async () => await new Promise<void>(() => {}), // never resolves
+      // A real (not mocked-away) 300ms delay before revokeToken resolves -- deliberately longer
+      // than the artificially small leaseDurationMs below, so the ORIGINAL nominal lease would have
+      // "expired" long before this call actually finishes if renewal were not keeping it alive.
+      const slowClient = fakeGoogleClient({
+        revokeToken: async () => {
+          await new Promise<void>((resolve) => setTimeout(resolve, 300));
+        },
       });
 
-      await expect(
-        disconnectGmailAccount(db, kek, hangingClient, {
-          sourceAccountId: accounts.gmailAccountId,
-          now: FIXTURE_NOW,
-          googleOperationTimeoutMs: 20,
-        }),
-      ).rejects.toThrow(/exceeded/);
+      const disconnectPromise = disconnectGmailAccount(db, kek, slowClient, {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+        leaseDurationMs: 100,
+        leaseHeartbeatIntervalMs: 15,
+      });
 
-      // The lease was released as part of the timeout's own failure path -- a reconnect attempted
-      // immediately afterward (same domain `now`, since the release is unconditional and does not
-      // depend on DISCONNECT_LEASE_DURATION_MS having elapsed) succeeds rather than being refused.
-      const afterTimeout = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+      // Real 180ms real-world wait: past the original 100ms nominal lease duration, but well before
+      // the 300ms revoke actually resolves -- exactly the window round 4's timeout-based release
+      // would have (unsafely) opened up for a reconnect.
+      await new Promise((resolve) => setTimeout(resolve, 180));
+
+      const duringSlowRevoke = await connectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         code: 'auth-code-2',
         codeVerifier: 'verifier-2',
         collectionMode: 'PUSH',
         kekVersion: KEK_VERSION,
-        now: FIXTURE_NOW,
+        // Domain `now` advanced by the same real 180ms, matching what a genuine concurrent request
+        // arriving at that real moment would supply.
+        now: new Date(Date.parse(FIXTURE_NOW) + 180).toISOString(),
       });
-      expect(afterTimeout).toEqual({ outcome: 'CONNECTED' });
+      expect(duringSlowRevoke).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+
+      const disconnectResult = await disconnectPromise;
+      expect(disconnectResult).toEqual({ outcome: 'DISCONNECTED' });
+
+      // Only now -- after the slow revoke has genuinely settled -- does a reconnect succeed.
+      const afterDisconnect = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-3',
+        codeVerifier: 'verifier-3',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: new Date(Date.parse(FIXTURE_NOW) + 400).toISOString(),
+      });
+      expect(afterDisconnect).toEqual({ outcome: 'CONNECTED' });
     },
+    2000,
   );
 
   it(
