@@ -3,9 +3,17 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
-## 2026-09-14 — G3 checkpoint 6 APPROVED: GPT-PM round 2 closes all five MAJORs (0/0/0)
+## 2026-09-14 — G3 checkpoint 6 CLOSED: GPT-PM round 2 closes all five MAJORs; final round 3 APPROVE (0/0/0), no round 4
 
-**Verdict:** `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR, bounded exactly to the five
+**Final round 3:** `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR, `final:true`, correlated
+review of `07c43c3...23faca5` (`reviewInputHash
+ed76fb3ad57647ba7a7dc53135bb0ce0cdbc72f62ba6f85159d1cdf2eafe7d94`, `reviewRequestId
+102d200b-b0d1-4cd1-ac6d-00be08e394d5`, `replyId a1fe99d5-bc1d-4e73-b203-ad5bcdcedf6d`).
+GPT-PM directly compared the round-2 and round-3 artifacts, confirmed every code/migration/test
+section byte-for-byte unchanged and the closure entry accurate, then ruled: "G3 checkpoint 6
+APPROVED and CLOSED under the three-round hard cap." No round 4.
+
+**Round 2 verdict:** `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR, bounded exactly to the five
 round-1 findings plus direct remediation regressions. Correlated review of
 `07c43c3...2d8a1ba`: `reviewInputHash 27ba7a6d21d516a734d0bd8de5a8b2ddec469d64ad3c9127366f3e3e99d48714`,
 `reviewRequestId 7d0d97ac-984f-4cd5-a647-e96e10b50289`,
