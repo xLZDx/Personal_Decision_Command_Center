@@ -3,6 +3,52 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 implementation checkpoint 1: Pub/Sub push-delivery lease/fence + migration 0002
+
+**Decision.** First implementation checkpoint of gate G3, on branch `gate/g3-implementation`:
+`infra/migrations/0002_gmail_connector.sql` (all 7 tables the APPROVEd V6 proposal needs) and the
+Pub/Sub push-delivery lease/fence primitives from proposal §2.6 (`packages/domain/src/gmail/
+push-lease.ts`: `claimOrInspectDelivery`/`reclaimDelivery`/`renewDeliveryLease`/`completeDelivery`/
+`pruneCompletedPushDeliveries`; `packages/domain/src/gmail/push-lease-recovery.ts`: the independent
+scheduled recovery sweep), each built directly from primary source (`packages/domain/src/lease.ts`,
+`lease-recovery.ts`, `transitions.ts`, `infra/migrations/0001_ingest_outbox.sql`) rather than from
+the proposal document's prose alone.
+
+**Internal review before GPT-PM (§17), two specialists in parallel**: a `database-reviewer` found 0
+BLOCKER/MAJOR and one MINOR (the new Gmail tables' FK to `source_accounts` was a plain
+single-column reference, not the source-scoped composite FK migration 0001 uses for `ingest_events`
+to close the same cross-source integrity gap) — fixed by adding a `source` column
+(`DEFAULT 'gmail' CHECK (source = 'gmail')`) and a composite FK on `gmail_connections`,
+`gmail_push_deliveries`, and `gmail_rate_reservations`. A `functional-test-reviewer` found two real
+gaps: (1) MAJOR — the index-coverage tests (an `EXPLAIN QUERY PLAN` check and a
+many-COMPLETED-rows-vs-small-active-set check) would both keep passing even if the migration's
+partial-index predicate (`WHERE state = 'IN_PROGRESS'`) were removed, since SQLite still picks the
+same-named index and the query's own `WHERE` clause guarantees correct results regardless of the
+index's own partiality — the exact "test passes for the wrong reason" failure mode this project
+watches for, recurring in the very test written to guard against it; (2) MAJOR — the proposal's own
+§2.6/§3 names a "COMPLETED rows prunable on a schedule" testing obligation with no deferral marker,
+and no implementation or test existed for it.
+
+**Fix, verified by mutation** (per this project's own "a broken instrument imitates the result you
+wanted" discipline — a test proving nothing until the mutation is confirmed to move behavior):
+added a direct `PRAGMA index_list('gmail_push_deliveries')`/`sqlite_master.sql`-text assertion that
+the index is genuinely partial; stripped the migration's `WHERE state = 'IN_PROGRESS'` clause by
+hand and confirmed exactly this new test (and only this one) failed, then restored it and reran the
+full suite green. Implemented `pruneCompletedPushDeliveries` (mirrors `cleanupExpiredNonces`'s
+caller-supplied-retention shape) with 3 new tests (deletes past retention, keeps recent, never
+touches `IN_PROGRESS`). Also fixed a MINOR: a test comment claiming an assertion the test body
+didn't actually perform (the real check already existed in a separate, correctly-named test).
+
+**Verification.** Full repo suite: 358/358 tests passing (30 files) after remediation, including 21
+new Gmail tests. `npm run typecheck`/`npm run lint` both clean. `prettier --check .` clean on every
+new/modified file (the 60-file warning list from an unrelated `npm run format` run is pre-existing
+Windows-checkout CRLF debt, confirmed by grepping the warning output for any touched path and
+finding none).
+
+**How to apply.** This checkpoint is internally reviewed and ready for a GPT-PM gate-review round
+before the next G3 checkpoint (OAuth lifecycle, §2.5) begins, per the same one-sweep discipline
+(§17) used to close G2 and the G3 plan itself.
+
 ## 2026-09-13 — G3 Gmail Connector architecture proposal APPROVEd (GPT-PM round 6, `VERDICT: APPROVE`)
 
 **Decision.** `governance/plans/G3_GMAIL_CONNECTOR_PROPOSAL.md` reached V6 after six full GPT-PM

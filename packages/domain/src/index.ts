@@ -51,3 +51,26 @@ export type {
   CheckKeyAndTimestampOptions,
   CheckSignatureAndNonceOptions,
 } from './auth/authenticate.js';
+
+export {
+  claimOrInspectDelivery,
+  reclaimDelivery,
+  renewDeliveryLease,
+  completeDelivery,
+  pruneCompletedPushDeliveries,
+} from './gmail/push-lease.js';
+export type {
+  ClaimOrInspectOptions,
+  ClaimOutcome,
+  ReclaimOptions,
+  ReclaimResult,
+  DeliveryHeartbeatOptions,
+  CompleteDeliveryOptions,
+  PruneCompletedDeliveriesOptions,
+} from './gmail/push-lease.js';
+
+export { recoverStalePushDeliveries } from './gmail/push-lease-recovery.js';
+export type {
+  RecoverStalePushDeliveriesOptions,
+  RecoveredPushDelivery,
+} from './gmail/push-lease-recovery.js';

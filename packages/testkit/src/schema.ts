@@ -13,3 +13,15 @@ export function loadG2Schema(): string {
   );
   return readFileSync(path, 'utf8');
 }
+
+/**
+ * G3's schema builds on G2's unchanged -- concatenates migration 0001 (accounts/policy/cursor/
+ * ingest/outbox/DLQ) with 0002 (Gmail connector) so a G3 test gets every table G3's own tables
+ * reference via FK (source_accounts, ingest_events) without re-declaring them.
+ */
+export function loadG3Schema(): string {
+  const path = fileURLToPath(
+    new URL('../../../infra/migrations/0002_gmail_connector.sql', import.meta.url),
+  );
+  return `${loadG2Schema()}\n${readFileSync(path, 'utf8')}`;
+}
