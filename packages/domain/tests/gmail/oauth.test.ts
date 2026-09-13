@@ -665,6 +665,50 @@ describe('disconnectGmailAccount', () => {
   );
 
   it(
+    'GPT-PM round-4 MAJOR: a hung revokeToken call is bounded by googleOperationTimeoutMs (well ' +
+      'below DISCONNECT_LEASE_DURATION_MS) -- the attempt fails and releases its lease long before ' +
+      "the lease's own nominal 60s expiry, so a Google call that never returns does not silently " +
+      'reopen the project-wide-revocation race by leaving the lease held past any bound a reconnect ' +
+      'would actually wait out',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const hangingClient = fakeGoogleClient({
+        revokeToken: async () => await new Promise<void>(() => {}), // never resolves
+      });
+
+      await expect(
+        disconnectGmailAccount(db, kek, hangingClient, {
+          sourceAccountId: accounts.gmailAccountId,
+          now: FIXTURE_NOW,
+          googleOperationTimeoutMs: 20,
+        }),
+      ).rejects.toThrow(/exceeded/);
+
+      // The lease was released as part of the timeout's own failure path -- a reconnect attempted
+      // immediately afterward (same domain `now`, since the release is unconditional and does not
+      // depend on DISCONNECT_LEASE_DURATION_MS having elapsed) succeeds rather than being refused.
+      const afterTimeout = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(afterTimeout).toEqual({ outcome: 'CONNECTED' });
+    },
+  );
+
+  it(
     'GPT-PM round-1 MAJOR #2: the connection delete and the oauth_flows clear are ONE atomic ' +
       'db.batch() -- when the batch itself fails, NEITHER takes effect, so a retry is never stuck ' +
       'seeing a half-cleaned-up state',

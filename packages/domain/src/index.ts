@@ -103,5 +103,6 @@ export type {
   CollectionMode,
   ConnectGmailAccountOptions,
   ConnectGmailAccountResult,
+  DisconnectGmailAccountOptions,
   DisconnectGmailAccountResult,
 } from './gmail/oauth.js';

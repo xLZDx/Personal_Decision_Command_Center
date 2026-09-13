@@ -1,4 +1,4 @@
-/* global crypto, TextEncoder, btoa */
+/* global crypto, TextEncoder, btoa, setTimeout, clearTimeout */
 // Web Platform APIs ambient under both Node (tests) and the Cloudflare Workers runtime
 // (production) -- no import needed either way, same convention as packages/domain/src/auth/hmac.ts
 // and packages/domain/src/gmail/crypto.ts.
@@ -15,6 +15,22 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Races `promise` against a real wall-clock timer, rejecting with `new Error(message)` if
+ * `timeoutMs` elapses first. Used by `disconnectGmailAccount` to bound its lease-holding critical
+ * section (GPT-PM round-4 MAJOR) -- genuinely real-time, not the module's usual `opts.now`-string
+ * determinism, because the property being guarded against is real elapsed wall-clock time during a
+ * hung network call, which a caller-supplied logical timestamp cannot represent. Clears its own
+ * timer on either outcome so a fast-resolving `promise` never leaves a dangling handle.
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 /** RFC 7636 PKCE `code_verifier`: 32 random bytes -> a 43-char base64url string, within the spec's
@@ -137,6 +153,15 @@ export type ConnectGmailAccountResult =
  * revoke call then invalidates -- Google's revocation is project-wide, not scoped to the single
  * token passed to the endpoint, so no amount of purely-local fencing on the connect side alone
  * could close this; the disconnect side must hold an exclusive window instead.
+ *
+ * **`DISCONNECT_IN_PROGRESS` is NOT ordinarily retryable with the same callback** (GPT-PM round-4
+ * MINOR): `exchangeCode` above runs BEFORE this guard, and Google authorization codes are one-time-
+ * use -- by the time this function can even observe an active disconnect lease, the code has already
+ * been irreversibly consumed at Google. A caller (the future `services/gmail-connector` Worker,
+ * §2.1) that receives `DISCONNECT_IN_PROGRESS` from this function MUST treat it as "the OAuth flow
+ * needs to be restarted from `/oauth/start` for a fresh code," never as "retry this same callback
+ * shortly" -- retrying with the same, already-consumed code will fail at Google regardless of
+ * whether the disconnect lease has since cleared.
  */
 export async function connectGmailAccount(
   db: D1Database,
@@ -199,6 +224,17 @@ export type DisconnectGmailAccountResult =
 const DISCONNECT_LEASE_DURATION_MS = 60_000;
 
 /**
+ * Default upper bound on `disconnectGmailAccount`'s own Google-call-and-finalize critical section
+ * (GPT-PM round-4 MAJOR). Deliberately well below `DISCONNECT_LEASE_DURATION_MS`, with a wide
+ * safety margin, so an attempt that hits this timeout has always already aborted (and released its
+ * lease -- see the `catch` block below) long before the lease's own nominal expiry could be read by
+ * anyone else as "abandoned." Overridable via `DisconnectGmailAccountOptions.googleOperationTimeoutMs`
+ * purely so a test can exercise the timeout path in milliseconds instead of production-scale tens of
+ * seconds; production callers should accept the default.
+ */
+const DEFAULT_GOOGLE_OPERATION_TIMEOUT_MS = 45_000;
+
+/**
  * `POST /oauth/disconnect` (proposal §2.5). Order matters, and is the actual property under test
  * (functional-test review, "disconnect ordering"): acquire the disconnect lease, stop the watch,
  * THEN decrypt+revoke the token, THEN delete the local row, THEN cancel any in-flight OAuth flow.
@@ -240,6 +276,25 @@ const DISCONNECT_LEASE_DURATION_MS = 60_000;
  * state. `DISCONNECT_LEASE_DURATION_MS` bounds how long a crashed/hung disconnect can block a
  * reconnect.
  *
+ * **Bounded critical section, not just a bounded lease** (GPT-PM round-4 MAJOR): a lease with a
+ * fixed expiry alone does NOT guarantee this function's own Google-call phase actually finishes
+ * within it -- a hung `revokeToken` call could still be genuinely in flight past
+ * `DISCONNECT_LEASE_DURATION_MS`, at which point the lease reads as "expired" to a reconnect even
+ * though this function has not released it and Google's revoke may still complete afterward,
+ * reopening the exact project-wide-invalidation race the lease exists to close. Fixed by racing the
+ * entire post-acquisition critical section (`stopWatch` -> decrypt -> `revokeToken` -> the fenced
+ * local batch) against `DEFAULT_GOOGLE_OPERATION_TIMEOUT_MS` (well below the lease's own duration,
+ * with a wide safety margin): if the section has not finished by then, this function treats it as a
+ * failure and takes the SAME release-on-failure path as any other error, so the lease is never left
+ * silently held past a bound far shorter than its own nominal expiry. This narrows, but does not
+ * claim to eliminate, one specific residual case honestly: if the injected `GoogleOAuthClient`'s
+ * `revokeToken` cannot actually be cancelled (this module has no `AbortSignal` in its interface --
+ * the real `fetch`-backed implementation is deferred to the `services/gmail-connector` Worker,
+ * §2.1), the underlying HTTP call to Google may still complete on Google's servers after this
+ * function has already given up and released the lease. The real implementation SHOULD support
+ * genuine cancellation (an `AbortSignal` threaded through to `fetch`) so a timed-out attempt does
+ * not merely stop watching its own promise but actually stops the outbound request.
+ *
  * **CAS-fenced local finalization** (GPT-PM round-1 MAJOR #1 on this checkpoint) -- kept as
  * defense in depth once the lease above has expired (e.g. this function crashed after revoking but
  * before deleting): the final `DELETE` is fenced on the EXACT
@@ -260,11 +315,19 @@ const DISCONNECT_LEASE_DURATION_MS = 60_000;
  * account" is implemented as clearing the whole table, the only reading the actual schema shape
  * supports. Revisit when a second account is ever added (security review, checkpoint 4).
  */
+export interface DisconnectGmailAccountOptions {
+  sourceAccountId: string;
+  now: string;
+  /** Overrides `DEFAULT_GOOGLE_OPERATION_TIMEOUT_MS` -- see that constant's doc comment. Test-only
+   *  escape hatch; production callers should omit this. */
+  googleOperationTimeoutMs?: number;
+}
+
 export async function disconnectGmailAccount(
   db: D1Database,
   kek: CryptoKey,
   googleClient: GoogleOAuthClient,
-  opts: { sourceAccountId: string; now: string },
+  opts: DisconnectGmailAccountOptions,
 ): Promise<DisconnectGmailAccountResult> {
   const leaseToken = generateRandomToken();
   const leaseExpiresAt = new Date(
@@ -293,44 +356,52 @@ export async function disconnectGmailAccount(
     return existing === null ? { outcome: 'NOT_CONNECTED' } : { outcome: 'DISCONNECT_IN_PROGRESS' };
   }
 
+  const timeoutMs = opts.googleOperationTimeoutMs ?? DEFAULT_GOOGLE_OPERATION_TIMEOUT_MS;
+
   try {
-    await googleClient.stopWatch(opts.sourceAccountId);
+    return await withTimeout(
+      (async (): Promise<DisconnectGmailAccountResult> => {
+        await googleClient.stopWatch(opts.sourceAccountId);
 
-    const aad: RefreshTokenAad = {
-      gmailAccountId: opts.sourceAccountId,
-      kekVersion: row.kek_version,
-    };
-    const refreshToken = await decryptRefreshToken(
-      kek,
-      { ciphertext: row.encrypted_refresh_token, iv: row.refresh_token_iv },
-      aad,
+        const aad: RefreshTokenAad = {
+          gmailAccountId: opts.sourceAccountId,
+          kekVersion: row.kek_version,
+        };
+        const refreshToken = await decryptRefreshToken(
+          kek,
+          { ciphertext: row.encrypted_refresh_token, iv: row.refresh_token_iv },
+          aad,
+        );
+        await googleClient.revokeToken(refreshToken);
+
+        const results = await db.batch([
+          db
+            .prepare(
+              `DELETE FROM gmail_connections
+               WHERE source_account_id = ? AND encrypted_refresh_token = ? AND refresh_token_iv = ? AND kek_version = ?`,
+            )
+            .bind(
+              opts.sourceAccountId,
+              row.encrypted_refresh_token,
+              row.refresh_token_iv,
+              row.kek_version,
+            ),
+          db.prepare('DELETE FROM oauth_flows'),
+        ]);
+        const deleteResult = results[0];
+        if (deleteResult === undefined || deleteResult.meta.changes === 0) {
+          // Only reachable if the disconnect lease above already expired (e.g. this call stalled
+          // past DISCONNECT_LEASE_DURATION_MS) and a reconnect then won the race and upserted a
+          // new row -- the row that exists now is NOT the one we just revoked, so deleting it
+          // would destroy a live credential.
+          return { outcome: 'SUPERSEDED_BY_RECONNECT' };
+        }
+
+        return { outcome: 'DISCONNECTED' };
+      })(),
+      timeoutMs,
+      `disconnectGmailAccount: Google/D1 finalization exceeded ${timeoutMs}ms`,
     );
-    await googleClient.revokeToken(refreshToken);
-
-    const results = await db.batch([
-      db
-        .prepare(
-          `DELETE FROM gmail_connections
-           WHERE source_account_id = ? AND encrypted_refresh_token = ? AND refresh_token_iv = ? AND kek_version = ?`,
-        )
-        .bind(
-          opts.sourceAccountId,
-          row.encrypted_refresh_token,
-          row.refresh_token_iv,
-          row.kek_version,
-        ),
-      db.prepare('DELETE FROM oauth_flows'),
-    ]);
-    const deleteResult = results[0];
-    if (deleteResult === undefined || deleteResult.meta.changes === 0) {
-      // Only reachable if the disconnect lease above already expired (e.g. this call stalled past
-      // DISCONNECT_LEASE_DURATION_MS) and a reconnect then won the race and upserted a new row --
-      // the row that exists now is NOT the one we just revoked, so deleting it would destroy a
-      // live credential.
-      return { outcome: 'SUPERSEDED_BY_RECONNECT' };
-    }
-
-    return { outcome: 'DISCONNECTED' };
   } catch (error) {
     // Release the lease immediately on any failure (stopWatch/decrypt/revoke/batch) rather than
     // leaving a retry blocked for the full DISCONNECT_LEASE_DURATION_MS by this failed attempt's

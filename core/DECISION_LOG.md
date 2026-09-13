@@ -190,12 +190,85 @@ carries real weight under the new design. All three reverted; full suite re-gree
 has no prettier parser registered for this project, matching every prior `infra/migrations/*.sql`
 file — not reformatted, consistent with existing convention).
 
-**How to apply.** This round-3/4 remediation is committed and will be sent to GPT-PM for a further
+**How to apply.** This round-3/4 remediation is committed and was sent to GPT-PM for a further
 verification round, scoped to this specific fix and any direct regression it introduces, per §17.
-Checkpoint 4 remains open until that verdict is `APPROVE`. The `DISCONNECT_IN_PROGRESS` outcome is
-new surface any future caller (the `services/gmail-connector` Worker, §2.1) of both
-`connectGmailAccount` and `disconnectGmailAccount` must handle explicitly — e.g. an HTTP endpoint
-should map it to a distinct, retryable-shortly response rather than folding it into a generic error.
+Checkpoint 4 remained open pending that verdict — see the round-4 entry immediately below, which
+corrects one wording error in this entry's original text: `DISCONNECT_IN_PROGRESS` from
+`connectGmailAccount` is **not** an ordinary retryable-shortly outcome (that phrasing above was
+wrong — `exchangeCode` runs before the lease guard, so the one-time authorization code is already
+consumed by the time this outcome can even be observed; the correct caller-facing contract is
+"restart OAuth from `/oauth/start`," documented directly in `connectGmailAccount`'s own doc comment
+after GPT-PM's round-4 review caught this).
+
+## 2026-09-13 — G3 checkpoint 4 round 4: GPT-PM found the lease had no bound on its own critical
+section, and that `DISCONNECT_IN_PROGRESS` cannot be retried with the same code; both fixed
+
+**GPT-PM round 4: `VERDICT: MAJOR`, 0 BLOCKER / 1 MAJOR / 1 MINOR**, reviewing commit
+`bbfd441977a9a592a08e6fb6351f95052282a18e` (the round-3/4 disconnect-lease remediation above).
+Confirmed the core remediation direction correct (atomic pre-Google lease acquisition, competing
+disconnects excluded, connect's upsert respects an active lease, failure cleanup releases only the
+exact token the failed attempt itself acquired) — one MAJOR and one MINOR against it, both verified
+against the actual source before remediating.
+
+**MAJOR**: `DISCONNECT_LEASE_DURATION_MS` is a fixed 60s bound on the lease's *local D1 row state*,
+but nothing bounded how long `disconnectGmailAccount`'s own `stopWatch`/decrypt/`revokeToken`/batch
+sequence could actually take. A slow or hung `revokeToken` call genuinely still in flight past 60s
+would leave the lease reading as "expired" to a reconnect (`disconnect_lease_expires_at <= now`)
+even though this function had not released it and Google's revoke might still complete afterward —
+reopening the exact project-wide-invalidation race (round 2/3) the lease exists to close. Confirmed
+against source: prior to this fix, `disconnectGmailAccount` had no timeout on its Google-call
+phase at all, and the existing "lease bound" test literally asserted a reconnect succeeds at
+`leaseExpiresAt + 1ms` with no check that the original disconnect had actually finished.
+
+**MINOR**: `connectGmailAccount` calls `googleClient.exchangeCode()` — which consumes Google's
+one-time authorization code — as its first line, before the lease guard is ever reached. So
+`DISCONNECT_IN_PROGRESS` from `connectGmailAccount` always means the code is already burned; this
+decision log's own round-3/4 entry (above) incorrectly described it as something a caller could map
+to "a distinct, retryable-shortly response," which GPT-PM correctly flagged as wrong caller-facing
+guidance — retrying the same OAuth callback would fail at Google regardless of lease state, since
+the code cannot be redeemed twice.
+
+**Fix, verified by mutation.** MAJOR: added `withTimeout()` (a `Promise.race` against a real
+wall-clock `setTimeout`, clearing its own timer on either outcome) and raced
+`disconnectGmailAccount`'s entire post-lease-acquisition critical section (stopWatch → decrypt →
+revoke → the fenced local batch) against it. Default `DEFAULT_GOOGLE_OPERATION_TIMEOUT_MS = 45_000`
+(well below `DISCONNECT_LEASE_DURATION_MS = 60_000`, wide safety margin), overridable per-call via
+a new `DisconnectGmailAccountOptions.googleOperationTimeoutMs` field purely so a test can exercise
+the timeout path in milliseconds — production callers use the default. On timeout, the function
+throws and takes the SAME release-on-failure path already built for round 3's fix (releases the
+lease token it holds, fenced on that exact token, then rethrows) — so a hung call never leaves the
+lease silently held past a bound far shorter than the lease's own nominal expiry. Documented one
+honest residual limit in the doc comment rather than claiming full closure: this module's
+`GoogleOAuthClient` interface has no `AbortSignal`, so a timed-out attempt stops waiting on its own
+promise but cannot force-cancel an in-flight HTTP call to Google — the real `fetch`-backed
+implementation (deferred to `services/gmail-connector`, §2.1) SHOULD thread a genuine
+`AbortSignal` through so a timed-out attempt actually stops the outbound request, not merely its own
+bookkeeping. MINOR: corrected `connectGmailAccount`'s doc comment (and this log's own round-3/4
+entry, in-place above) to state plainly that `DISCONNECT_IN_PROGRESS` requires restarting OAuth from
+`/oauth/start`, never retrying the same callback/code.
+
+Added and mutation-verified a new test: a `revokeToken` mock that never resolves, with
+`googleOperationTimeoutMs: 20`, asserts `disconnectGmailAccount` rejects (not hangs) and that an
+immediately-following `connectGmailAccount` call succeeds — proving the lease was actually released,
+not merely that the promise eventually settled. Mutation-verified by temporarily hardcoding the
+function to ignore the `googleOperationTimeoutMs` override (forcing the full 45s default): the new
+test then failed via vitest's own `testTimeout`, confirming the test is not vacuously passing.
+Reverted after confirmation.
+
+**Verification.** Full repo suite: 404/404 tests passing (33 files, 23 in `oauth.test.ts`).
+`npm run typecheck`/`npm run lint` both clean. `prettier --write` applied.
+
+**Evidence-integrity note from GPT-PM's round-4 reply, recorded rather than silently dropped**:
+GPT-PM stated the reviewed commit hash was "not currently visible through the connected GitHub
+repository" (this repo has not been pushed since checkpoint 3 — `gate/g3-implementation` on GitHub
+still resolves to `09a1967`, the round-1 remediation commit) and reviewed the supplied diff content
+directly instead, explicitly not treating push/correlation as a scoped defect for that round. No
+action needed for that round, but this means GPT-PM's GitHub connector access was NOT what verified
+this round's evidence — `--scope-note`/diff-in-request was. Flagging so a future round doesn't
+assume GitHub-connector visibility exists for this branch without checking.
+
+**How to apply.** This fix is committed. Sent to GPT-PM for round 5 verification, scoped to these
+two findings and any direct regression, per §17. Checkpoint 4 remains open until `VERDICT: APPROVE`.
 
 ## 2026-09-13 — G3 implementation checkpoint 3: KEK crypto (`packages/domain/src/gmail/crypto.ts`)
 
