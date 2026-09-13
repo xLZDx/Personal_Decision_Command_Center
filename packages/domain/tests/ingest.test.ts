@@ -71,6 +71,31 @@ describe('ingestEvent', () => {
     expect(row?.source_thread_id).toBe('thread-xyz-789');
   });
 
+  it('persists occurred_at_quality (G3 checkpoint 5, GPT-PM round-2 MAJOR): a non-default value is not silently dropped during persistence', async () => {
+    const { db, accounts } = await setup();
+    const event = buildEvent(accounts, { occurred_at_quality: 'ESTIMATED_FROM_RECEIPT' });
+    await ingestEvent(db, event);
+
+    const row = await db
+      .prepare('SELECT occurred_at_quality FROM ingest_events WHERE event_id = ?')
+      .bind(event.event_id)
+      .first<{ occurred_at_quality: string }>();
+    expect(row?.occurred_at_quality).toBe('ESTIMATED_FROM_RECEIPT');
+  });
+
+  it('defaults occurred_at_quality to PROVIDER_REPORTED when a producer never sets it -- backward compatible with every existing producer', async () => {
+    const { db, accounts } = await setup();
+    const event = buildEvent(accounts); // no occurred_at_quality override
+    expect(event.occurred_at_quality).toBe('PROVIDER_REPORTED'); // Zod's own default, applied at parse
+    await ingestEvent(db, event);
+
+    const row = await db
+      .prepare('SELECT occurred_at_quality FROM ingest_events WHERE event_id = ?')
+      .bind(event.event_id)
+      .first<{ occurred_at_quality: string }>();
+    expect(row?.occurred_at_quality).toBe('PROVIDER_REPORTED');
+  });
+
   it('is idempotent: a duplicate submission (same idempotency key) is a no-op, not an error', async () => {
     const { db, accounts } = await setup();
     const first = await ingestEvent(db, buildEvent(accounts));

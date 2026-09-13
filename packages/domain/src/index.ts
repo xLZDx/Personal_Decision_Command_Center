@@ -121,6 +121,7 @@ export {
   syncGmailAccountHistory,
   GmailHistoryCursorInvalidError,
   GmailHistoryCursorMissingBootstrapError,
+  RECOMMENDED_MAX_EXTERNAL_CALLS_PER_INVOCATION,
 } from './gmail/history-sync.js';
 export type {
   GmailMessageRef,

@@ -27,6 +27,13 @@ source_thread_id    string | null
 event_type          'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED'
 direction           'INBOUND' | 'OUTBOUND'
 occurred_at         ISO datetime, provider-reported (source provenance, TDD §13)
+occurred_at_quality 'PROVIDER_REPORTED' (default) | 'ESTIMATED_FROM_RECEIPT' — added G3 checkpoint
+                    5, GPT-PM round-2 MAJOR (2026-09-13): whether `occurred_at` above is genuinely
+                    the source's own reported time, or a connector's best estimate (its own
+                    processing time) because the source exposes no per-signal timestamp at all
+                    (e.g. Gmail history.list carries no timestamp for deletions/label changes).
+                    Additive and backward-compatible — an existing producer that never sets it
+                    gets the default, preserving its current semantics exactly.
 received_at         ISO datetime, central transport bookkeeping (provenance-bearing the moment it
                     derives business meaning such as urgency — TDD §13, MIN-6)
 content_locator     { kind: 'SOURCE_REF', ref: string } — a POINTER to content, never the content

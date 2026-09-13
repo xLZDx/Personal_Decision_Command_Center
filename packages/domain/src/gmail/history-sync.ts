@@ -25,24 +25,16 @@ import { NormalizedEventSchema, SCHEMA_VERSION, type NormalizedEvent } from '@pd
  *    account for an extra `messages.get` on those paths. `occurred_at` for those two event types is
  *    therefore the sync's own processing time (`opts.now`), same value as `received_at`.
  *
- *    GPT-PM round-1 MAJOR (2026-09-13): flagged this as a real violation of `NormalizedEvent`'s own
- *    provenance split (`occurred_at` = provider time, `received_at` = transport time,
- *    `packages/contracts/src/event.ts`) -- not merely an approximation, because a downstream
- *    latency/ordering consumer cannot distinguish "this really happened now" from "we don't know
- *    when this happened." GPT-PM's own suggested remedy is a governed CONTRACT change (a nullable/
- *    qualified occurrence time, or an explicit timestamp-provenance/quality field) -- NOT something
- *    this module can decide unilaterally: `NormalizedEvent` is shared with the Telegram connector
- *    and `services/ingest`, so a schema change here is real scope beyond this checkpoint's own
- *    §2.2/§2.3 boundary (also touches `SCHEMA_VERSION`, every other event producer/consumer, and
- *    every test fixture across the repo that constructs a `NormalizedEvent`). Deliberately NOT
- *    implemented in this checkpoint's remediation for that reason -- escalated back to GPT-PM as
- *    product owner in round 2 with two concrete options rather than decided silently: (a) accept
- *    this as a documented, narrowly-scoped limitation for checkpoint 5 specifically, with a tracked
- *    cross-cutting follow-up gate to add the contract's own provenance/quality field once its shape
- *    is agreed for every producer, not just Gmail; or (b) require the contract change as part of
- *    closing this gate, in which case the additive field this module would set is
- *    `occurred_at_quality: 'ESTIMATED_FROM_RECEIPT'` on these two paths (default
- *    `'PROVIDER_REPORTED'` everywhere else, so no existing producer/consumer needs to change).
+ *    GPT-PM round-1 MAJOR, resolved round-2 (2026-09-13, ruling option (b)): flagged this as a real
+ *    violation of `NormalizedEvent`'s own provenance split (`occurred_at` = provider time,
+ *    `received_at` = transport time, `packages/contracts/src/event.ts`) -- not merely an
+ *    approximation, because a downstream latency/ordering consumer could not distinguish "this
+ *    really happened now" from "we don't know when this happened." Fixed via the contract's new
+ *    additive `occurred_at_quality` field (`'PROVIDER_REPORTED'` | `'ESTIMATED_FROM_RECEIPT'`,
+ *    default `'PROVIDER_REPORTED'` so every OTHER existing producer/consumer is unaffected): these
+ *    two event types now set `'ESTIMATED_FROM_RECEIPT'` explicitly, persisted end-to-end through
+ *    `ingest_events.occurred_at_quality` (migration 0007) -- see ADR-004 and
+ *    `core/DECISION_LOG.md`.
  * 2. `direction` sourcing. Not addressed by §2.3's matrix at all. `MESSAGE_CREATED` derives it from
  *    the SAME `messages.get` call already budgeted for `occurred_at` (`labelIds.includes('SENT')`).
  *    `MESSAGE_DELETED`/`MESSAGE_UPDATED` default to `'INBOUND'` -- deriving it correctly would need
@@ -65,26 +57,43 @@ import { NormalizedEventSchema, SCHEMA_VERSION, type NormalizedEvent } from '@pd
  *    variant today (the proposal's §2.1 ingress contract does not define one), and a real
  *    quarantine mechanism needs new durable state (a dead-letter marker) this checkpoint's schema
  *    does not have -- out of §2.2/§2.3's stated scope. Revisit if this proves to matter in practice.
- * 4. Per-invocation work is now BOUNDED (fixed 2026-09-13, GPT-PM round-1 MAJOR -- the original
- *    "unbounded work, accepted as an unmeasured limitation" framing was rejected: Cloudflare's own
- *    current documentation gives Workers Free 50 subrequests/invocation, a real and current
- *    ceiling, not a hypothesis, and every `MESSAGE_ADDED` costs one `messages.get` subrequest on
- *    top of `history.list` itself -- an ordinary backlog of ~50 new messages already exceeds it).
- *    `SyncGmailAccountHistoryOptions.maxPagesPerInvocation` (optional; `undefined` = unbounded,
- *    the prior behavior) caps how many `history.list` pages the MAIN traversal processes in one
- *    call. When the budget is exhausted before the final page, progress is durably checkpointed
- *    in `gmail_history_sync_progress` -- a table OUTSIDE `cursor_value`, so this does not violate
- *    §2.2 (which forbids advancing the AUTHORITATIVE cursor mid-traversal, not persisting other
- *    resume state) -- and the call returns `PARTIAL_PROGRESS`; the next invocation resumes from
- *    the checkpoint's `next_page_token` instead of restarting page 1, fenced against the CURRENT
- *    `source_cursors` state (a stale/foreign checkpoint from a superseded traversal is discarded,
- *    never resumed against assumptions that no longer hold). Deliberately scoped to the MAIN
- *    traversal only -- `recoverFromInvalidCursor`'s bounded `messages.list` enumeration is NOT
- *    checkpointed by this mechanism; that recovery path already runs in a single bounded window
- *    (`[connectedAt, getCurrentHistoryId())`) rather than an open-ended live-tailing traversal, so
- *    its own subrequest growth is bounded by the SIZE of one gap, not by an unbounded live stream,
- *    and is judged a narrower, acceptable residual risk for this checkpoint (flagged to GPT-PM for
- *    explicit confirmation rather than silently decided).
+ * 4. Per-invocation work is BOUNDED at CHANGE granularity (not just page granularity -- fixed
+ *    2026-09-13, GPT-PM round-1 MAJOR then round-2 MAJOR). Cloudflare's own current documentation
+ *    gives Workers Free 50 subrequests/invocation, a real and current ceiling, and every
+ *    `MESSAGE_ADDED` costs 2 external subrequests (`messages.get` + the ingest submit; every other
+ *    change kind costs 1, submit only). Round-1's remediation checkpointed only at PAGE boundaries,
+ *    but Gmail documents `history.list` as returning up to 100 records per page -- a single page
+ *    can exceed the ceiling before ever reaching a page boundary. `next_change_index` now tracks
+ *    progress WITHIN a page (its classified changes, flattened across records, in processing
+ *    order), so a resumed invocation re-fetches the SAME page and skips straight to where it left
+ *    off instead of restarting the page or the whole traversal.
+ *
+ *    `SyncGmailAccountHistoryOptions.maxExternalCallsPerInvocation` (optional; `undefined` =
+ *    unbounded -- every test that omits it is intentionally exercising unbounded behavior;
+ *    `RECOMMENDED_MAX_EXTERNAL_CALLS_PER_INVOCATION` is exported as the safe default a real Worker
+ *    caller should pass on the Free plan) caps external calls per invocation. When the budget would
+ *    be exceeded, progress is durably checkpointed in `gmail_history_sync_progress` -- a table
+ *    OUTSIDE `cursor_value`, so this does not violate §2.2 (which forbids advancing the
+ *    AUTHORITATIVE cursor mid-traversal, not persisting other resume state) -- and the call returns
+ *    `PARTIAL_PROGRESS`; the next invocation resumes from the checkpoint, fenced against the
+ *    CURRENT `source_cursors` state read at the START of that call (a stale/foreign checkpoint is
+ *    discarded, never resumed against assumptions that no longer hold).
+ *
+ *    GPT-PM round-2 MAJOR: the checkpoint mechanism now ALSO covers `recoverFromInvalidCursor`'s
+ *    bounded `messages.list` gap-recovery enumeration (`mode = 'RECOVERY'` in the same table,
+ *    anchored on `window_start` instead of `start_history_id`) -- round-1's "the recovery window is
+ *    bounded by the size of one gap, so it doesn't need this" framing was rejected: a finite gap can
+ *    still contain more messages than one invocation's external-call budget, and the round-1
+ *    BLOCKER fix made the first-ever POLL bootstrap deliberately route through this exact path, so
+ *    it is now load-bearing, not a rare edge case.
+ *
+ *    GPT-PM round-2 MAJOR (checkpoint mutation fencing): round-1's `writeSyncProgress`/
+ *    `deleteSyncProgress` were unconditional (keyed only by `source_account_id`), so a stalled older
+ *    traversal resuming late could silently clobber or delete a DIFFERENT, newer traversal's valid
+ *    checkpoint. Every write/delete is now fenced by a `WHERE` predicate on the row's own anchor
+ *    (mode + start_history_id/window_start + prev_cursor_json) -- the same CAS convention
+ *    `advanceCursor` already uses for `source_cursors`: a stale caller's mutation naturally affects
+ *    zero rows because the row's anchor no longer matches what that caller expects.
  *
  * `content_locator.ref = message.id`: NOT a gap -- proposal §2.8 states the drill-down endpoint
  * "resolves the opaque `content_locator.ref` to a real Gmail `message.id`/`thread.id`", so this is
@@ -303,6 +312,13 @@ type PendingChange =
   | { changeKind: 'LABEL_ADDED'; messageId: string; threadId: string; historyRecordId: string }
   | { changeKind: 'LABEL_REMOVED'; messageId: string; threadId: string; historyRecordId: string };
 
+/** External-call cost of processing one change (GPT-PM round-2 MAJOR): `MESSAGE_ADDED` needs a
+ *  `messages.get` on top of the submit itself; every other kind only submits. Used to enforce
+ *  `maxExternalCallsPerInvocation` at CHANGE granularity, not merely page granularity. */
+function changeCost(change: PendingChange): number {
+  return change.changeKind === 'MESSAGE_ADDED' ? 2 : 1;
+}
+
 function dedupedRefs(refs: GmailMessageRef[]): GmailMessageRef[] {
   const seen = new Set<string>();
   const result: GmailMessageRef[] = [];
@@ -383,6 +399,7 @@ async function buildEventForChange(
         event_type: 'MESSAGE_CREATED',
         direction: metadata.labelIds.includes('SENT') ? 'OUTBOUND' : 'INBOUND',
         occurred_at: metadata.internalDate,
+        occurred_at_quality: 'PROVIDER_REPORTED',
         source_version: null,
       });
     }
@@ -392,6 +409,7 @@ async function buildEventForChange(
         event_type: 'MESSAGE_DELETED',
         direction: 'INBOUND',
         occurred_at: ctx.now,
+        occurred_at_quality: 'ESTIMATED_FROM_RECEIPT',
         source_version: null,
       });
     case 'LABEL_ADDED':
@@ -400,6 +418,7 @@ async function buildEventForChange(
         event_type: 'MESSAGE_UPDATED',
         direction: 'INBOUND',
         occurred_at: ctx.now,
+        occurred_at_quality: 'ESTIMATED_FROM_RECEIPT',
         source_version: `${change.historyRecordId}:LABEL_ADDED`,
       });
     case 'LABEL_REMOVED':
@@ -408,6 +427,7 @@ async function buildEventForChange(
         event_type: 'MESSAGE_UPDATED',
         direction: 'INBOUND',
         occurred_at: ctx.now,
+        occurred_at_quality: 'ESTIMATED_FROM_RECEIPT',
         source_version: `${change.historyRecordId}:LABEL_REMOVED`,
       });
   }
@@ -428,6 +448,190 @@ async function submitChange(
 }
 
 // ---------------------------------------------------------------------------------------------
+// Resumable checkpoint (`gmail_history_sync_progress`, migration 0008) -- OUTSIDE the
+// authoritative `cursor_value`, never violates §2.2. Covers BOTH the main `history.list`
+// traversal (`mode: 'MAIN'`) and `recoverFromInvalidCursor`'s bounded gap-recovery enumeration
+// (`mode: 'RECOVERY'`), GPT-PM round-2 MAJOR.
+// ---------------------------------------------------------------------------------------------
+
+/** A safe default for a real Worker caller targeting Cloudflare Workers Free (50 external
+ *  subrequests/invocation) -- leaves headroom for the page/window fetch itself plus a reasonable
+ *  safety margin, per GPT-PM round-2's "encode a safe domain default" option.
+ *  `maxExternalCallsPerInvocation` stays optional rather than mandatory so tests (and any future
+ *  non-Free-tier caller) can still exercise genuinely unbounded behavior deliberately. */
+export const RECOMMENDED_MAX_EXTERNAL_CALLS_PER_INVOCATION = 40;
+
+interface SyncProgressRow {
+  mode: 'MAIN' | 'RECOVERY';
+  start_history_id: string | null;
+  window_start: string | null;
+  prev_cursor_json: string | null;
+  recovery_history_id: string | null;
+  next_page_token: string | null;
+  next_change_index: number;
+  accumulated_newest_internal_date: string;
+}
+
+async function readSyncProgress(
+  db: D1Database,
+  sourceAccountId: string,
+): Promise<SyncProgressRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT mode, start_history_id, window_start, prev_cursor_json, recovery_history_id,
+              next_page_token, next_change_index, accumulated_newest_internal_date
+       FROM gmail_history_sync_progress WHERE source_account_id = ?`,
+    )
+    .bind(sourceAccountId)
+    .first<SyncProgressRow>();
+  return row ?? null;
+}
+
+/**
+ * Fenced write for a MAIN-mode checkpoint (GPT-PM round-2 MAJOR): the `ON CONFLICT ... WHERE`
+ * predicate only allows overwriting an EXISTING row that already belongs to THIS SAME traversal
+ * (`mode = 'MAIN'` and a matching anchor) -- a stale caller from a superseded traversal naturally
+ * writes zero rows instead of clobbering a different, newer checkpoint, the same CAS convention
+ * `advanceCursor` already uses for `source_cursors`. No existing row at all is always safe to
+ * INSERT (nothing to clobber), exactly like `advanceCursor`'s own "no row yet" case.
+ */
+async function writeMainProgress(
+  db: D1Database,
+  sourceAccountId: string,
+  progress: {
+    startHistoryId: string;
+    prevCursorJson: string | null;
+    nextPageToken: string | undefined;
+    nextChangeIndex: number;
+    accumulatedNewestInternalDate: string;
+  },
+  now: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `INSERT INTO gmail_history_sync_progress
+         (source_account_id, mode, start_history_id, window_start, prev_cursor_json,
+          recovery_history_id, next_page_token, next_change_index,
+          accumulated_newest_internal_date, updated_at)
+       VALUES (?, 'MAIN', ?, NULL, ?, NULL, ?, ?, ?, ?)
+       ON CONFLICT (source_account_id) DO UPDATE SET
+         mode = 'MAIN',
+         start_history_id = excluded.start_history_id,
+         window_start = NULL,
+         prev_cursor_json = excluded.prev_cursor_json,
+         recovery_history_id = NULL,
+         next_page_token = excluded.next_page_token,
+         next_change_index = excluded.next_change_index,
+         accumulated_newest_internal_date = excluded.accumulated_newest_internal_date,
+         updated_at = excluded.updated_at
+       WHERE gmail_history_sync_progress.mode = 'MAIN'
+         AND gmail_history_sync_progress.start_history_id IS ?
+         AND gmail_history_sync_progress.prev_cursor_json IS ?`,
+    )
+    .bind(
+      sourceAccountId,
+      progress.startHistoryId,
+      progress.prevCursorJson,
+      progress.nextPageToken ?? null,
+      progress.nextChangeIndex,
+      progress.accumulatedNewestInternalDate,
+      now,
+      progress.startHistoryId,
+      progress.prevCursorJson,
+    )
+    .run();
+  return result.meta.changes === 1;
+}
+
+/** Fenced delete for a MAIN-mode checkpoint -- same anchor predicate as `writeMainProgress`, so a
+ *  stale traversal's cleanup cannot delete a different, newer checkpoint. */
+async function deleteMainProgress(
+  db: D1Database,
+  sourceAccountId: string,
+  startHistoryId: string,
+  prevCursorJson: string | null,
+): Promise<void> {
+  await db
+    .prepare(
+      `DELETE FROM gmail_history_sync_progress
+       WHERE source_account_id = ? AND mode = 'MAIN'
+         AND start_history_id IS ? AND prev_cursor_json IS ?`,
+    )
+    .bind(sourceAccountId, startHistoryId, prevCursorJson)
+    .run();
+}
+
+/** RECOVERY-mode equivalent of `writeMainProgress` -- anchored on `window_start` instead of
+ *  `start_history_id`, and additionally persists `recovery_history_id` (captured once, before
+ *  enumeration began, and never re-derived on resume -- see the module header). */
+async function writeRecoveryProgress(
+  db: D1Database,
+  sourceAccountId: string,
+  progress: {
+    windowStart: string;
+    prevCursorJson: string | null;
+    recoveryHistoryId: string;
+    nextPageToken: string | undefined;
+    nextChangeIndex: number;
+    accumulatedNewestInternalDate: string;
+  },
+  now: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `INSERT INTO gmail_history_sync_progress
+         (source_account_id, mode, start_history_id, window_start, prev_cursor_json,
+          recovery_history_id, next_page_token, next_change_index,
+          accumulated_newest_internal_date, updated_at)
+       VALUES (?, 'RECOVERY', NULL, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (source_account_id) DO UPDATE SET
+         mode = 'RECOVERY',
+         start_history_id = NULL,
+         window_start = excluded.window_start,
+         prev_cursor_json = excluded.prev_cursor_json,
+         recovery_history_id = excluded.recovery_history_id,
+         next_page_token = excluded.next_page_token,
+         next_change_index = excluded.next_change_index,
+         accumulated_newest_internal_date = excluded.accumulated_newest_internal_date,
+         updated_at = excluded.updated_at
+       WHERE gmail_history_sync_progress.mode = 'RECOVERY'
+         AND gmail_history_sync_progress.window_start IS ?
+         AND gmail_history_sync_progress.prev_cursor_json IS ?`,
+    )
+    .bind(
+      sourceAccountId,
+      progress.windowStart,
+      progress.prevCursorJson,
+      progress.recoveryHistoryId,
+      progress.nextPageToken ?? null,
+      progress.nextChangeIndex,
+      progress.accumulatedNewestInternalDate,
+      now,
+      progress.windowStart,
+      progress.prevCursorJson,
+    )
+    .run();
+  return result.meta.changes === 1;
+}
+
+/** RECOVERY-mode equivalent of `deleteMainProgress`. */
+async function deleteRecoveryProgress(
+  db: D1Database,
+  sourceAccountId: string,
+  windowStart: string,
+  prevCursorJson: string | null,
+): Promise<void> {
+  await db
+    .prepare(
+      `DELETE FROM gmail_history_sync_progress
+       WHERE source_account_id = ? AND mode = 'RECOVERY'
+         AND window_start IS ? AND prev_cursor_json IS ?`,
+    )
+    .bind(sourceAccountId, windowStart, prevCursorJson)
+    .run();
+}
+
+// ---------------------------------------------------------------------------------------------
 // Top-level orchestration (§2.2 steps 1-6)
 // ---------------------------------------------------------------------------------------------
 
@@ -440,10 +644,10 @@ export type SyncGmailAccountHistoryResult =
   | { outcome: 'SYNCED'; counts: GmailHistorySyncCounts }
   | { outcome: 'CAS_LOST_RETRY'; counts: GmailHistorySyncCounts }
   | { outcome: 'RECOVERED_FROM_INVALID_CURSOR'; counts: GmailHistorySyncCounts }
-  /** The main traversal hit `maxPagesPerInvocation` before reaching its final page. Progress was
-   *  checkpointed to `gmail_history_sync_progress`; `cursor_value` is untouched (§2.2). The
-   *  caller should invoke `syncGmailAccountHistory` again (a later scheduled tick, a retry) to
-   *  resume from the checkpoint. */
+  /** Either the main traversal or gap recovery hit `maxExternalCallsPerInvocation` before
+   *  finishing. Progress was checkpointed to `gmail_history_sync_progress`; `cursor_value` is
+   *  untouched (§2.2). The caller should invoke `syncGmailAccountHistory` again (a later
+   *  scheduled tick, a retry) to resume from the checkpoint. */
   | { outcome: 'PARTIAL_PROGRESS'; counts: GmailHistorySyncCounts };
 
 export interface SyncGmailAccountHistoryOptions {
@@ -453,79 +657,11 @@ export interface SyncGmailAccountHistoryOptions {
    *  PRE_CONNECTION_BACKFILL = OFF). */
   connectedAt: string;
   now: string;
-  /** Optional per-invocation page budget for the MAIN `history.list` traversal (GPT-PM round-1
-   *  MAJOR #1 -- see the module header's design decision #4). `undefined` = unbounded, the
-   *  original behavior. Not applied to `recoverFromInvalidCursor`'s bounded gap-recovery window,
-   *  which is deliberately not checkpointed. */
-  maxPagesPerInvocation?: number;
-}
-
-interface SyncProgressRow {
-  start_history_id: string;
-  prev_cursor_json: string | null;
-  next_page_token: string;
-  accumulated_newest_internal_date: string;
-}
-
-/** Best-effort resumable checkpoint, OUTSIDE the authoritative `cursor_value` (never violates
- *  §2.2). Read once per traversal attempt; the caller MUST verify `start_history_id` and
- *  `prev_cursor_json` still match the CURRENT state before trusting `next_page_token` -- a row
- *  left behind by a superseded traversal (the real cursor moved since this checkpoint was
- *  written) must never be resumed from. */
-async function readSyncProgress(
-  db: D1Database,
-  sourceAccountId: string,
-): Promise<SyncProgressRow | null> {
-  const row = await db
-    .prepare(
-      `SELECT start_history_id, prev_cursor_json, next_page_token, accumulated_newest_internal_date
-       FROM gmail_history_sync_progress WHERE source_account_id = ?`,
-    )
-    .bind(sourceAccountId)
-    .first<SyncProgressRow>();
-  return row ?? null;
-}
-
-async function writeSyncProgress(
-  db: D1Database,
-  sourceAccountId: string,
-  progress: {
-    startHistoryId: string;
-    prevCursorJson: string | null;
-    nextPageToken: string;
-    accumulatedNewestInternalDate: string;
-  },
-  now: string,
-): Promise<void> {
-  await db
-    .prepare(
-      `INSERT INTO gmail_history_sync_progress
-         (source_account_id, start_history_id, prev_cursor_json, next_page_token,
-          accumulated_newest_internal_date, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (source_account_id) DO UPDATE SET
-         start_history_id = excluded.start_history_id,
-         prev_cursor_json = excluded.prev_cursor_json,
-         next_page_token = excluded.next_page_token,
-         accumulated_newest_internal_date = excluded.accumulated_newest_internal_date,
-         updated_at = excluded.updated_at`,
-    )
-    .bind(
-      sourceAccountId,
-      progress.startHistoryId,
-      progress.prevCursorJson,
-      progress.nextPageToken,
-      progress.accumulatedNewestInternalDate,
-      now,
-    )
-    .run();
-}
-
-async function deleteSyncProgress(db: D1Database, sourceAccountId: string): Promise<void> {
-  await db
-    .prepare(`DELETE FROM gmail_history_sync_progress WHERE source_account_id = ?`)
-    .bind(sourceAccountId)
-    .run();
+  /** Optional per-invocation external-call budget, applied at CHANGE granularity to BOTH the main
+   *  traversal and gap recovery (GPT-PM round-1/round-2 MAJOR -- see the module header's design
+   *  decision #4). `undefined` = unbounded, the original behavior. See
+   *  `RECOMMENDED_MAX_EXTERNAL_CALLS_PER_INVOCATION` for a safe Free-plan default. */
+  maxExternalCallsPerInvocation?: number;
 }
 
 /**
@@ -587,67 +723,72 @@ export async function syncGmailAccountHistory(
     baselineLastSeenInternalDate = cursor.lastSeenInternalDate;
   }
 
-  // GPT-PM round-1 MAJOR #1: resume from a durable page-granularity checkpoint when one exists
-  // AND still matches the CURRENT state this call just read -- never trusted blindly, since a
-  // checkpoint left behind by a superseded traversal (the real cursor moved since it was written)
-  // must not be resumed from.
+  // Resume from a durable checkpoint when one exists AND still matches the CURRENT state this
+  // call just read -- never trusted blindly (see writeMainProgress's own fencing doc comment).
   const existingProgress = await readSyncProgress(db, opts.sourceAccountId);
-  const progressMatchesCurrentState =
+  const mainProgressMatches =
     existingProgress !== null &&
+    existingProgress.mode === 'MAIN' &&
     existingProgress.start_history_id === startHistoryId &&
     existingProgress.prev_cursor_json === rawJson;
 
-  let newestInternalDate = progressMatchesCurrentState
+  let newestInternalDate = mainProgressMatches
     ? existingProgress.accumulated_newest_internal_date
     : baselineLastSeenInternalDate;
   let finalHistoryId: string | null = null;
-  let pageToken: string | undefined = progressMatchesCurrentState
-    ? existingProgress.next_page_token
+  let pageToken: string | undefined = mainProgressMatches
+    ? (existingProgress.next_page_token ?? undefined)
     : undefined;
-  let pagesProcessedThisInvocation = 0;
+  let resumeChangeIndex = mainProgressMatches ? existingProgress.next_change_index : 0;
+  let externalCallsThisInvocation = 0;
 
   try {
     do {
       const page = await historyClient.listHistory(
         pageToken === undefined ? { startHistoryId } : { startHistoryId, pageToken },
       );
-      for (const record of page.records) {
-        for (const change of classifyHistoryRecord(record)) {
-          const createdAt = await submitChange(historyClient, submitter, change, ctx, counts);
-          if (createdAt !== null) newestInternalDate = maxIso(newestInternalDate, createdAt);
+      externalCallsThisInvocation += 1; // the page fetch itself
+
+      const changes = page.records.flatMap(classifyHistoryRecord);
+      for (const [offset, change] of changes.slice(resumeChangeIndex).entries()) {
+        const i = resumeChangeIndex + offset;
+        const cost = changeCost(change);
+        if (
+          opts.maxExternalCallsPerInvocation !== undefined &&
+          externalCallsThisInvocation + cost > opts.maxExternalCallsPerInvocation
+        ) {
+          await writeMainProgress(
+            db,
+            opts.sourceAccountId,
+            {
+              startHistoryId,
+              prevCursorJson: rawJson,
+              nextPageToken: pageToken, // re-fetch the SAME (partially-processed) page
+              nextChangeIndex: i,
+              accumulatedNewestInternalDate: newestInternalDate,
+            },
+            opts.now,
+          );
+          return { outcome: 'PARTIAL_PROGRESS', counts };
         }
+        const createdAt = await submitChange(historyClient, submitter, change, ctx, counts);
+        externalCallsThisInvocation += cost;
+        if (createdAt !== null) newestInternalDate = maxIso(newestInternalDate, createdAt);
       }
-      pagesProcessedThisInvocation += 1;
+      resumeChangeIndex = 0;
       pageToken = page.nextPageToken;
       if (!pageToken) {
         finalHistoryId = page.historyId;
         break;
       }
-      if (
-        opts.maxPagesPerInvocation !== undefined &&
-        pagesProcessedThisInvocation >= opts.maxPagesPerInvocation
-      ) {
-        await writeSyncProgress(
-          db,
-          opts.sourceAccountId,
-          {
-            startHistoryId,
-            prevCursorJson: rawJson,
-            nextPageToken: pageToken,
-            accumulatedNewestInternalDate: newestInternalDate,
-          },
-          opts.now,
-        );
-        return { outcome: 'PARTIAL_PROGRESS', counts };
-      }
     } while (pageToken);
   } catch (error) {
     if (!(error instanceof GmailHistoryCursorInvalidError)) throw error;
-    await deleteSyncProgress(db, opts.sourceAccountId);
+    await deleteMainProgress(db, opts.sourceAccountId, startHistoryId, rawJson);
     return recoverFromInvalidCursor(db, historyClient, submitter, opts, rawJson, ctx, counts);
   }
 
-  await deleteSyncProgress(db, opts.sourceAccountId);
+  await deleteMainProgress(db, opts.sourceAccountId, startHistoryId, rawJson);
   const nextCursor: GmailCursorValue = {
     historyId: finalHistoryId as string,
     lastSeenInternalDate: newestInternalDate,
@@ -678,33 +819,76 @@ async function recoverFromInvalidCursor(
     prevCursor?.lastSeenInternalDate ?? opts.connectedAt,
   );
 
-  // Captured BEFORE enumeration begins: a message that arrives while recovery is still listing
-  // must not be silently claimed as "covered" by this recovery's cursor advance -- it will be
-  // picked up by the next normal history.list sync starting from this historyId instead.
-  const recoveryHistoryId = await historyClient.getCurrentHistoryId();
+  const existingProgress = await readSyncProgress(db, opts.sourceAccountId);
+  const recoveryProgressMatches =
+    existingProgress !== null &&
+    existingProgress.mode === 'RECOVERY' &&
+    existingProgress.window_start === windowStart &&
+    existingProgress.prev_cursor_json === prevRawJson;
 
-  let newestInternalDate = windowStart;
+  // Captured BEFORE enumeration begins on a FRESH recovery attempt -- a RESUMED recovery reuses
+  // the SAME historyId a prior invocation already captured (never re-derives a later one), or the
+  // recovered cursor could claim coverage past messages that arrived mid-recovery.
+  const recoveryHistoryId = recoveryProgressMatches
+    ? (existingProgress.recovery_history_id as string)
+    : await historyClient.getCurrentHistoryId();
+
+  let newestInternalDate = recoveryProgressMatches
+    ? existingProgress.accumulated_newest_internal_date
+    : windowStart;
+  let pageToken: string | undefined = recoveryProgressMatches
+    ? (existingProgress.next_page_token ?? undefined)
+    : undefined;
+  let resumeMessageIndex = recoveryProgressMatches ? existingProgress.next_change_index : 0;
+  let externalCallsThisInvocation = 0;
   const seen = new Set<string>();
-  let pageToken: string | undefined;
 
   do {
     const page = await historyClient.listMessagesInWindow(
       pageToken === undefined ? { afterIso: windowStart } : { afterIso: windowStart, pageToken },
     );
-    for (const ref of page.messages) {
+    externalCallsThisInvocation += 1; // the window-page fetch itself
+
+    for (const [offset, ref] of page.messages.slice(resumeMessageIndex).entries()) {
+      const i = resumeMessageIndex + offset;
       if (seen.has(ref.messageId)) continue;
-      seen.add(ref.messageId);
+
       const change: PendingChange = {
         changeKind: 'MESSAGE_ADDED',
         messageId: ref.messageId,
         threadId: ref.threadId,
       };
+      const cost = changeCost(change);
+      if (
+        opts.maxExternalCallsPerInvocation !== undefined &&
+        externalCallsThisInvocation + cost > opts.maxExternalCallsPerInvocation
+      ) {
+        await writeRecoveryProgress(
+          db,
+          opts.sourceAccountId,
+          {
+            windowStart,
+            prevCursorJson: prevRawJson,
+            recoveryHistoryId,
+            nextPageToken: pageToken,
+            nextChangeIndex: i,
+            accumulatedNewestInternalDate: newestInternalDate,
+          },
+          opts.now,
+        );
+        return { outcome: 'PARTIAL_PROGRESS', counts };
+      }
+
+      seen.add(ref.messageId);
       const createdAt = await submitChange(historyClient, submitter, change, ctx, counts);
+      externalCallsThisInvocation += cost;
       if (createdAt !== null) newestInternalDate = maxIso(newestInternalDate, createdAt);
     }
+    resumeMessageIndex = 0;
     pageToken = page.nextPageToken;
   } while (pageToken);
 
+  await deleteRecoveryProgress(db, opts.sourceAccountId, windowStart, prevRawJson);
   const nextCursor: GmailCursorValue = {
     historyId: recoveryHistoryId,
     lastSeenInternalDate: newestInternalDate,

@@ -6,21 +6,32 @@ import { fileURLToPath } from 'node:url';
  * Single source of truth for "which schema file do G2 tests run against" -- every domain/service
  * test asks this instead of hardcoding a relative path to `infra/migrations/0001_ingest_outbox.sql`,
  * so the path is correct in exactly one place if the migrations directory ever changes.
+ *
+ * Includes migration 0007 (`ingest_events.occurred_at_quality`, G3 checkpoint 5 GPT-PM round-2)
+ * even though it was added during G3 work -- `ingest_events` is a G2-scope table (ADR-006), and
+ * every G2 test needs the column NormalizedEvent's own contract now always carries.
  */
 export function loadG2Schema(): string {
-  const path = fileURLToPath(
+  const path0001 = fileURLToPath(
     new URL('../../../infra/migrations/0001_ingest_outbox.sql', import.meta.url),
   );
-  return readFileSync(path, 'utf8');
+  const path0007 = fileURLToPath(
+    new URL(
+      '../../../infra/migrations/0007_ingest_events_occurred_at_quality.sql',
+      import.meta.url,
+    ),
+  );
+  return `${readFileSync(path0001, 'utf8')}\n${readFileSync(path0007, 'utf8')}`;
 }
 
 /**
- * G3's schema builds on G2's unchanged -- concatenates migration 0001 (accounts/policy/cursor/
- * ingest/outbox/DLQ) with 0002 (Gmail connector), 0003 (OAuth disconnect lock, checkpoint 4
- * round-3), 0004 (OAuth lifecycle lock, checkpoint 4 round-8), 0005 (unique Gmail email,
- * checkpoint 4 round-9) and 0006 (history-sync resumable checkpoint, checkpoint 5 GPT-PM round-1)
- * so a G3 test gets every table G3's own tables reference via FK (source_accounts, ingest_events)
- * without re-declaring them.
+ * G3's schema builds on G2's unchanged -- concatenates migration 0001+0007 (accounts/policy/
+ * cursor/ingest/outbox/DLQ, via `loadG2Schema()`) with 0002 (Gmail connector), 0003 (OAuth
+ * disconnect lock, checkpoint 4 round-3), 0004 (OAuth lifecycle lock, checkpoint 4 round-8), 0005
+ * (unique Gmail email, checkpoint 4 round-9), 0006 (history-sync resumable checkpoint, checkpoint
+ * 5 GPT-PM round-1) and 0008 (history-sync checkpoint rebuild -- change-granularity budget +
+ * unified MAIN/RECOVERY mode, checkpoint 5 GPT-PM round-2) so a G3 test gets every table G3's own
+ * tables reference via FK (source_accounts, ingest_events) without re-declaring them.
  */
 export function loadG3Schema(): string {
   const path0002 = fileURLToPath(
@@ -38,9 +49,15 @@ export function loadG3Schema(): string {
   const path0006 = fileURLToPath(
     new URL('../../../infra/migrations/0006_gmail_history_sync_progress.sql', import.meta.url),
   );
+  const path0008 = fileURLToPath(
+    new URL(
+      '../../../infra/migrations/0008_gmail_history_sync_progress_rebuild.sql',
+      import.meta.url,
+    ),
+  );
   return (
     `${loadG2Schema()}\n${readFileSync(path0002, 'utf8')}\n${readFileSync(path0003, 'utf8')}\n` +
     `${readFileSync(path0004, 'utf8')}\n${readFileSync(path0005, 'utf8')}\n` +
-    `${readFileSync(path0006, 'utf8')}`
+    `${readFileSync(path0006, 'utf8')}\n${readFileSync(path0008, 'utf8')}`
   );
 }

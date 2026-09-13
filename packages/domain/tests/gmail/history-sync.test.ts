@@ -182,6 +182,9 @@ describe('syncGmailAccountHistory -- §2.3 normalization matrix', () => {
     expect(event.source_thread_id).toBe('t1');
     expect(event.source_version).toBeNull();
     expect(event.occurred_at).toBe('2026-09-13T01:00:00.000Z');
+    // GPT-PM round-2 MAJOR (contract fix, ruling option (b)): a real provider timestamp
+    // (messages.get's internalDate) is genuinely PROVIDER_REPORTED, not an estimate.
+    expect(event.occurred_at_quality).toBe('PROVIDER_REPORTED');
     expect(event.direction).toBe('INBOUND');
     expect(event.content_locator).toEqual({ kind: 'SOURCE_REF', ref: 'm1' });
   });
@@ -255,6 +258,11 @@ describe('syncGmailAccountHistory -- §2.3 normalization matrix', () => {
     expect(event.event_type).toBe('MESSAGE_DELETED');
     expect(event.source_version).toBeNull();
     expect(event.occurred_at).toBe(now);
+    // GPT-PM round-2 MAJOR (contract fix, ruling option (b)): Gmail exposes no per-signal
+    // timestamp for a deletion, so occurred_at here is an ESTIMATE (processing time), not
+    // genuine provider provenance -- the contract must say so explicitly, not just via a
+    // matching-but-unmarked occurred_at === received_at value.
+    expect(event.occurred_at_quality).toBe('ESTIMATED_FROM_RECEIPT');
   });
 
   it('labelsAdded -> MESSAGE_UPDATED with {historyRecordId}:LABEL_ADDED source_version', async () => {
@@ -289,6 +297,7 @@ describe('syncGmailAccountHistory -- §2.3 normalization matrix', () => {
     const event = NormalizedEventSchema.parse(submitted[0]);
     expect(event.event_type).toBe('MESSAGE_UPDATED');
     expect(event.source_version).toBe('r7:LABEL_ADDED');
+    expect(event.occurred_at_quality).toBe('ESTIMATED_FROM_RECEIPT');
   });
 
   it('labelsAdded and labelsRemoved for the SAME message in the SAME record -> two MESSAGE_UPDATED events with distinct source_version', async () => {
@@ -327,6 +336,7 @@ describe('syncGmailAccountHistory -- §2.3 normalization matrix', () => {
     // constraint tied to source_version) and go undetected by a source_version-only assertion.
     for (const event of submitted) {
       expect(event.event_type).toBe('MESSAGE_UPDATED');
+      expect(event.occurred_at_quality).toBe('ESTIMATED_FROM_RECEIPT');
     }
     const versions = submitted.map((e) => e.source_version).sort();
     expect(versions).toEqual(['r9:LABEL_ADDED', 'r9:LABEL_REMOVED']);
@@ -1056,40 +1066,98 @@ describe('syncGmailAccountHistory -- §2.2 step 6: bounded 404/invalid-cursor re
   });
 });
 
-describe('syncGmailAccountHistory -- resumable per-invocation page budget (GPT-PM round-1 MAJOR #1)', () => {
-  it('checkpoints progress outside cursor_value when the page budget is exhausted, then resumes from the checkpoint on the next invocation instead of restarting page 1', async () => {
+/** Inserts a `gmail_history_sync_progress` row directly, matching migration 0008's full column
+ *  set -- used to simulate a checkpoint already left behind by SOME OTHER traversal/invocation,
+ *  independent of whatever `syncGmailAccountHistory` itself would produce. */
+async function seedProgressRow(
+  db: Awaited<ReturnType<typeof setup>>['db'],
+  row: {
+    sourceAccountId: string;
+    mode: 'MAIN' | 'RECOVERY';
+    startHistoryId?: string | null;
+    windowStart?: string | null;
+    prevCursorJson: string | null;
+    recoveryHistoryId?: string | null;
+    nextPageToken: string | null;
+    nextChangeIndex: number;
+    accumulatedNewestInternalDate: string;
+    updatedAt: string;
+  },
+) {
+  await db
+    .prepare(
+      `INSERT INTO gmail_history_sync_progress
+         (source_account_id, mode, start_history_id, window_start, prev_cursor_json,
+          recovery_history_id, next_page_token, next_change_index,
+          accumulated_newest_internal_date, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      row.sourceAccountId,
+      row.mode,
+      row.startHistoryId ?? null,
+      row.windowStart ?? null,
+      row.prevCursorJson,
+      row.recoveryHistoryId ?? null,
+      row.nextPageToken,
+      row.nextChangeIndex,
+      row.accumulatedNewestInternalDate,
+      row.updatedAt,
+    )
+    .run();
+}
+
+async function readProgressRow(
+  db: Awaited<ReturnType<typeof setup>>['db'],
+  sourceAccountId: string,
+) {
+  return db
+    .prepare('SELECT * FROM gmail_history_sync_progress WHERE source_account_id = ?')
+    .bind(sourceAccountId)
+    .first<Record<string, unknown> | null>();
+}
+
+describe('syncGmailAccountHistory -- resumable per-invocation external-call budget (GPT-PM round-1 MAJOR #1, round-2 MAJOR)', () => {
+  it('checkpoints mid-PAGE when the external-call budget is exhausted, then resumes the SAME page on the next invocation instead of re-fetching or re-submitting already-processed changes', async () => {
+    // GPT-PM round-2 MAJOR: a page-BOUNDARY budget is not an external-call budget -- Gmail
+    // documents history.list as returning up to 100 records per page, and a single page can
+    // exceed the Free-plan ceiling before any page boundary is reached. This test puts BOTH
+    // messages in ONE page and proves the budget stops mid-page, not just between pages.
     const { db, accounts } = await setup({
       cursorValue: JSON.stringify({ historyId: 'h0', lastSeenInternalDate: FIXTURE_NOW }),
     });
     const { submitter, submitted } = fakeSubmitter();
 
-    // --- Invocation 1: budget of 1 page, backlog spans (at least) 2 pages. ---
+    // --- Invocation 1: ONE page containing 2 MESSAGE_ADDED changes (cost 2 each); budget=3 means
+    //     1 (page fetch) + 2 (m1) = 3 fits, but + 2 more for m2 would be 5 > 3. ---
     const calls1: Array<{ startHistoryId: string; pageToken?: string }> = [];
     const client1: GmailHistoryClient = {
       async listHistory(opts) {
         calls1.push(opts);
-        if (calls1.length === 1) {
-          return {
-            historyId: 'IGNORED',
-            nextPageToken: 'page2',
-            records: [
-              {
-                historyRecordId: 'r1',
-                messagesAdded: [{ messageId: 'm1', threadId: 't1' }],
-                messagesDeleted: [],
-                labelsAdded: [],
-                labelsRemoved: [],
-              },
-            ],
-          };
+        if (calls1.length > 1) {
+          throw new Error('invocation 1 must not fetch a second page');
         }
-        throw new Error('invocation 1 must not fetch a second page under a 1-page budget');
+        return {
+          historyId: 'h-final',
+          records: [
+            {
+              historyRecordId: 'r1',
+              messagesAdded: [
+                { messageId: 'm1', threadId: 't1' },
+                { messageId: 'm2', threadId: 't2' },
+              ],
+              messagesDeleted: [],
+              labelsAdded: [],
+              labelsRemoved: [],
+            },
+          ],
+        };
       },
       async getMessageMetadata(opts) {
         if (opts.messageId === 'm1') {
           return { internalDate: '2026-09-13T01:10:00.000Z', labelIds: [] };
         }
-        throw new Error(`unexpected messageId ${opts.messageId}`);
+        throw new Error(`invocation 1 must not process ${opts.messageId}`);
       },
       async listMessagesInWindow() {
         throw new Error('not used in this test');
@@ -1104,15 +1172,15 @@ describe('syncGmailAccountHistory -- resumable per-invocation page budget (GPT-P
       sourcePolicyId: accounts.gmailPolicyId,
       connectedAt: FIXTURE_NOW,
       now: '2026-09-13T02:00:00.000Z',
-      maxPagesPerInvocation: 1,
+      maxExternalCallsPerInvocation: 3,
     });
 
     expect(result1.outcome).toBe('PARTIAL_PROGRESS');
     if (result1.outcome === 'PARTIAL_PROGRESS') {
       expect(result1.counts).toEqual({ accepted: 1, alreadyAccepted: 0 });
     }
-    expect(calls1).toHaveLength(1);
-    expect(calls1[0]).toEqual({ startHistoryId: 'h0' });
+    expect(calls1).toHaveLength(1); // ONE page fetch, budget stopped WITHIN it
+    expect(submitted.map((e) => e.source_event_id)).toEqual(['m1']); // m2 NOT yet processed
 
     // cursor_value is UNTOUCHED -- §2.2's own invariant, preserved by the checkpoint mechanism.
     const rowAfter1 = await readCursorRow(db, accounts.gmailAccountId);
@@ -1121,43 +1189,45 @@ describe('syncGmailAccountHistory -- resumable per-invocation page budget (GPT-P
       lastSeenInternalDate: FIXTURE_NOW,
     });
 
-    const progressRow = await db
-      .prepare('SELECT * FROM gmail_history_sync_progress WHERE source_account_id = ?')
-      .bind(accounts.gmailAccountId)
-      .first<Record<string, unknown>>();
+    const progressRow = await readProgressRow(db, accounts.gmailAccountId);
     expect(progressRow).toMatchObject({
+      mode: 'MAIN',
       start_history_id: 'h0',
-      next_page_token: 'page2',
+      next_page_token: null, // re-fetch the SAME (first) page, not a "next" one
+      next_change_index: 1, // resume at m2, skip re-processing m1
       accumulated_newest_internal_date: '2026-09-13T01:10:00.000Z',
     });
 
-    // --- Invocation 2: must resume from the checkpoint (pageToken:'page2' on its FIRST call,
-    //     never a re-fetch of page 1) and complete the traversal. ---
+    // --- Invocation 2: fresh client re-scripted with the SAME page; must re-fetch it exactly
+    //     once, process ONLY m2 (never re-submit m1), and complete the traversal. ---
     const calls2: Array<{ startHistoryId: string; pageToken?: string }> = [];
     const client2: GmailHistoryClient = {
       async listHistory(opts) {
         calls2.push(opts);
-        if (calls2.length === 1) {
-          return {
-            historyId: 'h-final',
-            records: [
-              {
-                historyRecordId: 'r2',
-                messagesAdded: [{ messageId: 'm2', threadId: 't2' }],
-                messagesDeleted: [],
-                labelsAdded: [],
-                labelsRemoved: [],
-              },
-            ],
-          };
+        if (calls2.length > 1) {
+          throw new Error('invocation 2 must complete in a single re-fetched page');
         }
-        throw new Error('invocation 2 must complete in a single page');
+        return {
+          historyId: 'h-final',
+          records: [
+            {
+              historyRecordId: 'r1',
+              messagesAdded: [
+                { messageId: 'm1', threadId: 't1' },
+                { messageId: 'm2', threadId: 't2' },
+              ],
+              messagesDeleted: [],
+              labelsAdded: [],
+              labelsRemoved: [],
+            },
+          ],
+        };
       },
       async getMessageMetadata(opts) {
         if (opts.messageId === 'm2') {
           return { internalDate: '2026-09-13T01:20:00.000Z', labelIds: [] };
         }
-        throw new Error(`unexpected messageId ${opts.messageId}`);
+        throw new Error(`invocation 2 must not re-process ${opts.messageId}`);
       },
       async listMessagesInWindow() {
         throw new Error('not used in this test');
@@ -1172,25 +1242,20 @@ describe('syncGmailAccountHistory -- resumable per-invocation page budget (GPT-P
       sourcePolicyId: accounts.gmailPolicyId,
       connectedAt: FIXTURE_NOW,
       now: '2026-09-13T02:05:00.000Z',
-      maxPagesPerInvocation: 5,
+      maxExternalCallsPerInvocation: 10,
     });
 
     expect(result2.outcome).toBe('SYNCED');
     expect(calls2).toHaveLength(1);
-    expect(calls2[0]).toEqual({ startHistoryId: 'h0', pageToken: 'page2' }); // resumed, not restarted
-    expect(submitted.map((e) => e.source_event_id)).toEqual(['m1', 'm2']); // invocation-1 work preserved
+    expect(calls2[0]).toEqual({ startHistoryId: 'h0' }); // re-fetched the SAME first page
+    expect(submitted.map((e) => e.source_event_id)).toEqual(['m1', 'm2']); // m1 never resubmitted
 
     const rowAfter2 = await readCursorRow(db, accounts.gmailAccountId);
     expect(JSON.parse(rowAfter2!.cursor_value as string)).toEqual({
       historyId: 'h-final',
-      lastSeenInternalDate: '2026-09-13T01:20:00.000Z', // max across BOTH invocations' work
+      lastSeenInternalDate: '2026-09-13T01:20:00.000Z',
     });
-
-    const progressRowAfter2 = await db
-      .prepare('SELECT * FROM gmail_history_sync_progress WHERE source_account_id = ?')
-      .bind(accounts.gmailAccountId)
-      .first();
-    expect(progressRowAfter2).toBeNull(); // checkpoint cleaned up on successful completion
+    expect(await readProgressRow(db, accounts.gmailAccountId)).toBeNull(); // cleaned up
   });
 
   it('discards a checkpoint that no longer matches the current cursor state instead of resuming from stale assumptions', async () => {
@@ -1199,25 +1264,19 @@ describe('syncGmailAccountHistory -- resumable per-invocation page budget (GPT-P
     });
     // A checkpoint left behind by a superseded traversal -- anchored to a DIFFERENT
     // start_history_id/prev_cursor_json than the current source_cursors state.
-    await db
-      .prepare(
-        `INSERT INTO gmail_history_sync_progress
-           (source_account_id, start_history_id, prev_cursor_json, next_page_token,
-            accumulated_newest_internal_date, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        accounts.gmailAccountId,
-        'stale-history-id',
-        JSON.stringify({
-          historyId: 'stale-history-id',
-          lastSeenInternalDate: '2026-09-01T00:00:00.000Z',
-        }),
-        'stale-page-token',
-        '2026-09-01T00:00:00.000Z',
-        '2026-09-01T00:00:00.000Z',
-      )
-      .run();
+    await seedProgressRow(db, {
+      sourceAccountId: accounts.gmailAccountId,
+      mode: 'MAIN',
+      startHistoryId: 'stale-history-id',
+      prevCursorJson: JSON.stringify({
+        historyId: 'stale-history-id',
+        lastSeenInternalDate: '2026-09-01T00:00:00.000Z',
+      }),
+      nextPageToken: 'stale-page-token',
+      nextChangeIndex: 2,
+      accumulatedNewestInternalDate: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    });
 
     const calls: Array<{ startHistoryId: string; pageToken?: string }> = [];
     const client: GmailHistoryClient = {
@@ -1247,5 +1306,241 @@ describe('syncGmailAccountHistory -- resumable per-invocation page budget (GPT-P
     expect(result.outcome).toBe('SYNCED');
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual({ startHistoryId: 'h0' }); // fresh start, NOT resumed from 'stale-page-token'
+  });
+
+  it('a stale traversal never overwrites a different, newer checkpoint already in place (GPT-PM round-2 MAJOR: checkpoint write fencing)', async () => {
+    const { db, accounts } = await setup({
+      cursorValue: JSON.stringify({ historyId: 'hA', lastSeenInternalDate: FIXTURE_NOW }),
+    });
+    // Simulates a NEWER traversal (anchored to 'hB') that already checkpointed its own progress
+    // -- as if the authoritative cursor had already moved past 'hA' by the time this one runs.
+    await seedProgressRow(db, {
+      sourceAccountId: accounts.gmailAccountId,
+      mode: 'MAIN',
+      startHistoryId: 'hB',
+      prevCursorJson: JSON.stringify({
+        historyId: 'hB',
+        lastSeenInternalDate: '2026-09-13T01:30:00.000Z',
+      }),
+      nextPageToken: 'page-b-2',
+      nextChangeIndex: 3,
+      accumulatedNewestInternalDate: '2026-09-13T01:30:00.000Z',
+      updatedAt: '2026-09-13T01:30:00.000Z',
+    });
+
+    // A traversal anchored to the CURRENT cursor ('hA') that exhausts its budget and tries to
+    // write its OWN checkpoint -- it must not clobber 'hB'.
+    const client: GmailHistoryClient = {
+      async listHistory() {
+        return {
+          historyId: 'IGNORED',
+          records: [
+            {
+              historyRecordId: 'r1',
+              messagesAdded: [
+                { messageId: 'm1', threadId: 't1' },
+                { messageId: 'm2', threadId: 't2' },
+              ],
+              messagesDeleted: [],
+              labelsAdded: [],
+              labelsRemoved: [],
+            },
+          ],
+        };
+      },
+      async getMessageMetadata() {
+        return { internalDate: '2026-09-13T01:10:00.000Z', labelIds: [] };
+      },
+      async listMessagesInWindow() {
+        throw new Error('not used in this test');
+      },
+      async getCurrentHistoryId() {
+        throw new Error('not used in this test');
+      },
+    };
+    const { submitter } = fakeSubmitter();
+
+    const result = await syncGmailAccountHistory(db, client, submitter, {
+      sourceAccountId: accounts.gmailAccountId,
+      sourcePolicyId: accounts.gmailPolicyId,
+      connectedAt: FIXTURE_NOW,
+      now: '2026-09-13T02:00:00.000Z',
+      maxExternalCallsPerInvocation: 3, // stops after m1, before m2
+    });
+
+    expect(result.outcome).toBe('PARTIAL_PROGRESS');
+    const row = await readProgressRow(db, accounts.gmailAccountId);
+    // 'hB's checkpoint survives untouched -- the mismatched 'hA' write was fenced out (0 rows
+    // affected), not silently applied on top of it.
+    expect(row).toMatchObject({
+      start_history_id: 'hB',
+      next_page_token: 'page-b-2',
+      next_change_index: 3,
+    });
+  });
+
+  it("a stale traversal's cleanup delete never removes a different, newer checkpoint's row (GPT-PM round-2 MAJOR: checkpoint delete fencing)", async () => {
+    const { db, accounts } = await setup({
+      cursorValue: JSON.stringify({ historyId: 'hA', lastSeenInternalDate: FIXTURE_NOW }),
+    });
+    await seedProgressRow(db, {
+      sourceAccountId: accounts.gmailAccountId,
+      mode: 'MAIN',
+      startHistoryId: 'hB',
+      prevCursorJson: JSON.stringify({
+        historyId: 'hB',
+        lastSeenInternalDate: '2026-09-13T01:30:00.000Z',
+      }),
+      nextPageToken: 'page-b-2',
+      nextChangeIndex: 3,
+      accumulatedNewestInternalDate: '2026-09-13T01:30:00.000Z',
+      updatedAt: '2026-09-13T01:30:00.000Z',
+    });
+
+    // A traversal anchored to the CURRENT cursor ('hA') that completes normally -- its own
+    // cleanup delete is fenced to ITS OWN anchor ('hA'), so 'hB's row must survive.
+    const client: GmailHistoryClient = {
+      async listHistory() {
+        return { historyId: 'h-final', records: [] };
+      },
+      async getMessageMetadata() {
+        throw new Error('not used in this test');
+      },
+      async listMessagesInWindow() {
+        throw new Error('not used in this test');
+      },
+      async getCurrentHistoryId() {
+        throw new Error('not used in this test');
+      },
+    };
+    const { submitter } = fakeSubmitter();
+
+    const result = await syncGmailAccountHistory(db, client, submitter, {
+      sourceAccountId: accounts.gmailAccountId,
+      sourcePolicyId: accounts.gmailPolicyId,
+      connectedAt: FIXTURE_NOW,
+      now: '2026-09-13T02:00:00.000Z',
+    });
+
+    expect(result.outcome).toBe('SYNCED');
+    const row = await readProgressRow(db, accounts.gmailAccountId);
+    expect(row).toMatchObject({ start_history_id: 'hB' }); // survived the unrelated hA traversal's cleanup
+  });
+
+  it('recovery (404/invalid-cursor path) also checkpoints mid-window-page and resumes without re-deriving getCurrentHistoryId() (GPT-PM round-2 MAJOR: recovery needs the same bounded-progress property)', async () => {
+    const { db, accounts } = await setup({
+      cursorValue: JSON.stringify({
+        historyId: 'h-stale',
+        lastSeenInternalDate: '2026-09-13T01:00:00.000Z',
+      }),
+    });
+    const { submitter, submitted } = fakeSubmitter();
+
+    // --- Invocation 1: the cursor is reported invalid, triggering recovery. ONE window page
+    //     with 2 messages; budget stops mid-page after the first. ---
+    const calls1 = { listMessagesInWindow: 0, getCurrentHistoryId: 0 };
+    const client1: GmailHistoryClient = {
+      async listHistory() {
+        throw new GmailHistoryCursorInvalidError('h-stale');
+      },
+      async getMessageMetadata(opts) {
+        if (opts.messageId === 'm1') {
+          return { internalDate: '2026-09-13T01:10:00.000Z', labelIds: [] };
+        }
+        throw new Error(`invocation 1 must not process ${opts.messageId}`);
+      },
+      async listMessagesInWindow() {
+        calls1.listMessagesInWindow += 1;
+        if (calls1.listMessagesInWindow > 1) throw new Error('must not fetch a second window page');
+        return {
+          messages: [
+            { messageId: 'm1', threadId: 't1' },
+            { messageId: 'm2', threadId: 't2' },
+          ],
+        };
+      },
+      async getCurrentHistoryId() {
+        calls1.getCurrentHistoryId += 1;
+        return 'h-recovery-bootstrap';
+      },
+    };
+
+    const result1 = await syncGmailAccountHistory(db, client1, submitter, {
+      sourceAccountId: accounts.gmailAccountId,
+      sourcePolicyId: accounts.gmailPolicyId,
+      connectedAt: FIXTURE_NOW,
+      now: '2026-09-13T02:00:00.000Z',
+      maxExternalCallsPerInvocation: 3, // 1 (window fetch) + 2 (m1) = 3, m2 would exceed
+    });
+
+    expect(result1.outcome).toBe('PARTIAL_PROGRESS');
+    expect(calls1.getCurrentHistoryId).toBe(1);
+    expect(submitted.map((e) => e.source_event_id)).toEqual(['m1']);
+
+    const progressRow = await readProgressRow(db, accounts.gmailAccountId);
+    expect(progressRow).toMatchObject({
+      mode: 'RECOVERY',
+      window_start: '2026-09-13T01:00:00.000Z',
+      recovery_history_id: 'h-recovery-bootstrap',
+      next_page_token: null,
+      next_change_index: 1,
+    });
+
+    // cursor_value is still the STALE one -- recovery never advances it until it fully completes.
+    const rowAfter1 = await readCursorRow(db, accounts.gmailAccountId);
+    expect(JSON.parse(rowAfter1!.cursor_value as string)).toMatchObject({ historyId: 'h-stale' });
+
+    // --- Invocation 2: must resume WITHOUT calling getCurrentHistoryId() again (it must reuse
+    //     the ALREADY-captured 'h-recovery-bootstrap'), re-fetch the SAME window page, and
+    //     process only m2. ---
+    const calls2 = { listMessagesInWindow: 0, getCurrentHistoryId: 0 };
+    const client2: GmailHistoryClient = {
+      async listHistory() {
+        // cursor_value is still the STALE one (recovery hasn't completed), so a real retry
+        // re-triggers the identical 404 -- syncGmailAccountHistory's own entry point has no
+        // other way to know a recovery is already in progress.
+        throw new GmailHistoryCursorInvalidError('h-stale');
+      },
+      async getMessageMetadata(opts) {
+        if (opts.messageId === 'm2') {
+          return { internalDate: '2026-09-13T01:20:00.000Z', labelIds: [] };
+        }
+        throw new Error(`invocation 2 must not re-process ${opts.messageId}`);
+      },
+      async listMessagesInWindow() {
+        calls2.listMessagesInWindow += 1;
+        if (calls2.listMessagesInWindow > 1) throw new Error('must not fetch a second window page');
+        return {
+          messages: [
+            { messageId: 'm1', threadId: 't1' },
+            { messageId: 'm2', threadId: 't2' },
+          ],
+        };
+      },
+      async getCurrentHistoryId() {
+        calls2.getCurrentHistoryId += 1;
+        throw new Error('invocation 2 must not re-derive getCurrentHistoryId()');
+      },
+    };
+
+    const result2 = await syncGmailAccountHistory(db, client2, submitter, {
+      sourceAccountId: accounts.gmailAccountId,
+      sourcePolicyId: accounts.gmailPolicyId,
+      connectedAt: FIXTURE_NOW,
+      now: '2026-09-13T02:05:00.000Z',
+      maxExternalCallsPerInvocation: 10,
+    });
+
+    expect(result2.outcome).toBe('RECOVERED_FROM_INVALID_CURSOR');
+    expect(calls2.getCurrentHistoryId).toBe(0);
+    expect(calls2.listMessagesInWindow).toBe(1);
+    expect(submitted.map((e) => e.source_event_id)).toEqual(['m1', 'm2']); // m1 never resubmitted
+
+    const rowAfter2 = await readCursorRow(db, accounts.gmailAccountId);
+    expect(JSON.parse(rowAfter2!.cursor_value as string)).toEqual({
+      historyId: 'h-recovery-bootstrap',
+      lastSeenInternalDate: '2026-09-13T01:20:00.000Z',
+    });
+    expect(await readProgressRow(db, accounts.gmailAccountId)).toBeNull();
   });
 });

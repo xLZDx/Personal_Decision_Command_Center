@@ -86,6 +86,21 @@ const NormalizedEventBaseSchema = z
     /** Provider-reported time the event happened. Source provenance (TDD 13). */
     occurred_at: z.string().datetime({ offset: true }),
     /**
+     * Whether `occurred_at` above is genuinely the SOURCE's own reported time
+     * (`'PROVIDER_REPORTED'`, the default -- every existing producer/consumer is unaffected) or a
+     * connector's best estimate because the source exposes no per-signal timestamp at all
+     * (`'ESTIMATED_FROM_RECEIPT'`). G3 checkpoint 5, GPT-PM round-2 MAJOR (2026-09-13, ruling
+     * option (b)): Gmail's `history.list` carries no timestamp for deletions or label changes, and
+     * silently writing processing time into `occurred_at` for those events made a transport
+     * observation indistinguishable from real provider provenance to any downstream ordering/
+     * latency consumer -- a genuine contract violation, not merely an approximation (see ADR-004).
+     * Additive and backward-compatible: an existing producer that never sets this field gets the
+     * default, preserving its exact current semantics.
+     */
+    occurred_at_quality: z
+      .enum(['PROVIDER_REPORTED', 'ESTIMATED_FROM_RECEIPT'])
+      .default('PROVIDER_REPORTED'),
+    /**
      * Central transport bookkeeping. Becomes provenance-bearing the moment it is used to derive
      * business meaning such as urgency -- see TDD 13 and MIN-6.
      */

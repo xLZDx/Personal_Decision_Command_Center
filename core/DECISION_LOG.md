@@ -3,6 +3,93 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 5, GPT-PM round 2 (0 BLOCKER / 3 MAJOR) remediated in one batch,
+30 tests, 6 new mutation-tested guards, shared `NormalizedEvent` contract extended
+(`occurred_at_quality`) per GPT-PM's explicit ruling, ready for round 3 (final, verification-only)
+
+**GPT-PM round 2 verdict: MAJOR.** Full reply archived at
+`D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\tasks\ba3lsvgfz.output`
+(`reviewInputHash 29ef41dd...`, `replyId ec195851-76f1-43d6-aa0c-03d31ae04e9b`). GPT-PM's own
+closing line: "For Round 3, verification can stay narrow: verify these three remediation points and
+direct regressions only. I would not reopen checkpoint 5 for another architectural sweep after
+that" -- consistent with the operator's 3-round hard cap
+(`feedback-review-round-hard-cap-3.md`): round 3 is the FINAL round for this gate regardless of its
+outcome.
+
+1. **MAJOR: a PAGE-granularity budget is not an EXTERNAL-CALL budget.** GPT-PM's evidence: Gmail
+   documents `history.list` as returning up to 100 records per page by default, and every
+   `MESSAGE_ADDED` costs a `messages.get` subrequest on top of `history.list` itself against
+   Cloudflare Workers Free's 50-subrequest/invocation ceiling -- a single page with 50+ created-
+   message changes could exhaust the ceiling BEFORE round 1's page-boundary budget check was ever
+   reached, reproducing the exact liveness failure the mechanism existed to prevent. Also flagged:
+   the budget option was optional with `undefined` = unbounded, leaving any caller that omits it
+   exposed. **Fix**: budget is now enforced at CHANGE granularity (`next_change_index` tracks
+   progress WITHIN a page, flattened across its history records in processing order) -- a resumed
+   invocation re-fetches the SAME page and skips straight to where it left off, never re-submitting
+   already-accepted work. New `RECOMMENDED_MAX_EXTERNAL_CALLS_PER_INVOCATION = 40` exported as the
+   documented safe Free-plan default (GPT-PM's "encode a safe domain default" option); the parameter
+   itself stays optional so tests (and any non-Free-tier caller) can still exercise deliberately
+   unbounded behavior. Regression test: a single page with 2 `MESSAGE_ADDED` changes and a budget
+   that fits only the first proves the checkpoint lands mid-page and invocation 2 re-fetches the
+   SAME page, processes only the remaining change, and never re-submits the first.
+2. **MAJOR: checkpoint write/delete were unconditional, letting a stale traversal clobber a
+   different, newer traversal's checkpoint.** GPT-PM's evidence/scenario: T1 (anchored to cursor A)
+   stalls; T2 (also anchored to A) finishes and advances A→B; T3 (anchored to B) checkpoints its own
+   progress; T1 finally resumes and its unconditional `deleteSyncProgress`/`writeSyncProgress`
+   (keyed only by `source_account_id`) could delete or overwrite T3's valid B-anchored checkpoint.
+   **Fix**: every write/delete is now fenced by a `WHERE` predicate on the row's OWN anchor
+   (`mode` + `start_history_id`/`window_start` + `prev_cursor_json`) -- the same CAS convention
+   `advanceCursor` already uses for `source_cursors`: a stale caller's mutation naturally affects
+   zero rows because the row's anchor no longer matches what that caller expects. Two new tests
+   directly exercise this by seeding a "newer" checkpoint under a different anchor and proving a
+   mismatched write/delete leaves it untouched.
+3. **MAJOR: `occurred_at === received_at` for MESSAGE_DELETED/MESSAGE_UPDATED -- GPT-PM ruled
+   option (b), require the contract change now.** GPT-PM rejected documentation-only treatment:
+   "Deferring the schema fix means checkpoint 5 closes while knowingly emitting data contrary to its
+   shared contract." **Fix, implemented as scoped by GPT-PM's own proposed shape**: added
+   `NormalizedEvent.occurred_at_quality` (`'PROVIDER_REPORTED'` default | `'ESTIMATED_FROM_RECEIPT'`)
+   to `packages/contracts/src/event.ts` -- additive, backward-compatible (every existing
+   producer/consumer unaffected; confirmed via the full 455-test suite passing unchanged
+   immediately after the schema edit, before any other file was touched). Persisted end-to-end per
+   GPT-PM's explicit requirement ("silently defaulting a new field and then dropping it during
+   persistence would not close the finding"): migration 0007 adds
+   `ingest_events.occurred_at_quality`, `packages/domain/src/ingest.ts`'s INSERT now includes it,
+   and `packages/testkit/src/schema.ts`'s `loadG2Schema()` (not just G3's) carries the migration
+   since `ingest_events` is a G2-scope table. `history-sync.ts`'s Gmail
+   MESSAGE_DELETED/LABEL_ADDED/LABEL_REMOVED paths set `'ESTIMATED_FROM_RECEIPT'` explicitly;
+   MESSAGE_CREATED sets `'PROVIDER_REPORTED'` explicitly (real `messages.get` timestamp). ADR-004
+   updated. Not bumped: `SCHEMA_VERSION` (stayed at 4) -- judged unnecessary for a purely additive,
+   defaulted field with zero impact on any existing producer/consumer; recorded as a deliberate
+   decision, not an oversight. New tests: all four normalization-matrix tests now assert
+   `occurred_at_quality`; two new `packages/domain/tests/ingest.test.ts` tests prove the column is
+   actually persisted (not dropped) for both a non-default value and the default.
+
+**Additional finding accepted, GPT-PM's own words**: "I do not accept the proposed 'recovery is
+bounded by the size of one gap' rationale as sufficient liveness protection... The recovery path
+therefore needs the same effective bounded-progress property, although it need not use the
+identical table/schema if a simpler safe mechanism works." Migration 0008 rebuilds
+`gmail_history_sync_progress` (0006's own file left untouched, a new migration per this project's
+append-only convention) into a `mode: 'MAIN' | 'RECOVERY'` table, so `recoverFromInvalidCursor`'s
+bounded gap-recovery enumeration now checkpoints identically to the main traversal -- anchored on
+`window_start` instead of `start_history_id`, additionally persisting `recovery_history_id`
+(captured once before enumeration, reused unchanged across resuming invocations -- a mutation-tested
+guard proves a resumed recovery never re-derives `getCurrentHistoryId()`). New test: a 404 triggers
+recovery, a 2-message window page stops mid-page under budget, and invocation 2 resumes the SAME
+window page, reuses the SAME captured historyId, and completes.
+
+**GPT-PM round 1's BLOCKER and its own remediation were reconfirmed closed, not reopened**: "The
+Round-1 BLOCKER itself is closed on correctness... A crash during that recovery also remains
+correctness-safe."
+
+**Verification**: 27 tests in `history-sync.test.ts` (was 24), 2 new tests in `ingest.test.ts`
+(occurred_at_quality persistence), 460 total repo-wide (was 458 before this batch; 455 before round
+1's own remediation). tsc/eslint/prettier clean. 6 new/changed guards from this batch mutation-tested
+(backup/mutate/confirm exact expected test fails/restore/diff-verify byte-identical restoration):
+the write-fencing predicate, the delete-fencing predicate, the mid-page resume-index guard, and the
+recovery `recoveryHistoryId` reuse guard -- all four killed their respective targeted test cleanly.
+This is round-2 remediation under the operator's 3-round hard cap; round 3 (final, narrow
+verification per GPT-PM's own stated scope) is next.
+
 ## 2026-09-13 — G3 checkpoint 5, GPT-PM round 1 (BLOCKER + 2 MAJOR) remediated in one batch,
 24 tests, 3 new mutation-tested guards, MAJOR #2 escalated to GPT-PM round 2 rather than decided
 unilaterally
