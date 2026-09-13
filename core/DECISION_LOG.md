@@ -49,10 +49,32 @@ All three reverted after confirmation, full suite re-green.
 **Verification.** Full repo suite: 381/381 tests passing (32 files, 12 in the new
 `crypto.test.ts`). `npm run typecheck`/`npm run lint` both clean. `prettier --write` applied.
 
-**How to apply.** Checkpoint 3 is closed pending GPT-PM's own gate-review round on this diff.
-Remaining G3 checkpoints: OAuth lifecycle (§2.5 — the first actual consumer of this crypto module),
-cursor/history-list sync + normalization (§2.2/§2.3), quota limiter wiring (§2.9), drill-down
-endpoints (§2.8), and the `services/gmail-connector` Worker itself (§2.1).
+**GPT-PM gate review, round 1: genuine `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR**,
+correlated to the exact checkpoint commit `a364366` (full SHA
+`a364366a8023dc4f5bef3d7702fbab53ba587bef`, parent `21ee8db31db6c4a39b5b1c1b514599cb45870a99`,
+both matched byte-for-byte against `git rev-parse HEAD`/`HEAD~1` before logging),
+`reviewInputHash 90108e762dc4f96e8e6d21e13fd8a03004ef06535103773e7e470d98cbc52311`, `replyId
+542408a2-6be4-4ca6-84a2-56da7654d04a`. Confirmed the diff contained exactly the four expected files
+and one commit, the KEK design's soundness (non-extractable AES-GCM key, no caller-controlled IV
+path, AAD binding), and explicitly endorsed the three mutation-verified internal-review fixes as
+"real rather than decorative." Noted the future OAuth caller still owns choosing the matching
+versioned key and performing rotation atomically, but confirmed that's correctly out of this
+primitive's own scope, not a gap in it. Not marked `--final` (reserved for the gate's closing
+review).
+
+**Operational note**: this round required two operator-authorized `pm_bridge_restart force:true`
+calls (the shared orchestrator daemon repeatedly went stale seconds after restart because another
+concurrent session was actively editing `pm-bridge/src` at the same time — confirmed via
+`pm_bridge_mode_status`'s reported build-hash churn across consecutive checks). The first live
+review attempt after the operator's first restart returned this session's own already-logged
+checkpoint-2 reply (same `reviewRequestId f7652a3a...`) pasted back by the operator, correctly
+identified as stale before being mistaken for a new checkpoint-3 verdict.
+
+**How to apply.** Checkpoint 3 is closed. Continue to G3 checkpoint 4 per the standing
+autonomous-through-G6 authorization. Remaining G3 checkpoints: OAuth lifecycle (§2.5 — the first
+actual consumer of this crypto module), cursor/history-list sync + normalization (§2.2/§2.3), quota
+limiter wiring (§2.9), drill-down endpoints (§2.8), and the `services/gmail-connector` Worker itself
+(§2.1).
 
 ## 2026-09-13 — G3 implementation checkpoint 2: `ClaimedEvent.leaseToken` extension + lease-fenced enrichment persistence
 
