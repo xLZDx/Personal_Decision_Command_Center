@@ -355,6 +355,103 @@ The `DisconnectGmailAccountOptions.leaseDurationMs`/`leaseHeartbeatIntervalMs` f
 as a test escape hatch (documented as such in their own doc comments) — a future reviewer or
 caller should not treat them as production tuning knobs without a reason to revisit the defaults.
 
+## 2026-09-13 — G3 checkpoint 4 round 6: heartbeat renewal also rejected; the actual fix drops
+elapsed-time reasoning from reconnect eligibility entirely
+
+**GPT-PM round 6: `VERDICT: MAJOR`, 0 BLOCKER / 1 MAJOR / 0 MINOR**, reviewing commit `36465b3`
+(round 5's heartbeat-renewal fix). Found round 5 unsafe for two compounding reasons, both verified
+against the actual code before accepting: (1) `startLeaseHeartbeat`'s renewal write had only a
+`try/finally`, not a `try/catch` — if `db.prepare(...).run()` itself threw (a D1 transport error),
+the async tick's own promise rejected with NOTHING attached to observe it (an unhandled rejection),
+`heartbeat.failure` was never rejected (only `meta.changes !== 1` triggered that), and the
+`renewing` guard would let the interval keep silently failing forever without ever raising the
+alarm — meanwhile the row's LAST successfully-written `disconnect_lease_expires_at` would eventually
+lapse, and `connectGmailAccount`'s expiry-based guard would let a reconnect through regardless. A
+slow/hung single renewal write had the same effect: `renewing` stays `true` until that write
+settles, silently pausing ALL further renewal attempts. (2) Even a CORRECTLY detected lost fence
+(the `meta.changes !== 1` path working exactly as designed) only stops THIS function from awaiting
+`revokeToken` via `Promise.race` — it does not cancel the actual outbound HTTP request, so Google's
+revoke could still complete afterward, reinvalidating whatever the "winning" reconnect just issued.
+This is the SAME structural flaw as round 4, reachable through a different trigger (fence loss
+instead of a timer), not a new, unrelated finding.
+
+**GPT-PM's required change, read carefully rather than half-applied**: *"expiry alone cannot
+authorize reconnect while an external project-wide revoke may still exist... rather than
+automatically treating elapsed lease time as permission to reconnect."* This is a stronger claim
+than "the timing needs tuning" — it says NO client-side elapsed-time signal (a fixed timeout, a
+renewal heartbeat, however carefully built) can ever be a valid basis for letting reconnect proceed,
+because none of them can prove the external side effect has actually stopped. Accepted directly,
+without a rebuttal round: verified true given this module's `GoogleOAuthClient` interface has no
+cancellation contract at all, so "the client gave up watching" and "the operation genuinely
+concluded" are permanently different facts under the current design, and no amount of better timer
+engineering closes that gap — only removing the RELIANCE on elapsed time does.
+
+**The actual fix — a materially simpler design than either round 4 or round 5, not a more elaborate
+one**: `connectGmailAccount`'s guard changed from `disconnect_lease_token IS NULL OR
+disconnect_lease_expires_at <= ?` to `disconnect_lease_token IS NULL` alone. Reconnect is now
+refused for as long as ANY lease value is present on the row, however old its stored expiry —
+elapsed time is no longer part of the decision at all. The lease is cleared only by an ACTUAL
+settlement: `disconnectGmailAccount`'s own success (the fenced `DELETE`, which by construction only
+runs after `revokeToken` has genuinely resolved) or its own `catch` block on a genuine thrown error
+(unchanged from round 3 — see the residual note below). `DISCONNECT_LEASE_DURATION_MS` and
+`disconnect_lease_expires_at` still exist, but now govern ONLY disconnect-vs-disconnect contention:
+if a disconnect attempt crashes outright (the process dies, never reaching its own `catch`), a
+LATER `disconnectGmailAccount` retry for the SAME account may take over an expired lease and redo
+the whole sequence against the row's CURRENT stored ciphertext — safe because `stopWatch`/
+`revokeToken` are already documented as expected to be idempotent when repeated, and because
+reconnect can never have touched the row in the meantime (blocked unconditionally by the lease's
+mere presence). Recovering an abandoned disconnect is therefore always "retry
+`disconnectGmailAccount` for that account" — which actually settles the external side effect —
+never "wait for `connectGmailAccount` to decide enough time has passed," which only ever guessed.
+`startLeaseHeartbeat`, `LeaseHeartbeat`, `DEFAULT_LEASE_HEARTBEAT_INTERVAL_MS`, and
+`leaseHeartbeatIntervalMs` are all removed entirely (not merely superseded) — the design no longer
+has anywhere for a heartbeat to matter.
+
+**A consequence of this simplification, checked rather than assumed**: round 1's original CAS-fenced
+`DELETE`/`SUPERSEDED_BY_RECONNECT` outcome appears to become structurally unreachable through this
+module's own guarded API under the new design — reconnect can no longer land at all while ANY
+lease is present, so the row's ciphertext cannot change between a disconnect's lease acquisition
+and its own final `DELETE`, and two concurrent disconnects are already independently serialized by
+the SAME lease-acquisition guard. Traced through by hand rather than left as an assumption; not
+acted on by removing the outcome or its fencing — kept explicitly as defense-in-depth against a
+reasoning error in this analysis or a future design change, and the doc comment says so plainly
+rather than presenting it as covering a still-live race.
+
+**Residual, narrower ambiguity, tracked honestly rather than silently folded in**: the `catch`
+block still releases the lease on ANY thrown error from `stopWatch`/decrypt/`revokeToken`/the batch,
+including a network-level error where the request might have reached Google before failing locally
+(e.g. connection reset mid-response) — the same class of ambiguity just closed for the
+slow-but-alive case, now only for the thrown-but-ambiguous one. Not fixed this round: GPT-PM has
+not flagged this specific case across six rounds, and closing it needs a way to distinguish
+provably-local failures (safe to release immediately) from ambiguously-mid-flight ones, which this
+module's current `GoogleOAuthClient` interface has no way to express. Documented in the function's
+own doc comment as a named, open item rather than left implicit.
+
+**Tests, mutation-verified.** Replaced the round-5 heartbeat test (its premise no longer exists)
+with two tests that need no real timers at all (23 tests now run in well under a second, versus
+round 5's real-time waits): (1) a decisive regression — while disconnect is genuinely mid-`revoke`,
+the row's stored `disconnect_lease_expires_at` is forced into the past via direct SQL (exactly what
+a round-4/5-style design would have read as "safe"), and a reconnect attempted at that moment is
+still asserted `DISCONNECT_IN_PROGRESS`; (2) a recovery test — an abandoned lease (direct SQL,
+simulating a genuine crash) keeps refusing reconnect indefinitely, and only a retried
+`disconnectGmailAccount` call clears it, after which reconnect succeeds. The existing "lease bound"
+test (which previously asserted a reconnect succeeds once `DISCONNECT_LEASE_DURATION_MS` elapses)
+is replaced by test (2) above, since that old assertion is now the exact behavior this round
+removes. Mutation-verified by temporarily restoring the old expiry-based `OR` clause in
+`connectGmailAccount`'s guard: three tests failed as expected (the two new ones, plus the existing
+round-2/3 concurrent-reconnect test), confirming all three genuinely depend on the NULL-only guard.
+Reverted after confirmation.
+
+**Verification.** Full repo suite: 404/404 tests passing (33 files, 23 in `oauth.test.ts`, now
+running in ~80ms for the file versus round 5's ~650ms real-time-bound version).
+`npm run typecheck`/`npm run lint` both clean. `prettier --write` applied (no changes needed).
+
+**How to apply.** This fix is committed. Sent to GPT-PM for round 7 verification, scoped to this
+one finding and any direct regression, per §17. Checkpoint 4 remains open until `VERDICT: APPROVE`.
+If round 7 raises the residual thrown-but-ambiguous-error case flagged above as its own finding,
+that is a legitimate continuation of the SAME underlying invariant (never release exclusivity while
+Google's side effect might still be genuinely in flight), not a new, unrelated scope expansion.
+
 ## 2026-09-13 — G3 implementation checkpoint 3: KEK crypto (`packages/domain/src/gmail/crypto.ts`)
 
 **Decision.** Third implementation checkpoint of gate G3, on branch `gate/g3-implementation`: the

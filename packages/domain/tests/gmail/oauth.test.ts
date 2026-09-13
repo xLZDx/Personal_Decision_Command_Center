@@ -1,4 +1,4 @@
-/* global crypto, TextEncoder, btoa, setTimeout */
+/* global crypto, TextEncoder, btoa */
 import { describe, expect, it } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
 import { createTestD1, loadG3Schema, seedBaselineAccounts, FIXTURE_NOW } from '@pdos/testkit';
@@ -616,9 +616,11 @@ describe('disconnectGmailAccount', () => {
   );
 
   it(
-    'lease bound: an abandoned lease (the shape a crashed disconnect that never reached its own ' +
-      'release-on-failure cleanup would leave behind) no longer blocks a reconnect once ' +
-      "DISCONNECT_LEASE_DURATION_MS has elapsed, proving the guard isn't permanent",
+    'GPT-PM round 5/6 MAJOR (superseding rounds 4/5): a reconnect is refused even when the ' +
+      "lease's OWN stored expiry has already passed, as long as disconnect is still genuinely " +
+      'running -- proving reconnect eligibility depends on the lease being CLEARED (an actual ' +
+      'settlement), never on elapsed client-side time, which is exactly the property rounds 4 and ' +
+      '5 each got wrong in a different way',
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -630,18 +632,86 @@ describe('disconnectGmailAccount', () => {
         now: FIXTURE_NOW,
       });
 
+      let reconnectResult: ConnectGmailAccountResult | null = null;
+      const client = fakeGoogleClient({
+        revokeToken: async () => {
+          // While disconnect is still genuinely mid-flight (inside its own revokeToken call),
+          // force the row's OWN stored expiry into the past -- exactly what a round 4/5-style
+          // design would have read as "safe to let reconnect through." A correct design must
+          // still refuse here, since this disconnect attempt has not settled.
+          await db
+            .prepare(
+              'UPDATE gmail_connections SET disconnect_lease_expires_at = ? WHERE source_account_id = ?',
+            )
+            .bind(
+              new Date(Date.parse(FIXTURE_NOW) - 1_000_000).toISOString(),
+              accounts.gmailAccountId,
+            )
+            .run();
+
+          reconnectResult = await connectGmailAccount(
+            db,
+            kek,
+            fakeGoogleClient({
+              exchangeCode: async () => ({
+                refreshToken: '1//concurrent-reconnect-token',
+                gmailEmail: 'owner@example.com',
+              }),
+            }),
+            {
+              sourceAccountId: accounts.gmailAccountId,
+              code: 'auth-code-2',
+              codeVerifier: 'verifier-2',
+              collectionMode: 'PUSH',
+              kekVersion: KEK_VERSION,
+              now: FIXTURE_NOW,
+            },
+          );
+        },
+      });
+
+      const result = await disconnectGmailAccount(db, kek, client, {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+      });
+
+      expect(reconnectResult).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+      expect(result).toEqual({ outcome: 'DISCONNECTED' });
+    },
+  );
+
+  it(
+    'recovery is via retrying disconnectGmailAccount, never via connectGmailAccount timing out a ' +
+      'stale lease: an abandoned lease (the shape a disconnect that crashed outright, never ' +
+      'reaching its own catch block, would leave behind) keeps refusing reconnect indefinitely -- ' +
+      'only a fresh disconnectGmailAccount call for the same account can take it over ' +
+      '(DISCONNECT_LEASE_DURATION_MS still governs THAT contention) and actually clear it by ' +
+      'completing',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      // Simulate an abandoned lease directly at the schema level, with a stored expiry far in the
+      // past -- the exact shape a crashed disconnectGmailAccount call would leave behind.
       await db
         .prepare(
           'UPDATE gmail_connections SET disconnect_lease_token = ?, disconnect_lease_expires_at = ? WHERE source_account_id = ?',
         )
         .bind(
           'abandoned-lease',
-          new Date(Date.parse(FIXTURE_NOW) + 60_000).toISOString(),
+          new Date(Date.parse(FIXTURE_NOW) - 1_000_000).toISOString(),
           accounts.gmailAccountId,
         )
         .run();
 
-      const duringLease = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+      const reconnectAttempt = await connectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         code: 'auth-code-2',
         codeVerifier: 'verifier-2',
@@ -649,86 +719,24 @@ describe('disconnectGmailAccount', () => {
         kekVersion: KEK_VERSION,
         now: FIXTURE_NOW,
       });
-      expect(duringLease).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+      expect(reconnectAttempt).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
 
-      const afterExpiry = new Date(Date.parse(FIXTURE_NOW) + 60_001).toISOString();
-      const afterLease = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+      const recovered = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+      });
+      expect(recovered).toEqual({ outcome: 'DISCONNECTED' });
+
+      const afterRecovery = await connectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         code: 'auth-code-3',
         codeVerifier: 'verifier-3',
         collectionMode: 'PUSH',
         kekVersion: KEK_VERSION,
-        now: afterExpiry,
-      });
-      expect(afterLease).toEqual({ outcome: 'CONNECTED' });
-    },
-  );
-
-  it(
-    'GPT-PM round-5 MAJOR (superseding round-4): a revokeToken call still genuinely running past ' +
-      "the lease's ORIGINAL nominal duration keeps the lease alive via renewal -- a reconnect " +
-      'attempted after that original duration has elapsed is still refused, and only succeeds once ' +
-      'the slow-but-real disconnect has actually finished, never merely because a client-side clock ' +
-      'ran out',
-    async () => {
-      const { db, accounts, kek } = await setup();
-      await connectGmailAccount(db, kek, fakeGoogleClient(), {
-        sourceAccountId: accounts.gmailAccountId,
-        code: 'auth-code',
-        codeVerifier: 'verifier',
-        collectionMode: 'PUSH',
-        kekVersion: KEK_VERSION,
         now: FIXTURE_NOW,
       });
-
-      // A real (not mocked-away) 300ms delay before revokeToken resolves -- deliberately longer
-      // than the artificially small leaseDurationMs below, so the ORIGINAL nominal lease would have
-      // "expired" long before this call actually finishes if renewal were not keeping it alive.
-      const slowClient = fakeGoogleClient({
-        revokeToken: async () => {
-          await new Promise<void>((resolve) => setTimeout(resolve, 300));
-        },
-      });
-
-      const disconnectPromise = disconnectGmailAccount(db, kek, slowClient, {
-        sourceAccountId: accounts.gmailAccountId,
-        now: FIXTURE_NOW,
-        leaseDurationMs: 100,
-        leaseHeartbeatIntervalMs: 15,
-      });
-
-      // Real 180ms real-world wait: past the original 100ms nominal lease duration, but well before
-      // the 300ms revoke actually resolves -- exactly the window round 4's timeout-based release
-      // would have (unsafely) opened up for a reconnect.
-      await new Promise((resolve) => setTimeout(resolve, 180));
-
-      const duringSlowRevoke = await connectGmailAccount(db, kek, fakeGoogleClient(), {
-        sourceAccountId: accounts.gmailAccountId,
-        code: 'auth-code-2',
-        codeVerifier: 'verifier-2',
-        collectionMode: 'PUSH',
-        kekVersion: KEK_VERSION,
-        // Domain `now` advanced by the same real 180ms, matching what a genuine concurrent request
-        // arriving at that real moment would supply.
-        now: new Date(Date.parse(FIXTURE_NOW) + 180).toISOString(),
-      });
-      expect(duringSlowRevoke).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
-
-      const disconnectResult = await disconnectPromise;
-      expect(disconnectResult).toEqual({ outcome: 'DISCONNECTED' });
-
-      // Only now -- after the slow revoke has genuinely settled -- does a reconnect succeed.
-      const afterDisconnect = await connectGmailAccount(db, kek, fakeGoogleClient(), {
-        sourceAccountId: accounts.gmailAccountId,
-        code: 'auth-code-3',
-        codeVerifier: 'verifier-3',
-        collectionMode: 'PUSH',
-        kekVersion: KEK_VERSION,
-        now: new Date(Date.parse(FIXTURE_NOW) + 400).toISOString(),
-      });
-      expect(afterDisconnect).toEqual({ outcome: 'CONNECTED' });
+      expect(afterRecovery).toEqual({ outcome: 'CONNECTED' });
     },
-    2000,
   );
 
   it(
