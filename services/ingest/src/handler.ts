@@ -28,6 +28,17 @@ const DEFAULT_HMAC_TIMESTAMP_WINDOW_MS = 5 * 60_000;
 
 const INGEST_PATH_RE = /^\/ingest\/(gmail|telegram)$/;
 
+/**
+ * Security fix (G2 review, MINOR): `x-key-version` previously flowed unvalidated straight into
+ * `resolveSecret`'s binding-name lookup (`${connectorId}_${keyVersion}_HMAC_SECRET`). It was
+ * already bounded from ever reaching a wrong SECRET (an attacker-controlled value just produces a
+ * binding name that doesn't exist, so `resolveSecret` returns undefined and the request is
+ * rejected as UNKNOWN_KEY) -- but nothing stopped an oversized or control-character-laden header
+ * value from being echoed into a binding-name lookup and any log line built from it. A narrow
+ * allowlist rejects a malformed value at the boundary, before it is used for anything.
+ */
+const KEY_VERSION_RE = /^[A-Za-z0-9._-]{1,32}$/;
+
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -65,6 +76,9 @@ export async function handleIngestRequest(
   if (!signatureHex || !timestamp || !nonce || !keyVersion) {
     return jsonResponse(401, { error: 'MISSING_AUTH_HEADERS' });
   }
+  if (!KEY_VERSION_RE.test(keyVersion)) {
+    return jsonResponse(401, { error: 'INVALID_KEY_VERSION' });
+  }
 
   const bodyText = await request.text();
   const bodyHash = await sha256Hex(bodyText);
@@ -76,7 +90,7 @@ export async function handleIngestRequest(
     bodyHash,
   });
 
-  const secret = resolveSecret(env, connectorId, keyVersion);
+  const secret = resolveSecret(env, { connectorId, keyVersion });
   if (!secret) return jsonResponse(401, { error: 'UNKNOWN_KEY' });
 
   const authResult = await authenticateIngestRequest(env.DB, {

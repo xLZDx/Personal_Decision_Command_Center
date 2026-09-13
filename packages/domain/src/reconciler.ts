@@ -52,6 +52,25 @@ export async function reconcileDispatch(
   const dispatched: string[] = [];
   let budgetExhausted = false;
 
+  // Both mutations below are fenced on the exact set of pre-dispatch-eligible states, never the
+  // weaker `state <> 'CLOSED'` -- database review BLOCKER (G2): that weaker guard let two
+  // overlapping `reconcileDispatch` invocations (a slow previous cron tick still running, a manual
+  // re-trigger, a future multi-instance deployment) both match an already-DISPATCHED row -- one
+  // double-dispatching the same event to the real Queue, the other clobbering a genuinely
+  // DISPATCHED row back to BUDGET_DEFERRED. Restricting the WHERE clause to the eligible states
+  // makes each UPDATE an atomic compare-and-swap: only the invocation that observes the row still
+  // eligible at the moment ITS statement executes can ever change it (`result.meta.changes`
+  // distinguishes "I won" from "someone else already moved this row").
+  //
+  // Accepted residual risk, not closed by this fix: a losing invocation may still have already
+  // called `reserveBudget` for the row before losing the CAS race, wasting that day's budget slot.
+  // This does not reproduce the BLOCKER's failure scenario (no duplicate Queue send, no state
+  // corruption) and is bounded by `batchSize` per genuinely overlapping invocation -- an efficiency
+  // loss against the 2500 hard ceiling, not a correctness violation. Closing it fully would require
+  // claiming the row before reserving budget, which needs an intermediate schema state this gate's
+  // migration does not have; deferred rather than redesigning the schema under this fix.
+  const ELIGIBLE_STATES = "('PENDING', 'RETRY_PENDING', 'BUDGET_DEFERRED')";
+
   for (const { event_id: eventId } of candidates.results) {
     if (!budgetExhausted) {
       const reservation = await reserveBudget(db, { day: opts.day, cap: opts.cap });
@@ -61,7 +80,8 @@ export async function reconcileDispatch(
     if (budgetExhausted) {
       await db
         .prepare(
-          "UPDATE processing_outbox SET state = 'BUDGET_DEFERRED', updated_at = ? WHERE event_id = ? AND state <> 'CLOSED'",
+          `UPDATE processing_outbox SET state = 'BUDGET_DEFERRED', updated_at = ?
+           WHERE event_id = ? AND state IN ${ELIGIBLE_STATES}`,
         )
         .bind(opts.now, eventId)
         .run();
@@ -72,7 +92,7 @@ export async function reconcileDispatch(
       .prepare(
         `UPDATE processing_outbox SET state = 'DISPATCHED', dispatch_count = dispatch_count + 1,
            dispatched_at = ?, updated_at = ?
-         WHERE event_id = ? AND state <> 'CLOSED'`,
+         WHERE event_id = ? AND state IN ${ELIGIBLE_STATES}`,
       )
       .bind(opts.now, opts.now, eventId)
       .run();

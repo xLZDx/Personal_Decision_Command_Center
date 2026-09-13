@@ -159,9 +159,10 @@ CREATE INDEX idx_ingest_events_source_account ON ingest_events(source_account_id
 CREATE INDEX idx_ingest_events_processing_lease
   ON ingest_events(processing_lease_expires_at, event_id, processing_attempt_count)
   WHERE state = 'PROCESSING';
-CREATE INDEX idx_ingest_events_unprocessed
-  ON ingest_events(received_at, event_id)
-  WHERE state IN ('ACCEPTED', 'PROCESSING', 'RETRYABLE_FAILED');
+-- (database review, G2, Finding 4: an earlier idx_ingest_events_unprocessed index on
+-- (received_at, event_id) was dropped here -- no query in this codebase reads received_at in a
+-- WHERE/ORDER BY predicate, so it was pure write-amplification with no read benefit. Re-add it
+-- alongside whatever query actually needs it, with its own EXPLAIN QUERY PLAN test.)
 
 -- routing_hints (ProvenanceValue[], ADR-004) live in child tables so each hint's own ancestry is
 -- independently queryable rather than flattened/lost into a JSON blob on the parent row.
@@ -171,7 +172,10 @@ CREATE INDEX idx_ingest_events_unprocessed
 CREATE TABLE ingest_event_routing_hints (
   event_id TEXT NOT NULL REFERENCES ingest_events(event_id),
   hint_index INTEGER NOT NULL,
-  value TEXT NOT NULL,
+  -- Security fix (G2 review, MAJOR): mirrors packages/contracts' own MAX_ROUTING_HINT_VALUE_LENGTH
+  -- (512) at the storage boundary, so a future write path that bypasses the contract schema still
+  -- cannot smuggle unbounded content into a field this project treats as metadata, not content.
+  value TEXT NOT NULL CHECK (length(value) <= 512),
   derivation_method TEXT NOT NULL
     CHECK (derivation_method IN ('RULE', 'STATIC_CONFIG', 'PROVIDER_METADATA', 'AI_EXTRACTION')),
   ai_policy TEXT NOT NULL CHECK (ai_policy IN ('ALLOW', 'DENY')),

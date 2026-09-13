@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ProvenanceValueSchema, SourceSchema } from './provenance.js';
+import { provenanceValueSchema, SourceSchema } from './provenance.js';
 
 /**
  * The connector-neutral normalized event envelope (TDD 13).
@@ -23,6 +23,19 @@ export const SCHEMA_VERSION = 4;
  * (Gmail/Telegram), not a measured production ceiling -- revisit if a real connector needs more.
  */
 export const MAX_ROUTING_HINTS = 16;
+
+/**
+ * Security fix (G2 review, MAJOR): `routing_hints[].value` previously inherited the generic
+ * provenance value schema's unbounded `z.string().min(1)`, with no cost or content ceiling of its
+ * own -- a routing hint is metadata (a category, a tag, a classification), not content (INV-12/
+ * INV-14), and an unbounded length let raw connector body text be smuggled in disguised as one,
+ * indistinguishable from a legitimate hint by any downstream reader of this type. 512 is a
+ * deliberately generous bound for a routing/classification value, far short of a realistic message
+ * body, matched by a DB-level CHECK on ingest_event_routing_hints.value (migration 0001).
+ */
+export const MAX_ROUTING_HINT_VALUE_LENGTH = 512;
+const RoutingHintValueSchema = z.string().min(1).max(MAX_ROUTING_HINT_VALUE_LENGTH);
+const RoutingHintSchema = provenanceValueSchema(RoutingHintValueSchema);
 
 export const EVENT_TYPES = ['MESSAGE_CREATED', 'MESSAGE_UPDATED', 'MESSAGE_DELETED'] as const;
 export const EventTypeSchema = z.enum(EVENT_TYPES);
@@ -78,7 +91,7 @@ const NormalizedEventBaseSchema = z
      */
     received_at: z.string().datetime({ offset: true }),
     content_locator: ContentLocatorSchema,
-    routing_hints: z.array(ProvenanceValueSchema).max(MAX_ROUTING_HINTS),
+    routing_hints: z.array(RoutingHintSchema).max(MAX_ROUTING_HINTS),
     source_policy_id: z.string().min(1),
     trace_id: z.string().min(1),
     schema_version: z.literal(SCHEMA_VERSION),

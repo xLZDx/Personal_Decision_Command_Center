@@ -119,6 +119,19 @@ describe('handleIngestRequest', () => {
     expect(response.status).toBe(401);
   });
 
+  it('401s for a malformed key version, before it ever reaches secret resolution (security fix, G2 review)', async () => {
+    const { env } = await setupEnv();
+    const request = await signedRequest({
+      path: '/ingest/gmail',
+      bodyObject: gmailEvent(),
+      keyVersion: 'v1/../../etc',
+    });
+    const response = await handleIngestRequest(request, env, NOW);
+    expect(response.status).toBe(401);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe('INVALID_KEY_VERSION');
+  });
+
   it('401s for an unknown key version (no matching secret binding)', async () => {
     const { env } = await setupEnv();
     const request = await signedRequest({

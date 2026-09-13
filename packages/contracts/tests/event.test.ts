@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_ROUTING_HINT_VALUE_LENGTH,
   MAX_ROUTING_HINTS,
   NormalizedEventSchema,
   ProvenanceValueSchema,
@@ -116,6 +117,22 @@ describe('NormalizedEvent envelope', () => {
     it(`rejects ${MAX_ROUTING_HINTS + 1} routing hints`, () => {
       const hints = Array.from({ length: MAX_ROUTING_HINTS + 1 }, () => denyHint);
       expect(NormalizedEventSchema.safeParse(gmailEvent({ routing_hints: hints })).success).toBe(
+        false,
+      );
+    });
+  });
+
+  describe('routing_hints value length bound (security fix, G2 review MAJOR)', () => {
+    it(`accepts a value of exactly ${MAX_ROUTING_HINT_VALUE_LENGTH} characters`, () => {
+      const hint = { ...denyHint, value: 'a'.repeat(MAX_ROUTING_HINT_VALUE_LENGTH) };
+      expect(NormalizedEventSchema.safeParse(gmailEvent({ routing_hints: [hint] })).success).toBe(
+        true,
+      );
+    });
+
+    it(`rejects a value of ${MAX_ROUTING_HINT_VALUE_LENGTH + 1} characters -- a routing hint is metadata, not a place to smuggle raw content (INV-12/INV-14)`, () => {
+      const hint = { ...denyHint, value: 'a'.repeat(MAX_ROUTING_HINT_VALUE_LENGTH + 1) };
+      expect(NormalizedEventSchema.safeParse(gmailEvent({ routing_hints: [hint] })).success).toBe(
         false,
       );
     });

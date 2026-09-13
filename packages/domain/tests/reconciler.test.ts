@@ -103,6 +103,66 @@ describe('reconcileDispatch', () => {
       .first<{ n: number }>();
     expect(deferredCount?.n).toBe(2);
   });
+
+  it('BLOCKER regression (database review, G2): two overlapping invocations racing the same candidate produce exactly one DISPATCHED row, never a double dispatch', async () => {
+    const db = createTestD1(loadG2Schema());
+    const accounts = await seedBaselineAccounts(db);
+    await seedEvent(db, accounts, { eventId: 'ev-race', state: 'ACCEPTED' });
+    await seedOutbox(db, 'ev-race', {
+      state: 'PENDING',
+      nextAttemptAt: '2026-09-13T00:00:00.000Z',
+    });
+
+    const run = () =>
+      reconcileDispatch(db, {
+        now: '2026-09-13T00:05:00.000Z',
+        day: '2026-09-13',
+        cap: 2500,
+        maxAttempts: 5,
+        batchSize: 25,
+      });
+
+    // Two "overlapping" invocations against the SAME candidate -- before the fix, both matched the
+    // old `state <> 'CLOSED'` guard regardless of who had already dispatched it, so both would mark
+    // the row DISPATCHED (incrementing dispatch_count twice) and both would report it in their own
+    // `dispatched` array, which the caller (services/ingest's scheduled handler) would then send to
+    // the real Queue TWICE for the same event.
+    const [a, b] = await Promise.all([run(), run()]);
+    const totalDispatched = [...a.dispatched, ...b.dispatched];
+    expect(totalDispatched).toEqual(['ev-race']);
+
+    const outbox = await db
+      .prepare('SELECT state, dispatch_count FROM processing_outbox WHERE event_id = ?')
+      .bind('ev-race')
+      .first<{ state: string; dispatch_count: number }>();
+    expect(outbox).toEqual({ state: 'DISPATCHED', dispatch_count: 1 });
+  });
+
+  it('BLOCKER regression: a losing invocation can never clobber an already-DISPATCHED row back to BUDGET_DEFERRED', async () => {
+    const db = createTestD1(loadG2Schema());
+    const accounts = await seedBaselineAccounts(db);
+    await seedEvent(db, accounts, { eventId: 'ev-dispatched', state: 'ACCEPTED' });
+    await seedOutbox(db, 'ev-dispatched', {
+      state: 'DISPATCHED',
+      dispatchedAt: '2026-09-13T00:00:00.000Z',
+    });
+
+    // A second invocation somehow re-selects this event (e.g. it was still eligible under an
+    // earlier, looser candidate query) and, having exhausted its own budget, attempts to defer it.
+    // The fenced UPDATE must be a no-op against a row that is no longer in a pre-dispatch state.
+    await db
+      .prepare(
+        "UPDATE processing_outbox SET state = 'BUDGET_DEFERRED', updated_at = ? WHERE event_id = ? AND state IN ('PENDING', 'RETRY_PENDING', 'BUDGET_DEFERRED')",
+      )
+      .bind('2026-09-13T00:05:00.000Z', 'ev-dispatched')
+      .run();
+
+    const outbox = await db
+      .prepare('SELECT state FROM processing_outbox WHERE event_id = ?')
+      .bind('ev-dispatched')
+      .first<{ state: string }>();
+    expect(outbox?.state).toBe('DISPATCHED');
+  });
 });
 
 async function reserveUpTo(db: D1Database, n: number) {

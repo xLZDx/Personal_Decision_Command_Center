@@ -1,9 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { createTestD1, loadG2Schema, seedBaselineAccounts, seedEvent } from '@pdos/testkit';
 
-import { moveToDlq, moveToRetryableFailed, shouldMoveToDlq } from '../src/transitions.js';
+import {
+  moveToDlq,
+  moveToRetryableFailed,
+  shouldMoveToDlq,
+  type LeaseFence,
+} from '../src/transitions.js';
 
 const MAX_ATTEMPTS = 5;
+
+describe('LeaseFence (type-level, type-design review G2)', () => {
+  it('rejects both misuse directions the discriminated union exists to prevent', () => {
+    // A LIVE fence must never carry requireExpiredAsOf -- that field only means something once
+    // the SWEEP variant's own re-check semantics apply.
+    // @ts-expect-error -- LIVE does not accept requireExpiredAsOf
+    const liveWithExtra: LeaseFence = { kind: 'LIVE', token: 't', requireExpiredAsOf: 'x' };
+    // A SWEEP fence must always carry requireExpiredAsOf -- omitting it silently degrades to a
+    // token-only fence, which is exactly the ABA hole this type exists to make unrepresentable.
+    // @ts-expect-error -- SWEEP requires requireExpiredAsOf
+    const sweepMissing: LeaseFence = { kind: 'SWEEP', token: 't' };
+    expect(liveWithExtra.kind).toBe('LIVE');
+    expect(sweepMissing.kind).toBe('SWEEP');
+  });
+});
 
 describe('shouldMoveToDlq', () => {
   it('is true for PERMANENT_FAILURE regardless of attempt count', () => {
@@ -55,7 +75,7 @@ describe('moveToDlq', () => {
     const db = await setupProcessingEvent('ev-1', 5);
     const ok = await moveToDlq(db, {
       eventId: 'ev-1',
-      fence: { token: 'token-A' },
+      fence: { kind: 'LIVE', token: 'token-A' },
       now: '2026-09-13T00:03:00.000Z',
       errorClass: 'TimeoutError',
       errorCode: 'E_TIMEOUT',
@@ -94,7 +114,7 @@ describe('moveToDlq', () => {
     const db = await setupProcessingEvent('ev-2', 5, 'token-REAL');
     const ok = await moveToDlq(db, {
       eventId: 'ev-2',
-      fence: { token: 'token-STALE' },
+      fence: { kind: 'LIVE', token: 'token-STALE' },
       now: '2026-09-13T00:03:00.000Z',
       errorClass: 'TimeoutError',
       errorCode: 'E_TIMEOUT',
@@ -115,7 +135,7 @@ describe('moveToDlq', () => {
     const call = () =>
       moveToDlq(db, {
         eventId: 'ev-3',
-        fence: { token: 'token-A' },
+        fence: { kind: 'LIVE', token: 'token-A' },
         now: '2026-09-13T00:03:00.000Z',
         errorClass: 'TimeoutError',
         errorCode: 'E_TIMEOUT',
@@ -147,7 +167,11 @@ describe('moveToDlq', () => {
 
     const ok = await moveToDlq(db, {
       eventId: 'ev-4',
-      fence: { token: 'token-A', requireExpiredAsOf: '2026-09-13T00:03:00.000Z' },
+      fence: {
+        kind: 'SWEEP',
+        token: 'token-A',
+        requireExpiredAsOf: '2026-09-13T00:03:00.000Z',
+      },
       now: '2026-09-13T00:03:00.000Z',
       errorClass: 'LEASE_EXPIRED',
       errorCode: 'STALE_LEASE_RECOVERY_AT_CAP',
@@ -169,7 +193,7 @@ describe('moveToRetryableFailed', () => {
     const db = await setupProcessingEvent('ev-5', 2);
     const ok = await moveToRetryableFailed(db, {
       eventId: 'ev-5',
-      fence: { token: 'token-A' },
+      fence: { kind: 'LIVE', token: 'token-A' },
       now: '2026-09-13T00:03:00.000Z',
       nextAttemptAt: '2026-09-13T00:05:00.000Z',
       errorClass: 'NetworkError',

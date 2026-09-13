@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createTestD1 } from '../src/d1.js';
 import { loadG2Schema } from '../src/schema.js';
-import { seedBaselineAccounts, seedEvent } from '../src/fixtures.js';
+import { seedBaselineAccounts, seedEvent, seedOutbox } from '../src/fixtures.js';
 
 describe('createTestD1', () => {
   it('applies the real G2 schema without error', () => {
@@ -123,5 +123,41 @@ describe('createTestD1', () => {
       .bind('ev-batch-fail')
       .first<{ state: string }>();
     expect(event?.state).toBe('ACCEPTED');
+  });
+
+  it('a concurrent bare read never observes a partially-applied batch (database review, G2, Finding 2 regression)', async () => {
+    const db = createTestD1(loadG2Schema());
+    const accounts = await seedBaselineAccounts(db);
+    await seedEvent(db, accounts, { eventId: 'ev-race' });
+    await seedOutbox(db, 'ev-race', {
+      state: 'PENDING',
+      nextAttemptAt: '2026-09-13T00:00:00.000Z',
+    });
+
+    const reads: (string | undefined)[] = [];
+    // Both calls are issued synchronously, in this source order, before either settles -- the read
+    // is therefore enqueued strictly AFTER the whole batch's transaction, so it must observe the
+    // batch's fully-applied final state, never an intermediate one a mid-transaction interleave
+    // would expose. Before the Finding 2 fix, a bare `.first()` bypassed the write queue entirely
+    // and executed synchronously and IMMEDIATELY when called -- before the batch's own deferred
+    // `writeQueue.then(run, run)` execution even started -- so this same assertion would have
+    // observed the PRE-batch state ('PENDING') instead of the post-batch one.
+    const batchPromise = db.batch([
+      db
+        .prepare("UPDATE processing_outbox SET state = 'RETRY_PENDING' WHERE event_id = ?")
+        .bind('ev-race'),
+      db
+        .prepare("UPDATE processing_outbox SET state = 'CLOSED' WHERE event_id = ?")
+        .bind('ev-race'),
+    ]);
+    const readPromise = db
+      .prepare('SELECT state FROM processing_outbox WHERE event_id = ?')
+      .bind('ev-race')
+      .first<{ state: string }>()
+      .then((row) => reads.push(row?.state));
+
+    await Promise.all([batchPromise, readPromise]);
+
+    expect(reads).toEqual(['CLOSED']);
   });
 });

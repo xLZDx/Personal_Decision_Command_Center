@@ -2,21 +2,26 @@ import type { D1Database } from '@cloudflare/workers-types';
 
 /**
  * The compare-and-swap fence every mutation of a PROCESSING row must present (migration 0001's own
- * comment on `ingest_events.processing_lease_token`). `token` alone is what the live processor's
- * own claim/heartbeat/complete path uses -- it always acts on its own currently-valid, non-expired
- * lease by definition. `requireExpiredAsOf` is additional and ONLY for the cron stale-lease-recovery
- * sweep: the heartbeat/renewal path extends `processing_lease_expires_at` WITHOUT rotating the
- * token, so a token-only fence would let a sweep incorrectly steal a lease a live processor had
- * just legitimately renewed. Re-checked against the column's CURRENT value at mutation time, never
- * a value cached from an earlier SELECT.
+ * comment on `ingest_events.processing_lease_token`). A discriminated union, not one interface with
+ * an optional field (type-design review, G2): the two variants are never interchangeable --
+ * `requireExpiredAsOf` is not a detail that happens to be missing sometimes, it is what makes the
+ * SWEEP variant safe to use at all, and the type now makes it impossible to construct a SWEEP fence
+ * that forgot it, or a LIVE fence that carries one by copy-paste from a SWEEP call site.
+ *
+ * - `LIVE`: the live processor's own claim/heartbeat/complete/fail path. Token alone is the correct
+ *   and sufficient fence -- it always acts on its own currently-valid, non-expired lease by
+ *   definition.
+ * - `SWEEP`: the cron stale-lease-recovery sweep ONLY. The heartbeat/renewal path extends
+ *   `processing_lease_expires_at` WITHOUT rotating the token, so a token-only fence would let the
+ *   sweep incorrectly steal a lease a live processor had just legitimately renewed --
+ *   `requireExpiredAsOf` is re-checked against the column's CURRENT value at mutation time, never a
+ *   value cached from an earlier SELECT.
  */
-export interface LeaseFence {
-  token: string;
-  requireExpiredAsOf?: string;
-}
+export type LeaseFence =
+  { kind: 'LIVE'; token: string } | { kind: 'SWEEP'; token: string; requireExpiredAsOf: string };
 
 function fenceClause(fence: LeaseFence): { sql: string; params: unknown[] } {
-  if (fence.requireExpiredAsOf === undefined) {
+  if (fence.kind === 'LIVE') {
     return { sql: 'processing_lease_token = ?', params: [fence.token] };
   }
   return {
@@ -147,8 +152,13 @@ export async function moveToRetryableFailed(
       .bind(ctx.now, ctx.eventId, ...fenceParams),
     db
       .prepare(
+        // Guarded on state <> 'CLOSED' for defense-in-depth consistency with every sibling
+        // terminal-transition statement in this file (moveToDlq's own outbox close, and
+        // completeProcessing's in lease.ts) -- database review, G2: unreachable today given the
+        // current call graph, but a future replay/re-open path must not silently reopen a CLOSED
+        // outbox row.
         `UPDATE processing_outbox SET state = 'RETRY_PENDING', next_attempt_at = ?, updated_at = ?
-         WHERE event_id = ?
+         WHERE event_id = ? AND state <> 'CLOSED'
            AND EXISTS (SELECT 1 FROM ingest_events e WHERE e.event_id = ? AND e.state = 'RETRYABLE_FAILED')`,
       )
       .bind(ctx.nextAttemptAt, ctx.now, ctx.eventId, ctx.eventId),

@@ -24,12 +24,13 @@ export interface IngestEnv {
   HMAC_TIMESTAMP_WINDOW_MS?: string;
 }
 
-export function resolveSecret(
-  env: IngestEnv,
-  connectorId: string,
-  keyVersion: string,
-): string | undefined {
-  const bindingName = `${connectorId.toUpperCase()}_${keyVersion.toUpperCase()}_HMAC_SECRET`;
+export interface ResolveSecretOptions {
+  connectorId: string;
+  keyVersion: string;
+}
+
+export function resolveSecret(env: IngestEnv, opts: ResolveSecretOptions): string | undefined {
+  const bindingName = `${opts.connectorId.toUpperCase()}_${opts.keyVersion.toUpperCase()}_HMAC_SECRET`;
   const record = env as unknown as Record<string, string | undefined>;
   return record[bindingName];
 }

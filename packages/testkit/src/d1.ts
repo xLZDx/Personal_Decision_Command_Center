@@ -38,26 +38,30 @@ function toD1Meta(changes: number, lastInsertRowid: number | bigint) {
   };
 }
 
+type Enqueue = <T>(fn: () => T) => Promise<T>;
+
 class TestD1PreparedStatement implements D1PreparedStatement {
   readonly #db: DatabaseSyncClass;
   readonly #sql: string;
   readonly #params: unknown[];
+  readonly #enqueue: Enqueue;
 
-  constructor(db: DatabaseSyncClass, sql: string, params: unknown[] = []) {
+  constructor(db: DatabaseSyncClass, sql: string, enqueue: Enqueue, params: unknown[] = []) {
     this.#db = db;
     this.#sql = sql;
+    this.#enqueue = enqueue;
     this.#params = params;
   }
 
   bind(...values: unknown[]): D1PreparedStatement {
-    return new TestD1PreparedStatement(this.#db, this.#sql, values);
+    return new TestD1PreparedStatement(this.#db, this.#sql, this.#enqueue, values);
   }
 
   #statement(): StatementSync {
     return this.#db.prepare(this.#sql);
   }
 
-  async first<T = Record<string, unknown>>(colName?: string): Promise<T | null> {
+  #firstSync<T>(colName?: string): T | null {
     const row = this.#statement().get(...(this.#params as never[])) as
       Record<string, unknown> | undefined;
     if (row === undefined) return null;
@@ -65,12 +69,12 @@ class TestD1PreparedStatement implements D1PreparedStatement {
     return row as T;
   }
 
-  async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+  #runSync<T>(): D1Result<T> {
     // A statement carrying RETURNING must execute exactly once. `.run()` on node:sqlite discards
     // returned rows, so RETURNING statements are executed via `.all()` instead -- matches real D1,
     // which does populate `results` for a RETURNING statement passed to `.run()`.
     if (RETURNING_RE.test(this.#sql)) {
-      return this.all<T>();
+      return this.#allSync<T>();
     }
     const info = this.#statement().run(...(this.#params as never[]));
     return {
@@ -80,7 +84,7 @@ class TestD1PreparedStatement implements D1PreparedStatement {
     };
   }
 
-  async all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+  #allSync<T>(): D1Result<T> {
     const rows = this.#statement().all(...(this.#params as never[])) as T[];
     return {
       success: true,
@@ -89,9 +93,7 @@ class TestD1PreparedStatement implements D1PreparedStatement {
     };
   }
 
-  raw<T = unknown[]>(options: { columnNames: true }): Promise<[string[], ...T[]]>;
-  raw<T = unknown[]>(options?: { columnNames?: false }): Promise<T[]>;
-  async raw<T = unknown[]>(options?: { columnNames?: boolean }): Promise<T[] | [string[], ...T[]]> {
+  #rawSync<T>(options?: { columnNames?: boolean }): T[] | [string[], ...T[]] {
     const rows = this.#statement().all(...(this.#params as never[])) as Record<string, unknown>[];
     const values = rows.map((row) => Object.values(row)) as T[];
     if (options?.columnNames) {
@@ -100,31 +102,75 @@ class TestD1PreparedStatement implements D1PreparedStatement {
     }
     return values;
   }
+
+  async first<T = Record<string, unknown>>(colName?: string): Promise<T | null> {
+    return this.#enqueue(() => this.#firstSync<T>(colName));
+  }
+
+  async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+    return this.#enqueue(() => this.#runSync<T>());
+  }
+
+  async all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+    return this.#enqueue(() => this.#allSync<T>());
+  }
+
+  raw<T = unknown[]>(options: { columnNames: true }): Promise<[string[], ...T[]]>;
+  raw<T = unknown[]>(options?: { columnNames?: false }): Promise<T[]>;
+  async raw<T = unknown[]>(options?: { columnNames?: boolean }): Promise<T[] | [string[], ...T[]]> {
+    return this.#enqueue(() => this.#rawSync<T>(options));
+  }
+
+  // Executes immediately against node:sqlite, bypassing the write queue -- used ONLY by
+  // createTestD1's own batch(), which already occupies the single queue slot for its whole
+  // multi-statement transaction (database review, G2, Finding 2). Routing this through #enqueue
+  // too would deadlock: the batch's own queue slot can never resolve while it waits on a nested
+  // enqueue of itself. Not part of the D1PreparedStatement interface -- never call this from
+  // outside this module.
+  runRawForBatch<T = Record<string, unknown>>(): D1Result<T> {
+    return this.#runSync<T>();
+  }
 }
 
 export function createTestD1(schemaSql: string): D1Database {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
   db.exec(schemaSql);
 
-  // Real D1 is a single-writer system: concurrent `batch()` calls against the SAME database are
-  // transparently serialized, never rejected as "a transaction within a transaction". `node:sqlite`
-  // has no such queueing built in, so two `batch()` calls issued without awaiting one another (a
-  // realistic shape for this project's own concurrent-replay tests, e.g. two racing DLQ-transition
-  // attempts) would otherwise interleave their BEGIN/COMMIT pairs and throw a shim-specific error
-  // that has no real-D1 counterpart. This FIFO promise chain reproduces D1's serialization instead.
+  // Real D1 is a single-writer system: concurrent calls against the SAME database -- whether a
+  // multi-statement `batch()` or a single bare `.prepare().run()/.first()/.all()` -- are
+  // transparently serialized, never interleaved. `node:sqlite` has no such queueing built in, so
+  // without this, two `batch()` calls issued without awaiting one another would interleave their
+  // BEGIN/COMMIT pairs and throw a shim-specific error with no real-D1 counterpart, AND a bare
+  // statement racing an in-flight `batch()` could execute mid-transaction -- observing (or being
+  // silently rolled back with) a partially-applied batch, which real D1 never allows (database
+  // review, G2, Finding 2). This FIFO promise chain is the ONE queue every statement execution in
+  // this module goes through -- `TestD1PreparedStatement`'s own public run()/first()/all()/raw()
+  // enqueue onto it via `enqueue` below; only `batch()`'s internal per-statement execution bypasses
+  // it (via `runRawForBatch`), because batch() itself already holds the single queue slot for its
+  // whole transaction.
   let writeQueue: Promise<unknown> = Promise.resolve();
+  const enqueue: Enqueue = (fn) => {
+    const scheduled = writeQueue.then(fn, fn);
+    // Swallow rejections in the queue chain itself (not in what callers observe) so one failed
+    // statement/batch doesn't permanently wedge every later one behind a rejected promise.
+    writeQueue = scheduled.then(
+      () => undefined,
+      () => undefined,
+    );
+    return scheduled;
+  };
 
   return {
     prepare(query: string): D1PreparedStatement {
-      return new TestD1PreparedStatement(db, query);
+      return new TestD1PreparedStatement(db, query, enqueue);
     },
     batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
-      const run = async (): Promise<D1Result<T>[]> => {
+      const run = (): D1Result<T>[] => {
         db.exec('BEGIN');
         try {
           const results: D1Result<T>[] = [];
           for (const statement of statements) {
-            results.push(await statement.run<T>());
+            results.push((statement as TestD1PreparedStatement).runRawForBatch<T>());
           }
           db.exec('COMMIT');
           return results;
@@ -133,11 +179,7 @@ export function createTestD1(schemaSql: string): D1Database {
           throw error;
         }
       };
-      const result = writeQueue.then(run, run);
-      // Swallow rejections in the queue chain itself (not in what callers observe) so one failed
-      // batch doesn't permanently wedge every later batch behind a rejected promise.
-      writeQueue = result.catch(() => undefined);
-      return result;
+      return enqueue(run);
     },
     async exec(query: string) {
       db.exec(query);
@@ -150,5 +192,5 @@ export function createTestD1(schemaSql: string): D1Database {
     async dump(): Promise<ArrayBuffer> {
       throw new Error('createTestD1: dump() is not supported by this test shim');
     },
-  } as unknown as D1Database;
+  } as D1Database;
 }

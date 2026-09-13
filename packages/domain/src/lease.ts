@@ -1,6 +1,11 @@
 import type { D1Database } from '@cloudflare/workers-types';
 
-import { moveToDlq, moveToRetryableFailed, shouldMoveToDlq } from './transitions.js';
+import {
+  moveToDlq,
+  moveToRetryableFailed,
+  shouldMoveToDlq,
+  type LeaseFence,
+} from './transitions.js';
 
 export interface ClaimOptions {
   eventId: string;
@@ -147,7 +152,7 @@ export interface FailResult {
  *  lease by definition). Routes to `moveToDlq`/`moveToRetryableFailed`, the SAME primitives the
  *  stale-lease-recovery sweep uses for its own at-cap/below-cap outcomes. */
 export async function failProcessing(db: D1Database, opts: FailOptions): Promise<FailResult> {
-  const fence = { token: opts.token };
+  const fence: LeaseFence = { kind: 'LIVE', token: opts.token };
   if (shouldMoveToDlq(opts.outcome, opts.attemptCountAtFailure, opts.maxAttempts)) {
     const transitioned = await moveToDlq(db, {
       eventId: opts.eventId,

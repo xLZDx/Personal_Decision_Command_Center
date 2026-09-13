@@ -1,6 +1,11 @@
 import type { D1Database } from '@cloudflare/workers-types';
 
-import { moveToDlq, moveToRetryableFailed, shouldMoveToDlq } from './transitions.js';
+import {
+  moveToDlq,
+  moveToRetryableFailed,
+  shouldMoveToDlq,
+  type LeaseFence,
+} from './transitions.js';
 
 export interface RecoverStaleLeasesOptions {
   now: string;
@@ -49,7 +54,11 @@ export async function recoverStaleLeases(
 
   const recovered: RecoveredLease[] = [];
   for (const row of candidates.results) {
-    const fence = { token: row.processing_lease_token, requireExpiredAsOf: opts.now };
+    const fence: LeaseFence = {
+      kind: 'SWEEP',
+      token: row.processing_lease_token,
+      requireExpiredAsOf: opts.now,
+    };
 
     if (shouldMoveToDlq('RETRYABLE_FAILURE', row.processing_attempt_count, opts.maxAttempts)) {
       const transitioned = await moveToDlq(db, {

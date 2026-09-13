@@ -26,6 +26,7 @@ export type {
 export {
   SCHEMA_VERSION,
   MAX_ROUTING_HINTS,
+  MAX_ROUTING_HINT_VALUE_LENGTH,
   EVENT_TYPES,
   EventTypeSchema,
   DIRECTIONS,

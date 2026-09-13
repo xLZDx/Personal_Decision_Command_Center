@@ -3,6 +3,108 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G2 implementation, checkpoint 3: internal specialist review (database/security/
+type-design), one-sweep remediation batch, 315 tests, all green
+
+**Context.** Per §17's own binding sequencing ("run the internal specialist reviewers BEFORE
+sending work to GPT-PM"), ran `database-reviewer`, `security-reviewer`, and `type-design-analyzer`
+in parallel against the full checkpoint-1+2 diff on `gate/g2-implementation`. All three hit their
+per-call turn limits mid-review and were resumed via `SendMessage` to completion. Findings were
+batched and remediated together in one pass, per §17's "one sweep, not one finding per round" rule
+— not fixed one at a time across separate rounds.
+
+**Findings and remediation, in one batch:**
+- **BLOCKER (database-reviewer):** `reconciler.ts`'s DISPATCHED- and BUDGET_DEFERRED-marking
+  UPDATEs were fenced only on `state <> 'CLOSED'`, not on the specific pre-dispatch-eligible states
+  the candidate SELECT had actually observed. Two overlapping `reconcileDispatch` invocations (a
+  slow previous cron tick still running, a manual re-trigger, a future multi-instance deployment)
+  could both match an already-DISPATCHED row: one double-dispatching the same event to the real
+  Cloudflare Queue, the other clobbering a genuinely DISPATCHED row back to BUDGET_DEFERRED. Fixed
+  by restricting both UPDATEs' WHERE clause to `state IN ('PENDING', 'RETRY_PENDING',
+  'BUDGET_DEFERRED')`, making each an atomic single-statement CAS backed by
+  `result.meta.changes`. Accepted residual risk, documented in `reconciler.ts`'s own comment: a
+  losing invocation may still have already reserved a budget slot before losing the CAS race,
+  wasting it — bounded by `batchSize` per genuinely overlapping invocation, not a correctness
+  violation of HARD_ZERO, and not closed here since closing it fully would need an intermediate
+  schema state this migration does not have. Two regression tests added to
+  `packages/domain/tests/reconciler.test.ts` proving exactly one DISPATCHED row/dispatch_count=1
+  under a `Promise.all` race, and that an already-DISPATCHED row cannot be clobbered back to
+  BUDGET_DEFERRED.
+- **MAJOR (database-reviewer):** `packages/testkit/src/d1.ts`'s write-serialization queue covered
+  only `batch()`; every bare `.prepare().run()/.first()/.all()/.raw()` call bypassed it entirely and
+  executed synchronously and immediately, which could observe (or be silently rolled back with) a
+  concurrently in-flight `batch()` transaction mid-way — a fidelity gap real D1 does not have.
+  Fixed by refactoring `TestD1PreparedStatement` so every public method enqueues onto the SAME FIFO
+  `writeQueue` `createTestD1` already used for `batch()`; `batch()`'s own internal per-statement
+  execution now calls a new non-enqueued `runRawForBatch()` instead (calling the queued path from
+  inside `batch()` would deadlock on its own already-held queue slot). Regression test added to
+  `packages/testkit/tests/d1.test.ts` proving a bare concurrent read can no longer observe a
+  partially-applied batch's intermediate state.
+- **MAJOR (database-reviewer):** the "concurrent" nonce-replay test
+  (`packages/domain/tests/auth/nonce.test.ts`) never actually interleaved under the pre-fix shim (an
+  `async` function with no internal `await` runs its whole body, including the DB write,
+  synchronously before yielding) — it happened to prove the right property only because
+  `reserveNonce`'s own INSERT...ON CONFLICT is intrinsically atomic as one SQL statement, not
+  because the shim modeled real concurrency. Resolved as a side effect of the testkit fix above:
+  every statement now genuinely defers through the queue, so `Promise.all`-based races now
+  interleave for real; no separate doc/test change was needed once that shim fix landed.
+- **MINOR (database-reviewer):** `moveToRetryableFailed`'s outbox-reopening UPDATE
+  (`packages/domain/src/transitions.ts`) had no `state <> 'CLOSED'` guard, unlike its sibling
+  terminal-transition statements in the same file. Added for defense-in-depth consistency, even
+  though unreachable under the current call graph.
+- **MINOR (database-reviewer):** `idx_ingest_events_unprocessed` (migration 0001) was unused by any
+  query in the codebase and untested by the schema suite's own index-coverage assertions — pure
+  write-amplification with no read benefit. Dropped, with a comment noting it should return
+  alongside whatever query actually needs it, plus its own EXPLAIN QUERY PLAN test.
+- **MAJOR (security-reviewer):** `routing_hints[].value` (`packages/contracts/src/event.ts`) had no
+  length bound, permitting raw connector content to be smuggled in disguised as routing metadata,
+  contradicting INV-12/INV-14. Fixed with a dedicated `RoutingHintValueSchema` (`.max(512)`) used
+  only for `routing_hints`, plus a matching `CHECK (length(value) <= 512)` on
+  `ingest_event_routing_hints.value` in the migration itself (pre-deployment, so edited directly
+  rather than via a follow-up migration). Two regression tests added to
+  `packages/contracts/tests/event.test.ts`.
+- **MINOR (security-reviewer):** `x-key-version` flowed unvalidated into `resolveSecret`'s
+  binding-name lookup (`services/ingest/src/handler.ts`) — already bounded from reaching a wrong
+  secret (a garbage value just fails to match any binding, yielding `UNKNOWN_KEY`), but nothing
+  rejected an oversized/control-character value before it was used in a lookup and any log line
+  built from it. Fixed with a narrow allowlist (`/^[A-Za-z0-9._-]{1,32}$/`) checked immediately
+  after the missing-header check, rejecting a malformed value as `INVALID_KEY_VERSION` before it
+  reaches anything else. Regression test added to `services/ingest/tests/handler.test.ts`.
+- **MAJOR (type-design-analyzer):** `LeaseFence` (`packages/domain/src/transitions.ts`) was one
+  interface with an optional `requireExpiredAsOf` field, which did not structurally enforce the
+  LIVE-processor/SWEEP distinction it exists to encode — nothing stopped a LIVE fence from
+  accidentally carrying a stale `requireExpiredAsOf` by copy-paste, or a SWEEP fence from omitting
+  it and silently degrading to a token-only fence (the exact ABA hole the field exists to close).
+  Converted to a discriminated union (`{kind:'LIVE'; token} | {kind:'SWEEP'; token;
+  requireExpiredAsOf}`), with `fenceClause` and both call sites (`lease.ts`'s `failProcessing`,
+  `lease-recovery.ts`'s `recoverStaleLeases`) updated accordingly. A `@ts-expect-error` type-only
+  test was added to `transitions.test.ts` proving both misuse directions (LIVE with the extra
+  field, SWEEP missing it) now fail to compile.
+- **MINOR (type-design-analyzer):** `resolveSecret(env, connectorId, keyVersion)`
+  (`services/ingest/src/env.ts`) took two adjacent same-typed positional string params, swap-prone.
+  Converted to an options object (`resolveSecret(env, { connectorId, keyVersion })`), matching the
+  rest of the codebase's convention; call site and tests updated.
+- **MINOR (type-design-analyzer, verified fixable):** `packages/testkit/src/d1.ts`'s
+  `as unknown as D1Database` double-cast, which disabled structural overlap checking, was tightened
+  to a single-step `as D1Database` — confirmed via `npx tsc --noEmit` that the narrower cast still
+  compiles cleanly after the write-queue refactor above.
+- Not remediated, explicitly deferred rather than silently dropped: type-design-analyzer's MINOR
+  that `provenanceValueSchema`'s STATIC_CONFIG-zero-ancestors invariant lives only in `superRefine`,
+  not the static type — a real type-level improvement, but out of this gate's own scope (no
+  reported failure traces to it) and left for a future contracts-hardening pass.
+
+**Verification:** `npx tsc --noEmit`, `npx eslint .` both clean repo-wide; `npx prettier --check .`
+clean for every file this checkpoint touched (the same 7 pre-existing, untouched governance/ADR
+files from checkpoints 1-2 remain non-conforming, confirmed unchanged via `git status`); full
+`npx vitest run` — 307/307 passing across the whole repo (7 new this checkpoint: 1 LeaseFence
+type-level test, 2 reconciler BLOCKER regressions, 1 testkit Finding-2 regression, 2 routing-hint
+length-bound tests, 1 invalid-key-version test — plus the pre-existing 300 from checkpoints 1-2).
+
+**Not yet done:** GPT-PM's own gate-level review of the full, internally-reviewed diff (this
+checkpoint closes the §17 prerequisite for sending it); the dedicated multi-tick resilience
+scenario noted as a remaining gap in checkpoint 2 (still not blocking — core regressions are
+already covered by the unit suites, including the new concurrent-race ones added here).
+
 ## 2026-09-13 — G2 implementation, checkpoint 1: contracts + provenance + domain + testkit, 148
 new tests, all green
 
