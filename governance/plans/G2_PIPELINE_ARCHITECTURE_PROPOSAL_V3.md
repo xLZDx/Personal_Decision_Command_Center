@@ -14,12 +14,12 @@ MAJORs GPT-PM confirmed closed in that same round.
 
 ## 1. Cross-reference: Round 2's 4 open findings, and how this revision resolves them
 
-| # | Severity | GPT-PM's Round-2 finding | Where resolved |
-|---|---|---|---|
-| B2/B3 | BLOCKER | Processor outcome state machine incomplete — a `PERMANENT_FAILURE` below the attempt cap was left `PROCESSING`, then incorrectly retried after lease expiry | §2 |
-| lease-ABA | BLOCKER | `processing_lease_owner` (a reusable identity) was the fencing value, not a fresh per-claim token — a stale claimant could pass the fence | §3 |
-| M4 | MAJOR | `source_version` nullable with no stated mandatory condition — the original `MESSAGE_UPDATED` collision still possible | §4 |
-| M5 | MAJOR | Durable `ingest_event_routing_hints` never gained `sensitivity`/`created_at`/`derivation_version`; `provenance.min(1)` inconsistent with `STATIC_CONFIG`'s own zero-ancestor root | §5 |
+| #         | Severity | GPT-PM's Round-2 finding                                                                                                                                                          | Where resolved |
+| --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| B2/B3     | BLOCKER  | Processor outcome state machine incomplete — a `PERMANENT_FAILURE` below the attempt cap was left `PROCESSING`, then incorrectly retried after lease expiry                       | §2             |
+| lease-ABA | BLOCKER  | `processing_lease_owner` (a reusable identity) was the fencing value, not a fresh per-claim token — a stale claimant could pass the fence                                         | §3             |
+| M4        | MAJOR    | `source_version` nullable with no stated mandatory condition — the original `MESSAGE_UPDATED` collision still possible                                                            | §4             |
+| M5        | MAJOR    | Durable `ingest_event_routing_hints` never gained `sensitivity`/`created_at`/`derivation_version`; `provenance.min(1)` inconsistent with `STATIC_CONFIG`'s own zero-ancestor root | §5             |
 
 **Two amendments made after GPT-PM's plan-level review of this round's own Rosetta plan** (which
 returned `VERDICT: BLOCKER`, 0 BLOCKER/2 MAJOR on the plan's stated scope, not the design):
@@ -167,10 +167,10 @@ NC9 same-revision-retry collides on idempotency_key as intended -> UNIQUE constr
 Positive control: a DIFFERENT revision (rev-2, different idempotency_key) inserted OK -- distinct key.
 ```
 
-Reading these against GPT-PM's three named proofs: (1) *same revision retry → same key* — NC9's
-retry of `rev-1` collides on `idempotency_key`, exactly the intended dedup behavior; (2) *two
-revisions → different keys* — the `rev-2` positive control inserts as a distinct row; (3)
-*required-version update with no version → rejected* — NC8.
+Reading these against GPT-PM's three named proofs: (1) _same revision retry → same key_ — NC9's
+retry of `rev-1` collides on `idempotency_key`, exactly the intended dedup behavior; (2) _two
+revisions → different keys_ — the `rev-2` positive control inserts as a distinct row; (3)
+_required-version update with no version → rejected_ — NC8.
 
 ## 5. Durable routing-hint metadata + `STATIC_CONFIG` consistency (MAJOR M5)
 
@@ -218,23 +218,26 @@ which is what Round 2 required.
 
 ```ts
 export function provenanceValueSchema<T extends z.ZodTypeAny>(valueSchema: T) {
-  return z.object({
-    value: valueSchema,
-    provenance: z.array(z.string().min(1)),   // no longer unconditionally .min(1)
-    derivation_method: DerivationMethodSchema,
-    ai_policy: AiPolicySchema,
-    sensitivity: SensitivitySchema,
-    created_at: z.string().datetime({ offset: true }),
-    derivation_version: z.number().int().positive(),
-  }).strict().superRefine((v, ctx) => {
-    if (v.derivation_method !== 'STATIC_CONFIG' && v.provenance.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['provenance'],
-        message: 'Non-STATIC_CONFIG values must carry at least one provenance id...',
-      });
-    }
-  });
+  return z
+    .object({
+      value: valueSchema,
+      provenance: z.array(z.string().min(1)), // no longer unconditionally .min(1)
+      derivation_method: DerivationMethodSchema,
+      ai_policy: AiPolicySchema,
+      sensitivity: SensitivitySchema,
+      created_at: z.string().datetime({ offset: true }),
+      derivation_version: z.number().int().positive(),
+    })
+    .strict()
+    .superRefine((v, ctx) => {
+      if (v.derivation_method !== 'STATIC_CONFIG' && v.provenance.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['provenance'],
+          message: 'Non-STATIC_CONFIG values must carry at least one provenance id...',
+        });
+      }
+    });
 }
 ```
 

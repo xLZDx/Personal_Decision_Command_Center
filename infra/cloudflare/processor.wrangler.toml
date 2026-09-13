@@ -1,0 +1,35 @@
+# G2 processor Worker: the Queue consumer implementing claim -> (process) -> complete/fail against
+# the fenced processing lease (services/processor/src/index.ts).
+#
+# max_batch_size = 1 (TDD §16.1's own initial default): one event per invocation, so a measured
+# active-CPU figure belongs to exactly one claim/process/complete-or-fail cycle, not an average
+# across a batch. max_retries relies on THIS system's own D1-backed outbox/reconciler retry path,
+# not Cloudflare's native per-message retry -- every message is ack()ed after processing
+# (services/processor/src/index.ts's own comment explains why two independent retry mechanisms
+# would double-drive the same event) -- so a low max_retries here is a safety net for a message
+# that somehow never reaches ack() (e.g. an uncaught exception outside processMessage's own
+# try/catch), not the primary retry path.
+
+name = "pdos-processor"
+main = "src/index.ts"
+compatibility_date = "2026-09-10"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pdos-g2"
+database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
+
+[[queues.consumers]]
+queue = "pdos-ingest-dispatch"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "pdos-ingest-dispatch-dlq"
+
+[vars]
+MAX_PROCESSING_ATTEMPTS = "5"
+# Must stay comfortably above the Cron Trigger interval in infra/cloudflare/ingest.wrangler.toml
+# (currently 1 minute) -- a shorter lease than the sweep's own poll interval would let the sweep
+# routinely race a still-healthy processor rather than only a genuinely stuck one.
+LEASE_DURATION_MS = "120000"
+PROCESSOR_VERSION = "processor-v1"

@@ -5,17 +5,35 @@ export {
   DerivationMethodSchema,
   AI_POLICIES,
   AiPolicySchema,
+  SensitivitySchema,
+  MAX_SENSITIVITY_LENGTH,
+  provenanceValueSchema,
+  enumProvenanceValueSchema,
+  StringProvenanceValueSchema,
+  NumberProvenanceValueSchema,
+  DatetimeProvenanceValueSchema,
+  BooleanProvenanceValueSchema,
   ProvenanceValueSchema,
 } from './provenance.js';
-export type { Source, DerivationMethod, AiPolicy, ProvenanceValue } from './provenance.js';
+export type {
+  Source,
+  DerivationMethod,
+  AiPolicy,
+  Sensitivity,
+  StringProvenanceValue,
+  ProvenanceValue,
+} from './provenance.js';
 
 export {
   SCHEMA_VERSION,
+  MAX_ROUTING_HINTS,
+  MAX_ROUTING_HINT_VALUE_LENGTH,
   EVENT_TYPES,
   EventTypeSchema,
   DIRECTIONS,
   DirectionSchema,
   ContentLocatorSchema,
+  SourceVersionSchema,
   NormalizedEventSchema,
   idempotencyKey,
 } from './event.js';

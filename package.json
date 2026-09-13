@@ -26,6 +26,7 @@
     "verify:secrets": "node scripts/verify/check-secrets.mjs"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260911.1",
     "@eslint/js": "^9.17.0",
     "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^8.18.1",

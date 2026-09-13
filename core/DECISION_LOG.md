@@ -3,7 +3,625 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — PR #23's `verify` CI check failed on real pre-existing formatting debt; fixed
+
+**Decision.** Opening PR #23 triggered this branch's very first real CI run (`gate/g2-implementation`
+had been pushed several times across checkpoints 3-6 with no PR open, so `pull_request`-triggered
+CI never actually ran against it before now). The `verify` job's `npm run format`
+(`prettier --check .`) failed on 4 files: `core/DECISION_LOG.md` and the three
+`governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL*.md` documents — genuinely non-conforming
+content (markdown table separator rows not column-padded, `*emphasis*` not normalized to
+`_emphasis_`), not a CRLF artifact.
+
+**Why this wasn't caught by any local `prettier --check .` run across checkpoints 4-6**, each of
+which reported "6 pre-existing, untouched governance/ADR/plan documents remain non-conforming,
+unchanged" and treated that as accepted debt outside this gate's own diff: two OTHER files in that
+same local list (`core/adr/ADR-004-normalized-event.md`, `governance/gate-manifests/g2.yaml`) are
+NOT flagged by CI at all — verified directly: `git show main:core/adr/ADR-004-normalized-event.md`
+piped through `prettier --check` on a temp file passes cleanly. This repo's `core.autocrlf=true`
+with no `.gitattributes` and no `.prettierrc.json` line-ending override other than the already-set
+`"endOfLine": "lf"` means the Windows working-tree checkout of those two untouched files carries
+CRLF while the actual git blob (and the Linux CI runner's checkout) is LF — the same
+local-vs-CI divergence already on record in auto-memory
+(`branch-switch-crlf-breaks-vitest-locally.md`). So the "6 non-conforming" figure repeated across
+three checkpoints was actually **2 local CRLF artifacts + 4 genuinely non-conforming files**
+conflated into one count; nobody had verified the real 4 against an actual LF-checkout tool until
+CI ran for the first time just now.
+
+**Fix.** `npx prettier --write` on exactly the 4 CI-flagged files (all within G2's
+`allowed_paths` — `core/DECISION_LOG.md` and `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL*.md`
+are both named explicitly in `governance/gate-manifests/g2.yaml`). Verified content-preserving
+before committing: word-tokenized diff (`tr -s '[:space:]' '\n'` on old vs. new, then `diff`) shows
+the only changes are (a) markdown table separator padding, (b) `*text*` → `_text_` emphasis-marker
+normalization, and (c) the new decision-log prose this same session already added — no actual word
+of pre-existing content was altered, added, or removed. `npx prettier --check` on all 4 files now
+passes.
+
+**How to apply:** Before opening a PR for a long-lived gate branch that has never had CI actually
+run against it, run `prettier --check .` once against a **freshly cloned or `git show`-extracted**
+copy of each flagged file (not the Windows working tree) to separate real non-conformance from a
+CRLF-checkout artifact — the working-tree check alone cannot tell them apart on this machine's
+`core.autocrlf=true` setting.
+
+---
+
+## 2026-09-13 — G2 GATE CLOSED: GPT-PM round 4 `VERDICT: APPROVE` (final), PR #23 opened
+
+**Decision.** Sent checkpoint 6's diff (`git diff e1013e9...9e7779e`) to GPT-PM for round 4,
+scoped per §17 to "the round-3 reported fix plus any regression directly caused by it." GPT-PM
+returned `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR, `correlated: true` -- confirming the round-3
+MAJOR (inadequate regression test) is fully closed: the new probe genuinely distinguishes the
+current atomic implementation from the reconstructed old two-step one, and the crash/rollback test
+genuinely exercises the D1 shim's real transaction-rollback path. Re-sent the identical diff with
+`--final` per §15's design (a receipt records that a review ran, not that it approved; `--final` is
+the caller's own claim that the loop concluded, and `review.js` requires a live round to attach it
+-- there is no way to mark an already-completed round final after the fact). The final round
+independently reproduced `VERDICT: APPROVE`, `correlated: true`, `final: true`,
+`final_overridden: false`, `receipt_written: true` (`reviewRequestId: 4a8c56c5-e923-435c-8250-810ad724c919`,
+`replyId: f15d76fe-e33e-4907-ba4a-f08cb3241035`).
+
+**Per project §17: no unresolved BLOCKER/MAJOR after this round → gate CLOSED.** G2's full review
+loop: internal specialists (checkpoint 3) → GPT-PM round 1 (5 BLOCKER + 10 MAJOR, checkpoint 4) →
+round 2 (1 BLOCKER + 3 MAJOR, regressions from round 1's own remediation, checkpoint 5) → round 3
+(0 BLOCKER + 1 MAJOR, a regression-test defect in round 2's own remediation, checkpoint 6) →
+round 4 (0 BLOCKER / 0 MAJOR, APPROVE, final).
+
+**Push and PR.** Per global CLAUDE.md §22, the approved gate's push needed no separate operator
+word; per §15, the push also needed a genuine `--final` receipt, obtained above. Pushed
+`gate/g2-implementation` (`b690ebf..9e7779e`) to origin -- this is an existing, already-authorized
+branch (created and pushed in earlier G2 checkpoints), not a new branch, so §14's double consent
+does not apply. Opened PR #23 (`gate/g2-implementation` -> `main`):
+https://github.com/xLZDx/Personal_Decision_Command_Center/pull/23.
+
+**Not yet done, per §24's own conditions for a GPT-PM-authorized merge:** the round-4 APPROVE names
+head `9e7779e`, which is this PR's exact head -- but §24 also requires every CI check the repo's
+branch protection actually requires to be green on that same head before merging, and that has not
+yet been confirmed (CI was just triggered by opening the PR). Will check CI status before merging;
+if a new commit lands on the PR before merge, the APPROVE is stale and a fresh round is needed.
+
+**Evidence:** `D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\tasks\bc6wbh8w4.output`
+(the `--final` receipt JSON); `D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\scratchpad\g2-review-round4-scope-note.md`
+(the scope note sent).
+
+**How to apply:** Once CI is confirmed green on `9e7779e`, merge PR #23 per §24 (ordinary merge
+method, no admin bypass) and proceed to G3 per the operator's standing autonomous-through-G6
+authorization -- no separate confirmation needed for that continuation.
+
+---
+
+## 2026-09-13 — G2 implementation, checkpoint 6: GPT-PM gate review round 3 (0 BLOCKER + 1 MAJOR,
+
+scoped to checkpoint-5's own regression test), 337 tests, all green
+
+**Context.** Checkpoint 5's diff (`git diff e1013e9...HEAD`, the exact remediation round 2
+requested) went to GPT-PM for round 3 verification, scoped per §17 to "the round-2 reported fixes
+plus any regression directly caused by that remediation." GPT-PM returned `VERDICT: MAJOR` with 0
+BLOCKER + 1 MAJOR — a genuine, narrowly-scoped defect in checkpoint 5's own regression test for the
+BLOCKER, not a new production bug — confirmed real by direct source inspection before remediating,
+per §3/§23.
+
+**MAJOR, verified and fixed:**
+
+- **Checkpoint 5's regression test for the atomic-retry BLOCKER proved an outcome, not the specific
+  fix.** The test (`ev-atomic-retry` in `packages/domain/tests/transitions.test.ts`) awaited
+  `moveToRetryableFailed` to full completion, then called `claimLease` and asserted it was rejected
+  because the outbox was already `RETRY_PENDING`. GPT-PM's own reviewer standard — "verify each
+  cited regression would actually fail if the fix it claims to guard were reverted" — was not met:
+  under checkpoint-4's OWN broken two-step implementation (`transition.run()` awaited to completion,
+  THEN a separate `db.batch()` for outbox/audit), the duplicate `claimLease` call in the test still
+  runs only after BOTH steps have already finished, so it would ALSO observe `RETRY_PENDING` and
+  ALSO be rejected — under either implementation. The test never forces the vulnerable interval
+  between the standalone transition and the follow-up batch to actually exist at the moment of the
+  duplicate claim; it merely confirms the end state is correct, which both implementations produce.
+  Verified directly against the source: `moveToRetryableFailed` at
+  `packages/domain/src/transitions.ts` never exposes a standalone `.run()` for the `ingest_events`
+  transition in the current code — the whole thing is one `db.batch()` — so the only way to
+  distinguish it from the old code is to make the "old code" comparison explicit and probe for the
+  intermediate window's actual existence, not just the final outcome.
+
+  Fixed exactly to GPT-PM's own specified required change (quoted from the round-3 reply): built an
+  instrumented D1 wrapper, `wrapDbForRetryRaceProbe`, that intercepts `.prepare(sql)` for the SQL
+  statement containing `"SET state = 'RETRYABLE_FAILED'"` and fires a caller-supplied probe callback
+  immediately after that statement's own STANDALONE `.run()` completes — critically, the wrapper
+  forwards `runRawForBatch()` (the method the testkit's D1 shim uses internally when a statement
+  executes as part of `db.batch()`) straight to the real bound statement with no interception, so
+  the probe fires ONLY if the SQL statement is ever executed as a standalone `.run()`, never when
+  it executes only inside a batch. Reconstructed `oldBrokenMoveToRetryableFailed` — a literal copy
+  of checkpoint-4's own pre-round-2 two-step logic (standalone fenced transition, then a separate
+  `db.batch()` for outbox/audit) — purely as a local test fixture, not production code. Two new
+  tests replace the inadequate one:
+  1. Running the CURRENT implementation through the probe: `standaloneRunObserved` stays `false`
+     and the probe's injected duplicate-claim attempt never runs at all — proving the current code
+     provides no such hook/window for a duplicate claim to land in.
+  2. Running the reconstructed OLD BROKEN implementation through the exact SAME probe:
+     `standaloneRunObserved` becomes `true` and the injected duplicate `claimLease` attempt
+     genuinely succeeds (`claimed: true`) in that window — proving the probe is a real
+     mutation-testing harness that distinguishes the two implementations, not a vacuous check that
+     would pass regardless of which code it ran against.
+
+  Also added, per the second half of GPT-PM's required change: a crash-mid-batch rollback proof.
+  A separate db wrapper makes the audit statement (matched by its literal
+  `"outcome = 'RETRYABLE_FAILURE'"` text) throw when executed inside `db.batch()`. The test asserts
+  `moveToRetryableFailed(...)` rejects, and — critically — that NO partial commit occurred: the
+  event is still `PROCESSING` with its original lease token intact, the outbox row is still
+  `DISPATCHED`, and the audit row's `finished_at` is still `null`. This proves D1's real batch
+  semantics (all-or-nothing within one transaction, replicated faithfully by the testkit shim) hold
+  for this specific statement ordering, closing the other failure mode GPT-PM named (a crash between
+  the standalone transition and the follow-up batch, which cannot happen at all now that there is
+  only one batch).
+
+**Verification:** `npx tsc --build --force`, `npx eslint .` both clean repo-wide; `npx prettier
+--check .` clean for `packages/domain/tests/transitions.test.ts` (the same 6 pre-existing, untouched
+governance/ADR/plan documents remain non-conforming, unchanged); full `npx vitest run` — 337/337
+passing across the whole repo (3 new this checkpoint, replacing the 1 inadequate `ev-atomic-retry`
+test: 2 probe-distinguishes-implementations tests, 1 crash-mid-batch no-partial-commit test — net
++2 over checkpoint 5's 334). Manifest scope re-verified by hand against
+`governance/gate-manifests/g2.yaml`'s `allowed_paths`/`forbidden_paths`: the only changed path is
+`packages/domain/tests/transitions.test.ts`, squarely inside `packages/domain/**`.
+
+**Not yet done:** GPT-PM round 4 (verification of this remediation, per §17 — nothing else in scope
+unless a genuine regression from this batch surfaces).
+
+---
+
+## 2026-09-13 — G2 implementation, checkpoint 5: GPT-PM gate review round 2 (1 BLOCKER + 3 MAJOR,
+
+all scoped to checkpoint-4's own remediation), 334 tests, all green
+
+**Context.** Checkpoint 4's diff (`git diff b690ebf...HEAD`, the exact remediation round 1
+requested) went to GPT-PM for round 2 verification, scoped per §17 to "the reported fixes plus
+regressions directly caused by that remediation." GPT-PM returned `VERDICT: BLOCKER` with 1 BLOCKER
+
+- 3 MAJOR, all genuinely within that scope (real regressions introduced by checkpoint 4's own
+  fixes, or gaps in checkpoint 4's own new evidence) — confirmed real by direct source inspection
+  before remediating, per §3/§23.
+
+**BLOCKER, verified and fixed:**
+
+- **The retry-failure remediation's own "loser touches nothing" restructuring reintroduced the
+  exact race it was meant to prevent.** `moveToRetryableFailed` ran the fenced `ingest_events`
+  transition as a standalone `.run()`, checked its own `meta.changes`, and only THEN issued the
+  outbox/audit statements in a separate `db.batch()`. That created a genuine await gap: once the
+  standalone transition committed (event `RETRYABLE_FAILED`, lease cleared) but before the
+  follow-up batch ran, `processing_outbox.state` was still `DISPATCHED` — exactly the state
+  checkpoint 4's own new `claimLease` rule treats as claimable. A delayed/duplicate Queue
+  redelivery landing in that gap could claim attempt N+1 immediately, bypassing the backoff this
+  function exists to enforce, and — if it also incremented `processing_attempt_count` before the
+  audit statement ran — could cause that statement to close out the WRONG attempt's row. Fixed by
+  making the whole transition one atomic `db.batch()` again (matching `moveToDlq`'s own shape),
+  reordered so the outbox/audit statements run FIRST, each independently re-fenced via
+  `EXISTS (... state = 'PROCESSING' AND <same fence>)` against the still-untouched `ingest_events`
+  row; the authoritative `ingest_events` transition runs LAST in the same batch. A loser's fence
+  now fails for all three statements at once — nothing to touch — and a winner's three statements
+  commit together or not at all, closing the window entirely rather than narrowing it. Regression
+  test added (`packages/domain/tests/transitions.test.ts`) proving a duplicate `claimLease`
+  attempt immediately after a `moveToRetryableFailed` call is rejected because the outbox is
+  already `RETRY_PENDING`, never observably still `DISPATCHED`.
+
+**MAJORs, verified and fixed:**
+
+- **Heartbeat renewal had no error handling for a D1 call that THROWS, as opposed to returning
+  `false`.** `startHeartbeat`'s fire-and-forget tick directly awaited `renewLease` with no
+  try/catch; a transient D1/runtime error rejected the detached async function with no controlled
+  handling, `onLost()` was never called, and no further heartbeat was scheduled — silently breaking
+  the "leaseLost fires whenever renewal cannot be proven to have succeeded" contract for exactly
+  the failure mode most likely in production. Fixed: the renewal call is now wrapped in try/catch;
+  "cannot prove renewal" (an exception) is treated identically to "renewal reported false" — signal
+  lease loss and stop scheduling. Regression test added
+  (`services/processor/tests/handler.test.ts`) using a db wrapper that makes only the renewal
+  statement throw, proving `leaseLost` fires, no unhandled rejection occurs, and the eventual
+  completion behaves correctly (the lease itself was never actually reclaimed by anything else, so
+  the stale worker's own completion legitimately succeeds).
+- **The mandatory quota test undercounted Queue ops/event by roughly 3x.** TDD §16.3 states
+  plainly that "a normal message commonly consumes write + read + delete operations," but the
+  harness counted only the producer's `send()`, asserting `queueOpsPerEvent === 1`. Fixed to model
+  and count the producer write, the consumer's own read/pull of each message, and its ack/delete
+  separately (`tests/quota/budget.test.ts`), now asserting `queueOpsPerEvent === 3` and that the
+  resulting daily total stays under Free Queues' 10,000 operations/day ceiling for both mandatory
+  volumes.
+- **Round-1 regression evidence was still incomplete for three of checkpoint 4's own fixes** — the
+  reviewer's own standard ("would the cited test actually fail if the fix were reverted") was not
+  met for: (a) the 413 body-size cap had zero test coverage of the 413 path itself; (b) the
+  redispatch regression proved only that the outbox row is remarked DISPATCHED, stopping short of
+  Queue consumption/PROCESSED; (c) nothing would fail if `cleanupExpiredNonces`'s call from
+  `handleScheduled` were removed. Fixed with four new tests: an active-key oversized-body test
+  expecting 413 (`services/ingest/tests/handler.test.ts`); a companion test proving the request
+  body is never even read (`ReadableStream.locked` stays `false`) when the cheap pre-body check
+  fails first; a scheduled-handler nonce-cleanup assertion seeding a stale nonce directly and
+  confirming it is purged; and a new end-to-end integration test
+  (`tests/integration/redispatch-recovery.test.ts`) proving a lost dispatch (`Queue.send()` throws
+  right after the D1 dispatch transition commits) is redispatched once the redispatch-due window
+  elapses and reaches `PROCESSED` through the real Queue consumer.
+
+**Verification:** `npx tsc --build --force`, `npx eslint .` both clean repo-wide; `npx prettier
+--check .` clean for every file this checkpoint touched (the same 6 pre-existing, untouched
+governance/ADR/plan documents remain non-conforming, unchanged); full `npx vitest run` —
+334/334 passing across the whole repo (6 new this checkpoint: 1 atomic-retry-transition BLOCKER
+regression, 1 heartbeat-throws MAJOR regression, 2 body-cap/never-read MAJOR regressions, 1
+nonce-cleanup-wiring MAJOR regression, 1 end-to-end redispatch-to-PROCESSED integration test —
+plus the pre-existing 328 from checkpoint 4). Manifest scope re-verified by hand against
+`governance/gate-manifests/g2.yaml`'s `allowed_paths`/`forbidden_paths` for every changed path
+(all under `packages/domain/**`, `services/processor/**`, `services/ingest/**`, `tests/quota/**`,
+`tests/integration/**`).
+
+**Not yet done:** GPT-PM round 3 (verification of this remediation, per §17 — nothing else in
+scope unless a genuine regression from this batch surfaces).
+
+## 2026-09-13 — G2 implementation, checkpoint 4: GPT-PM gate review round 1 (5 BLOCKER + 10 MAJOR),
+
+one-sweep remediation batch, 328 tests, all green
+
+**Context.** Checkpoint 3's diff (269,544 chars, under `review.js`'s `MAX_DIFF_CHARS` truncation
+limit) went to GPT-PM for the gate-level review §17 requires before a gate can close, with a scope
+note (`--scope-note-file`) bounding the review to this gate's own invariants. GPT-PM returned
+`VERDICT: BLOCKER` with 5 BLOCKER + 10 MAJOR findings. Every finding was verified against the
+actual source (file:line, not GPT-PM's characterization) before remediation, per §3/§23. All were
+confirmed real. Remediated as one batch, per §17.
+
+**BLOCKERs, verified and fixed:**
+
+- **Manifest-scope violations.** `.gitignore`, `eslint.config.js`, and `tests/schema/**` were
+  touched by checkpoint 3 outside `governance/gate-manifests/g2.yaml`'s own `allowed_paths` —
+  confirmed by direct read of the manifest, not GPT-PM's say-so. Reverted `.gitignore` and
+  `eslint.config.js` to byte-identical with base commit `714874f` (confirmed via empty `git diff`);
+  moved `tests/schema/0001_ingest_outbox.test.ts` to `tests/contract/0001_ingest_outbox.test.ts`
+  (an allowed path) via `git mv`, no content change needed. Per-file `/* global ... */` ESLint
+  directives (7 files) replace what the reverted `eslint.config.js` had tried to solve via config
+  changes — `no-undef`'s flat-config behavior respects file-level directives identically.
+- **`package-lock.json` missing the `services/processor` workspace.** Confirmed via direct
+  inspection: no `node_modules/@pdos/processor-service` resolution block existed. Regenerated via
+  `npm install` at the repo root; reproducibility verified via an isolated `npm ci` against a
+  skeleton copy in the session scratchpad (never touching the shared live checkout's own
+  `node_modules`, per this workspace's concurrent-sessions convention).
+- **Reconciler never redispatches a DISPATCHED-but-lost message.** The root cause was pre-existing,
+  not introduced by checkpoint 3: `next_attempt_at` was never advanced on a successful dispatch, so
+  under the ORIGINAL code a DISPATCHED-but-unclaimed row would be re-selected and re-dispatched on
+  literally every cron tick (double-dispatch), while checkpoint 3's own CAS-scope fix (restricting
+  dispatch to `PENDING`/`RETRY_PENDING`/`BUDGET_DEFERRED`) accidentally suppressed that symptom by
+  introducing the opposite defect: a genuinely lost dispatch would never redispatch at all. Fixed
+  both at once in `reconciler.ts`: every dispatch now sets `next_attempt_at = now +
+REDISPATCH_TIMEOUT_MS`, and a new CAS branch redispatches a due DISPATCHED row fenced on the
+  OBSERVED `dispatch_count`. `REDISPATCH_TIMEOUT_MS` added as a runtime var
+  (`infra/cloudflare/ingest.wrangler.toml`). Regression test added proving a lost dispatch becomes
+  redispatch-eligible past the timeout, with `dispatch_count` incrementing correctly.
+- **`claimLease` had no defense against a delayed/duplicate Queue redelivery.** Cloudflare Queues'
+  at-least-once semantics can redeliver a message for an event now sitting in its `RETRY_PENDING`
+  backoff window, or already at the attempt cap — neither case was checked. Fixed by requiring
+  `processing_outbox.state = 'DISPATCHED'` (ties a claim to a delivery the reconciler actually just
+  authorized) and `processing_attempt_count < maxAttempts` (independent backstop) in `claimLease`'s
+  own fenced UPDATE. Two regression tests added (`packages/domain/tests/lease.test.ts`): a
+  delayed-duplicate cannot claim while RETRY_PENDING; a duplicate cannot claim once at cap even with
+  a DISPATCHED row.
+- **Heartbeat/renewal existed but was never wired into live processing.** `renewLease` was a
+  correctly-fenced helper from checkpoint 1 that nothing ever called during an actual processing
+  attempt — any attempt genuinely exceeding the fixed lease TTL (real I/O latency, not a hang) would
+  be wrongly reclaimed by `recoverStaleLeases` while still alive. Fixed: `processMessage`
+  (`services/processor/src/handler.ts`) now runs a self-rescheduling `setTimeout`-based heartbeat
+  for the full duration `process()` runs, using a FRESH clock reading per tick (never the frozen
+  `now` param). `ClaimedEvent` gained a `leaseLost: AbortSignal` so a cooperative processor can
+  abandon further external work once a renewal reports the fence already lost — the D1 layer stays
+  safe regardless (`completeProcessing`/`failProcessing` are token-fenced). Two regression tests
+  added (`services/processor/tests/handler.test.ts`, using injectable `heartbeatNow` + Vitest fake
+  timers): a healthy heartbeat prevents sweep reclamation of a slow-but-alive attempt; a lease
+  reclaimed out from under a running attempt fires `leaseLost` and the stale worker's eventual
+  completion safely reports `transitioned: false`.
+
+**MAJORs, verified and fixed (selected — full list in the round-1 receipt):**
+
+- `packages/domain/src/ingest.ts`'s INSERT never populated `source_thread_id` despite the column
+  existing and `NormalizedEvent` carrying it. Fixed; regression test added.
+- `lookupSigningKeyStatus` fell through to `'VALID'` for a malformed `valid_from`/`valid_until`
+  (`Date.parse` returns `NaN`, which fails every comparison silently) — fail-open on corrupted
+  timestamp data. Fixed with explicit `Number.isNaN()` checks, returning `'UNKNOWN'`. Two regression
+  tests added.
+- `cleanupExpiredNonces` purged at `1×windowMs`, but `isTimestampWithinWindow`'s symmetric
+  `abs(now - signedTimestamp) <= windowMs` check tolerates a signed timestamp up to `windowMs`
+  ahead of server-now, so the real acceptance interval extends to `2×windowMs` after reservation —
+  opening a replay window between the two. Fixed to purge at `2×windowMs`. Regression test added at
+  the 1.5×-window boundary.
+- `services/ingest/src/handler.ts` read/hashed/buffered the full request body BEFORE any
+  authentication check ran, letting an unauthenticated-looking caller force CPU/memory spend on an
+  arbitrarily large body. Split `authenticateIngestRequest` into `checkKeyAndTimestamp` (no body
+  needed) and `checkSignatureAndNonce` (body-dependent); the handler now runs the cheap check first,
+  then reads the body through a new byte-capped `readBodyWithLimit` (413 on overflow), then the
+  expensive check.
+- `packages/contracts/src/queue.ts`'s `QueuePayloadSchema` existed from an earlier gate but neither
+  side of the Queue adopted it — both `services/ingest` and `services/processor` used an ad hoc
+  `{eventId}` shape with no runtime validation on the consumer side. Adopted on both sides;
+  `services/processor`'s consumer now `safeParse`s every inbound message and acks-and-skips one that
+  fails the contract (D1 remains the source of truth, so nothing is lost). Regression test added
+  proving a non-conforming message is skipped without touching D1.
+- `services/ingest/src/handler.ts`'s scheduled handler awaited each `INGEST_QUEUE.send()` with no
+  try/catch — one throwing send would abort every remaining dispatch in that tick. Fixed: each send
+  wrapped individually, failures collected in a new `sendFailures` array rather than propagating.
+  Regression test added.
+- `handleScheduled` never called `cleanupExpiredNonces` — wired in, run last, after dispatch.
+- `SensitivitySchema` (`packages/contracts/src/provenance.ts`) was `z.string().min(1)`: accepted a
+  whitespace-only string, and had no upper bound. Fixed with the same non-mutating trimmed-nonempty
+  predicate `SourceVersionSchema` already established, plus a 128-char ceiling
+  (`MAX_SENSITIVITY_LENGTH`), matching the DB CHECK added to `ingest_event_routing_hints.sensitivity`
+  in the same migration. Three regression tests added.
+
+**Also added this checkpoint, closing gaps in the gate's own DoD (TDD §35/§71), not GPT-PM findings:**
+
+- `packages/domain/src/metrics.ts`: `getOldestUnprocessedEvent` — the "oldest accepted-unprocessed
+  metric exists" line item, querying `ingest_events` for the oldest non-terminal row. Two tests.
+- `core/adr/ADR-006-durable-ingest-outbox.md`: an addendum (not a rewrite, per that ADR's own
+  amendment convention) documenting the `CLOSED` terminal outbox state, the
+  `dispatch_count`/`processing_attempt_count` split, the redispatch protocol, the heartbeat
+  protocol, and the adopted Queue wire contract — none of which the original decision recorded.
+- `tests/quota/budget.test.ts`: an end-to-end 200-event and 1000-event simulation running the REAL
+  `handleIngestRequest` → `handleScheduled` (looped to drain, matching production's per-minute
+  cron/`RECONCILER_BATCH_SIZE` behavior) → the real Queue consumer, counting actual D1 statement
+  executions (reads vs. writes, classified by leading SQL keyword — explicitly documented as an
+  operation-count estimate, not Cloudflare's row-based billing unit, since the test D1 shim never
+  populates `rows_read`), Queue sends, and HTTP requests, all per-event. `Analytics
+datapoints/event` reported honestly as 0 (G2 has no Analytics Engine binding in scope — not
+  estimated, not invented).
+
+**Verification:** `npx tsc --build --force`, `npx eslint .` both clean repo-wide; `npx prettier
+--check .` clean for every file this checkpoint touched (the same 6 pre-existing, untouched
+governance/ADR/plan documents from earlier checkpoints remain non-conforming, confirmed unchanged);
+full `npx vitest run` — 328/328 passing across the whole repo (21 new this checkpoint: 2 lease
+BLOCKER-3 regressions, 1 redispatch BLOCKER-2 regression, 2 heartbeat BLOCKER-4 regressions, 1
+ingest source_thread_id regression, 2 signing-key fail-closed regressions, 1 nonce-window
+regression, 1 throwing-send regression, 1 malformed-Queue-message regression, 3 sensitivity
+regressions, 2 metrics tests, 3 budget-simulation tests, plus the pre-existing 307 from checkpoint
+3). Manifest scope re-verified by hand against `governance/gate-manifests/g2.yaml`'s own
+`allowed_paths`/`forbidden_paths` for every changed path (the mechanical checker
+`scripts/verify/check-gate-scope.mjs` needs committed `BASE_SHA`/`HEAD_SHA` refs, so this was cross-
+checked directly against the manifest text pending the actual commit).
+
+**Not yet done:** GPT-PM round 2 (verification of this remediation, per §17 — nothing else in
+scope unless a genuine regression from this batch surfaces).
+
+## 2026-09-13 — G2 implementation, checkpoint 3: internal specialist review (database/security/
+
+type-design), one-sweep remediation batch, 315 tests, all green
+
+**Context.** Per §17's own binding sequencing ("run the internal specialist reviewers BEFORE
+sending work to GPT-PM"), ran `database-reviewer`, `security-reviewer`, and `type-design-analyzer`
+in parallel against the full checkpoint-1+2 diff on `gate/g2-implementation`. All three hit their
+per-call turn limits mid-review and were resumed via `SendMessage` to completion. Findings were
+batched and remediated together in one pass, per §17's "one sweep, not one finding per round" rule
+— not fixed one at a time across separate rounds.
+
+**Findings and remediation, in one batch:**
+
+- **BLOCKER (database-reviewer):** `reconciler.ts`'s DISPATCHED- and BUDGET_DEFERRED-marking
+  UPDATEs were fenced only on `state <> 'CLOSED'`, not on the specific pre-dispatch-eligible states
+  the candidate SELECT had actually observed. Two overlapping `reconcileDispatch` invocations (a
+  slow previous cron tick still running, a manual re-trigger, a future multi-instance deployment)
+  could both match an already-DISPATCHED row: one double-dispatching the same event to the real
+  Cloudflare Queue, the other clobbering a genuinely DISPATCHED row back to BUDGET_DEFERRED. Fixed
+  by restricting both UPDATEs' WHERE clause to `state IN ('PENDING', 'RETRY_PENDING',
+'BUDGET_DEFERRED')`, making each an atomic single-statement CAS backed by
+  `result.meta.changes`. Accepted residual risk, documented in `reconciler.ts`'s own comment: a
+  losing invocation may still have already reserved a budget slot before losing the CAS race,
+  wasting it — bounded by `batchSize` per genuinely overlapping invocation, not a correctness
+  violation of HARD_ZERO, and not closed here since closing it fully would need an intermediate
+  schema state this migration does not have. Two regression tests added to
+  `packages/domain/tests/reconciler.test.ts` proving exactly one DISPATCHED row/dispatch_count=1
+  under a `Promise.all` race, and that an already-DISPATCHED row cannot be clobbered back to
+  BUDGET_DEFERRED.
+- **MAJOR (database-reviewer):** `packages/testkit/src/d1.ts`'s write-serialization queue covered
+  only `batch()`; every bare `.prepare().run()/.first()/.all()/.raw()` call bypassed it entirely and
+  executed synchronously and immediately, which could observe (or be silently rolled back with) a
+  concurrently in-flight `batch()` transaction mid-way — a fidelity gap real D1 does not have.
+  Fixed by refactoring `TestD1PreparedStatement` so every public method enqueues onto the SAME FIFO
+  `writeQueue` `createTestD1` already used for `batch()`; `batch()`'s own internal per-statement
+  execution now calls a new non-enqueued `runRawForBatch()` instead (calling the queued path from
+  inside `batch()` would deadlock on its own already-held queue slot). Regression test added to
+  `packages/testkit/tests/d1.test.ts` proving a bare concurrent read can no longer observe a
+  partially-applied batch's intermediate state.
+- **MAJOR (database-reviewer):** the "concurrent" nonce-replay test
+  (`packages/domain/tests/auth/nonce.test.ts`) never actually interleaved under the pre-fix shim (an
+  `async` function with no internal `await` runs its whole body, including the DB write,
+  synchronously before yielding) — it happened to prove the right property only because
+  `reserveNonce`'s own INSERT...ON CONFLICT is intrinsically atomic as one SQL statement, not
+  because the shim modeled real concurrency. Resolved as a side effect of the testkit fix above:
+  every statement now genuinely defers through the queue, so `Promise.all`-based races now
+  interleave for real; no separate doc/test change was needed once that shim fix landed.
+- **MINOR (database-reviewer):** `moveToRetryableFailed`'s outbox-reopening UPDATE
+  (`packages/domain/src/transitions.ts`) had no `state <> 'CLOSED'` guard, unlike its sibling
+  terminal-transition statements in the same file. Added for defense-in-depth consistency, even
+  though unreachable under the current call graph.
+- **MINOR (database-reviewer):** `idx_ingest_events_unprocessed` (migration 0001) was unused by any
+  query in the codebase and untested by the schema suite's own index-coverage assertions — pure
+  write-amplification with no read benefit. Dropped, with a comment noting it should return
+  alongside whatever query actually needs it, plus its own EXPLAIN QUERY PLAN test.
+- **MAJOR (security-reviewer):** `routing_hints[].value` (`packages/contracts/src/event.ts`) had no
+  length bound, permitting raw connector content to be smuggled in disguised as routing metadata,
+  contradicting INV-12/INV-14. Fixed with a dedicated `RoutingHintValueSchema` (`.max(512)`) used
+  only for `routing_hints`, plus a matching `CHECK (length(value) <= 512)` on
+  `ingest_event_routing_hints.value` in the migration itself (pre-deployment, so edited directly
+  rather than via a follow-up migration). Two regression tests added to
+  `packages/contracts/tests/event.test.ts`.
+- **MINOR (security-reviewer):** `x-key-version` flowed unvalidated into `resolveSecret`'s
+  binding-name lookup (`services/ingest/src/handler.ts`) — already bounded from reaching a wrong
+  secret (a garbage value just fails to match any binding, yielding `UNKNOWN_KEY`), but nothing
+  rejected an oversized/control-character value before it was used in a lookup and any log line
+  built from it. Fixed with a narrow allowlist (`/^[A-Za-z0-9._-]{1,32}$/`) checked immediately
+  after the missing-header check, rejecting a malformed value as `INVALID_KEY_VERSION` before it
+  reaches anything else. Regression test added to `services/ingest/tests/handler.test.ts`.
+- **MAJOR (type-design-analyzer):** `LeaseFence` (`packages/domain/src/transitions.ts`) was one
+  interface with an optional `requireExpiredAsOf` field, which did not structurally enforce the
+  LIVE-processor/SWEEP distinction it exists to encode — nothing stopped a LIVE fence from
+  accidentally carrying a stale `requireExpiredAsOf` by copy-paste, or a SWEEP fence from omitting
+  it and silently degrading to a token-only fence (the exact ABA hole the field exists to close).
+  Converted to a discriminated union (`{kind:'LIVE'; token} | {kind:'SWEEP'; token;
+requireExpiredAsOf}`), with `fenceClause` and both call sites (`lease.ts`'s `failProcessing`,
+  `lease-recovery.ts`'s `recoverStaleLeases`) updated accordingly. A `@ts-expect-error` type-only
+  test was added to `transitions.test.ts` proving both misuse directions (LIVE with the extra
+  field, SWEEP missing it) now fail to compile.
+- **MINOR (type-design-analyzer):** `resolveSecret(env, connectorId, keyVersion)`
+  (`services/ingest/src/env.ts`) took two adjacent same-typed positional string params, swap-prone.
+  Converted to an options object (`resolveSecret(env, { connectorId, keyVersion })`), matching the
+  rest of the codebase's convention; call site and tests updated.
+- **MINOR (type-design-analyzer, verified fixable):** `packages/testkit/src/d1.ts`'s
+  `as unknown as D1Database` double-cast, which disabled structural overlap checking, was tightened
+  to a single-step `as D1Database` — confirmed via `npx tsc --noEmit` that the narrower cast still
+  compiles cleanly after the write-queue refactor above.
+- Not remediated, explicitly deferred rather than silently dropped: type-design-analyzer's MINOR
+  that `provenanceValueSchema`'s STATIC_CONFIG-zero-ancestors invariant lives only in `superRefine`,
+  not the static type — a real type-level improvement, but out of this gate's own scope (no
+  reported failure traces to it) and left for a future contracts-hardening pass.
+
+**Verification:** `npx tsc --noEmit`, `npx eslint .` both clean repo-wide; `npx prettier --check .`
+clean for every file this checkpoint touched (the same 7 pre-existing, untouched governance/ADR
+files from checkpoints 1-2 remain non-conforming, confirmed unchanged via `git status`); full
+`npx vitest run` — 307/307 passing across the whole repo (7 new this checkpoint: 1 LeaseFence
+type-level test, 2 reconciler BLOCKER regressions, 1 testkit Finding-2 regression, 2 routing-hint
+length-bound tests, 1 invalid-key-version test — plus the pre-existing 300 from checkpoints 1-2).
+
+**Not yet done:** GPT-PM's own gate-level review of the full, internally-reviewed diff (this
+checkpoint closes the §17 prerequisite for sending it); the dedicated multi-tick resilience
+scenario noted as a remaining gap in checkpoint 2 (still not blocking — core regressions are
+already covered by the unit suites, including the new concurrent-race ones added here).
+
+## 2026-09-13 — G2 implementation, checkpoint 1: contracts + provenance + domain + testkit, 148
+
+new tests, all green
+
+**Context.** Operator gave a standing, explicit, broad authorization to proceed autonomously
+through G6's completion without returning for routine confirmation (verbatim: "полностью
+автономно до конца МВП1... не трогай меня"), continuing to record every manifest/approval/PR/push.
+This entry is the first substantive implementation checkpoint under that authorization, on branch
+`gate/g2-implementation` (base `origin/main` @ `714874fef3bdb09e9b3075f4621c4f4d32178954`, the
+merged `manifest-proposal/g2` commit), under the approved Rosetta plan
+`personal-decision-os-2026-09-13T06-29-26-148Z-20280d` (hash
+`94031e52732abc334c102e2ec625474119978ce81c31e22d8d36ac114c72990f`).
+
+**What was built, in dependency order:**
+
+- `infra/migrations/0001_ingest_outbox.sql` — the 13-table G2 schema (rewritten per the plan's own
+  5 review rounds; see the entries below for the specific fixes), verified by actually applying it
+  to a real SQLite engine.
+- `packages/contracts` — `provenance.ts` (generic `provenanceValueSchema<T>` factory, required
+  `sensitivity`), `event.ts` (`SCHEMA_VERSION` 4, `MAX_ROUTING_HINTS`, non-mutating
+  `SourceVersionSchema`, `source_version` folded into `idempotencyKey()`).
+- `packages/provenance` — `dag.ts` rewritten to a discriminated-union `ProvenanceNodeSchema`
+  (`SOURCE_EVENT`/`STATIC_CONFIG`/`DERIVED`), a `safeParse`-validated `isAiSafe` with an explicit
+  `ai_policy !== 'ALLOW'` fail-closed check (not `!== 'DENY'`), and `sourceEventNode` resolving
+  `ai_policy` from a `SourcePolicyLookup` with a `event.source` vs. resolved-policy `source`
+  cross-check. New `source-policy.ts` (`SourcePolicyRecordSchema`/`SourcePolicyLookup`).
+- **New `packages/testkit`** — a D1Database-shaped adapter over `node:sqlite`
+  (`createTestD1`/`loadG2Schema`), since Miniflare/wrangler are not installed in this repo (a
+  deliberate scope decision, not an oversight: G2's own scope is the domain logic, not the
+  Cloudflare deploy tooling). Two non-obvious fixes needed to make the shim behave like real D1:
+  (1) `node:sqlite` cannot be statically `import`ed under vitest/vite (Vite's builtin-module list
+  predates it) — resolved via `process.getBuiltinModule('node:sqlite')`, saved as memory
+  `vitest-vite-lacks-node-sqlite-builtin.md`; (2) `batch()` must serialize concurrent calls the way
+  real D1's single-writer model does, or two calls issued without awaiting each other throw
+  "cannot start a transaction within a transaction" — fixed with a FIFO promise-chain queue inside
+  `createTestD1`, verified by the concurrent-replay tests below actually exercising it.
+- **New `packages/domain`** — the actual G2 pipeline logic: `ingest.ts` (idempotent insert via a
+  single D1 `batch()`, UNIQUE-constraint collision on `idempotency_key` resolved to an
+  `ALREADY_ACCEPTED` no-op rather than an error); `transitions.ts` (`moveToDlq`/
+  `moveToRetryableFailed`, the ONE shared atomic primitive used by both the live processor's own
+  failure path and the cron stale-lease-recovery sweep — the DLQ write self-conditions on
+  `ingest_events`' CURRENT state plus a `NOT EXISTS` guard on `dead_letter_events`' own PRIMARY KEY,
+  so a concurrent replay produces exactly one record regardless of which caller's fenced UPDATE
+  actually won); `lease.ts` (claim issues a fresh token and never reuses one; heartbeat renews
+  expiry WITHOUT rotating the token, matching the schema's own documented behavior; complete/fail
+  are token-only fenced since the live processor holds a currently-valid lease by definition);
+  `lease-recovery.ts` (the sweep fences on BOTH the observed token AND a live re-check of
+  `processing_lease_expires_at <= now` — the Round-4 BLOCKER fix: a token-only fence would let a
+  sweep steal a lease a live heartbeat had just legitimately renewed); `budget.ts` (the
+  self-bootstrapping atomic UPSERT reservation, cap validated against the schema's absolute 2500
+  ceiling before ever touching D1); `reconciler.ts` (the HARD_ZERO dispatch loop — budget is
+  reserved and the outbox row marked DISPATCHED BEFORE any real Queue send would happen, and once
+  budget is exhausted every remaining fetched candidate this cycle is marked `BUDGET_DEFERRED`, not
+  silently skipped); `auth/{hmac,nonce,keys,authenticate}.ts` (the generic HMAC ingest-boundary —
+  Web Crypto `crypto.subtle`, atomic nonce reservation via `ON CONFLICT DO NOTHING` against
+  `ingest_nonces`' own composite PRIMARY KEY, metadata-only key-version lookup, and an orchestrator
+  that deliberately checks key validity and the signature BEFORE reserving the nonce, so a garbage-
+  signed replay of an intercepted timestamp+nonce pair can never burn the real sender's nonce).
+- `eslint.config.js` — added scoped `globals` blocks for `packages/domain/**`+`services/**`
+  (`crypto`/`TextEncoder`/`URL` — Web Platform APIs identical under Node and Workers) and
+  `packages/testkit/**` (same plus `process`, Node-only since this package never ships to Workers);
+  added `varsIgnorePattern`/`ignoreRestSiblings` to `no-unused-vars` for the rest-sibling-omission
+  destructuring pattern used in `event.test.ts`. First gate to write actual runtime code, so the
+  first to need these — not scope creep, a genuine prior gap with nothing to exercise it yet.
+
+**Verification:** `npx tsc --noEmit` clean; `npx eslint .` clean; `npx prettier --check` clean for
+every file this checkpoint touched (a handful of pre-existing, untouched governance/ADR markdown
+files remain non-conforming from before this branch — confirmed via `git status` showing zero
+diff on them — left alone rather than reformatted, since reformatting `governance/gate-manifests/
+g2.yaml` specifically would change its hash against the already-set `GATE_MANIFEST_APPROVED_HASH_G2`
+repo variable); full `npx vitest run` — 256/256 tests passing across the whole repo (148 new this
+checkpoint: 41 domain, 33 auth, 6 testkit self-tests, 19+5 provenance, 39+16 contracts, plus the
+pre-existing 108 governance-policy tests untouched and still green).
+
+**Not yet done** (tracked, not forgotten): `services/ingest`, `services/processor`, their
+`infra/cloudflare/**` wrangler configs; the resilience/quota/integration vitest suites translating
+every scratch-validated and GPT-PM-mandated regression into an executed, mutation-proven test;
+`npm run verify`'s full pipeline (format/lint/typecheck/test — each already verified individually
+above, not yet run as the single combined command); the internal specialist review
+(`database-reviewer`/`security-reviewer`/`type-design-analyzer`) required before this goes to
+GPT-PM per §17's sequencing; then the GPT-PM gate-level review itself.
+
+## 2026-09-13 — G2 implementation, checkpoint 2: services/ingest + services/processor +
+
+wrangler configs + ported schema-integrity suite, 325 tests, all green
+
+**What was added on top of checkpoint 1:**
+
+- **`services/ingest`** — `env.ts` (`IngestEnv`, `resolveSecret` deriving a Worker Secret binding
+  name by convention: `<CONNECTOR>_<KEYVERSION>_HMAC_SECRET`, so a new connector/key version is a
+  binding + a wrangler.toml line, never a code change); `handler.ts` (`handleIngestRequest` —
+  auth-before-D1-write via `authenticateIngestRequest`, then `NormalizedEventSchema.safeParse`,
+  then a `source` vs. URL-`connectorId` cross-check closing a real gap a valid HMAC key alone does
+  not close — a compromised/misconfigured Gmail key could otherwise inject an event claiming
+  `source: 'telegram'` — then `ingestEvent`; `handleScheduled` — Phase 1 `recoverStaleLeases` THEN
+  Phase 2 `reconcileDispatch`, in that order so a lease just reclaimed this same tick is
+  immediately eligible for dispatch rather than stranded a full cron cycle; Queue sends happen only
+  for event_ids already marked DISPATCHED, never before); `index.ts` (the thin `ExportedHandler`
+  wiring — the one place the module casts between the global Node/undici `Request`/`Response`
+  types `handler.ts` is written against, for plain-`Request`-in-tests convenience, and the Workers-
+  specific ones `ExportedHandler` itself requires; same runtime object either way, a type-only gap).
+- **`services/processor`** — `processor.ts` (`EventProcessor`, an INJECTED strategy — the actual
+  downstream business logic, topic assignment/AI extraction, is explicitly out of G2's own manifest
+  scope; the default `noopProcessor` always succeeds, standing in long enough to prove the lease
+  lifecycle moves an event to PROCESSED end-to-end); `handler.ts` (`processMessage`: claim -> run
+  the injected processor, catching a thrown exception as RETRYABLE_FAILURE rather than letting it
+  propagate and strand the lease until the sweep eventually reclaims it -> complete/fail via the
+  SAME `packages/domain` primitives the sweep uses); `index.ts` (the Queue consumer — every message
+  is `ack()`ed regardless of outcome, since retries are driven entirely by the D1-backed outbox/
+  reconciler, not Cloudflare Queue's own native per-message retry; double-driving the same event
+  through two independent retry mechanisms with two different backoff schedules would be a real
+  defect, not a redundant safety net).
+- **`infra/cloudflare/{ingest,processor}.wrangler.toml`** — real Cloudflare Workers config
+  (D1 binding, Queue producer/consumer, a 1-minute Cron Trigger for the scheduled handler,
+  `max_batch_size = 1` per TDD §16.1's own initial default, a dead-letter-queue name for the rare
+  message that never reaches `ack()`). Database/queue names are placeholders (no live Cloudflare
+  account provisioned in this environment); secrets are documented by name/convention, never
+  present as values, consistent with `ingest_signing_keys` being metadata-only.
+- **`tests/schema/0001_ingest_outbox.test.ts`** — every one of the G2 architecture review's own
+  Python/sqlite3 scratch negative/positive controls (`validate.py`/`validate3.py`, cited in the
+  entries below), ported into the REAL, executed vitest suite against the actual migration file via
+  `@pdos/testkit`: 7 FK/CHECK control pairs (telegram+ALLOW, source/account mismatch, orphan
+  provenance FK, DLQ-with-live-lease, PROCESSING-without-lease, PROCESSING-without-token, DLQ-with-
+  zero-attempts, MESSAGE_UPDATED-without-source_version, idempotency_key collision, all four
+  routing-hint wrapper-column CHECKs, the budget-counter hard ceiling) plus the 2 EXPLAIN QUERY PLAN
+  index-coverage assertions (the reconciler due-query hits `idx_processing_outbox_due`, the lease-
+  sweep query hits `idx_ingest_events_processing_lease` — neither is a full table scan). These
+  constraints existed in the schema with nothing in the automated suite protecting them until now.
+
+**Verification:** `npx tsc --noEmit`, `npx eslint .`, `npx prettier --check` (services/infra
+scope) all clean; full `npx vitest run` — 300/300 across the whole repo (44 new this checkpoint: 19
+services + 25 schema-integrity, on top of checkpoint 1's 148 + the pre-existing 108 governance-
+policy tests).
+
+**Not yet done:** the remaining resilience/quota vitest cases the original pending list named that
+checkpoints 1+2 did not already cover in the unit suites (a dedicated multi-tick resilience
+scenario is still worth a pass, though the core regressions -- heartbeat-during-sweep, exact-cap
+budget, concurrent nonce replay, exactly-one-DLQ-record -- are already exercised); the internal
+specialist review (`database-reviewer`/`security-reviewer`/`type-design-analyzer`) required before
+GPT-PM per §17; then GPT-PM's own gate-level review.
+
 ## 2026-09-12/13 — G2 Revision 2: 3-agent redesign, executably validated, Rosetta plan revised
+
 after GPT-PM's own plan-level BLOCKER, GO obtained, V2 proposal sent
 
 **Context.** GPT-PM's `VERDICT: BLOCKER` on the original G2 proposal (3 BLOCKER + 4 MAJOR, see the
@@ -30,11 +648,12 @@ the correction this project's own §17 ground-truth-order habit calls for.
 
 **Revised plan (`personal-decision-os-2026-09-12T21-44-44-733Z-f21028`) fixed both:** added
 executable scratch validation as its own step, and set a deterministic boundary -- the plan closes
-the instant GPT-PM's reply to the V2 document is captured; recording that reply's *content* is
+the instant GPT-PM's reply to the V2 document is captured; recording that reply's _content_ is
 explicitly the next plan's job, not this one's. Sent for GO.
 
 **PM Bridge transport was genuinely unstable across this send**, not merely slow -- worth recording
 precisely since it cost several retries and two daemon restarts before resolving:
+
 1. First `gpt_send_and_await` (request_id `e3a4c8f1-...`, the first plan) returned
    `CHATGPT_SEND_UNCONFIRMED` ("No matching new ChatGPT user turn appeared after Enter within 32s").
 2. Retried the same request_id per the tool's own instruction twice; `pm_bridge_job_status` showed
@@ -115,7 +734,7 @@ the scratch harness outside the repo tree exercised anything resembling those sh
 
 **Per the deterministic boundary this plan itself sets: this entry does not record GPT-PM's ruling
 on the V2 document.** That send happens after this commit, under this same plan (its final step,
-per the approved scope), and the reply is captured but recording its *content* belongs to the next
+per the approved scope), and the reply is captured but recording its _content_ belongs to the next
 plan -- exactly the ambiguity the revised plan was built to avoid repeating.
 
 **Plan closed** (`pm_rosetta_close`, result `passed`, review class `LOCAL` -- 3 doc files, 1
@@ -159,7 +778,7 @@ combined defect) and M4/M5 remain contested.
    preflight measurement (network/D1/AI wait time is not active CPU per the TDD's own framing) --
    needs either a lease-renewal/heartbeat mechanism or a measured end-to-end wall-time bound.
 3. **MAJOR -- M4 (idempotency) only partially fixed.** `source_version` is nullable with no stated
-   rule for *when* it must be non-null, so the original collision (reused `source_event_id`, no
+   rule for _when_ it must be non-null, so the original collision (reused `source_event_id`, no
    version) still collapses onto one key for `MESSAGE_UPDATED`. Required: an executable rule (e.g.
    non-empty `source_version` mandatory for `MESSAGE_UPDATED`) plus named behavioral proofs (same
    revision retries to the same key; two revisions produce different keys; a required-but-absent
@@ -175,7 +794,7 @@ combined defect) and M4/M5 remain contested.
 capped non-terminal event is "unrepresentable," citing NC6 -- but NC6 only proved DLQ-with-zero-
 attempts is rejected. The schema CAN represent `RETRYABLE_FAILED` at count 5, and necessarily
 represents the live fifth attempt as `PROCESSING` at count 5 while it runs. The actual required
-proof is a *transition* invariant (no capped non-terminal row survives past the fifth attempt's
+proof is a _transition_ invariant (no capped non-terminal row survives past the fifth attempt's
 completion or lease expiry), not static unrepresentability -- this was an overreach in how strongly
 the DDL evidence was described, corrected here rather than repeated in the next round.
 
@@ -191,6 +810,7 @@ these four findings and their direct regression tests." No re-litigating the thr
 or the three closed MAJORs.
 
 ## 2026-09-13 — G2 Round 3: remediated GPT-PM's remaining 2 BLOCKER + 2 MAJOR (V3), operator
+
 authorized autonomous completion of MVP1
 
 **Operator instruction, this session:** "план меняется ГО делать все до конца, пм теперь работает
@@ -257,12 +877,14 @@ commit): every step executed as approved, reply captured and correlated
 (`replyId e96ddc1e-f38f-48a6-b317-d75acea7f11b`).
 
 ## 2026-09-13 — GPT-PM's Round-3 ruling on the G2 V3 proposal: `VERDICT: APPROVE`, 0 BLOCKER/0
+
 MAJOR -- G2 architecture is now GPT-PM-approved
 
 Verbatim reply (`replyId e96ddc1e-f38f-48a6-b317-d75acea7f11b`, correlated, `request_id
 2f8e4c91-6a3d-4b7e-9c1f-5d0a8b3e7f24`) preserved in this session's PM Bridge transcript.
 
 **All four remaining findings confirmed closed:**
+
 - B2/B3 (processor state machine): "permanent failure is terminal at any attempt count; retryable
   failure below the cap returns to RETRYABLE_FAILED; retryable failure at the cap reaches DLQ; and
   success reaches PROCESSED... replaces V2's incorrect static 'unrepresentable' assertion with the
@@ -278,6 +900,7 @@ Verbatim reply (`replyId e96ddc1e-f38f-48a6-b317-d75acea7f11b`, correlated, `req
 
 **Two non-blocking implementation notes for the actual code (not architecture-blocking, to carry
 into the implementation gate's own review):**
+
 1. Make `MESSAGE_UPDATED.source_version` non-empty as well as non-null at both boundaries (the
    architecture used `.min(1)`-style non-emptiness in the scratch validation; ensure the real
    implementation's CHECK/superRefine both enforce non-empty, not merely non-null).
@@ -325,7 +948,7 @@ gate's own `[GPT-ASKED]`-equivalent escape hatch rather than looping on an unrea
 
 **3. G2 synthesis sent, GPT-PM returns `VERDICT: BLOCKER`.** Addressed GPT-PM's own GO-round
 execution constraint first: re-checked `docs/architecture/TDD.md:693-697` (SS14) directly and found
-the binding spec *already names* a `source_version_if_needed` fourth key field that
+the binding spec _already names_ a `source_version_if_needed` fourth key field that
 `packages/contracts/src/event.ts:105-111`'s shipped `idempotencyKey()` never implements -- upgraded
 SS7's third finding from a hypothesis about connector behavior to a verified spec-vs-implementation
 deviation before sending. Sent the full `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md`
@@ -363,7 +986,7 @@ file:line citation independently checkable against this repo):**
 - **BLOCKER, SS3 (attempt-cap remedy): rejects `architect`'s unconditional-claim-then-partition
   fix.** Required semantics instead: the processing failure transaction that pushes
   `attempt_count` to `MAX_PROCESSING_ATTEMPTS` must itself atomically set `ingest_events.state =
-  DLQ` and insert the `dead_letter_events` row in the same transaction -- no separate reconciler
+DLQ` and insert the `dead_letter_events` row in the same transaction -- no separate reconciler
   claim to "discover" an already-exhausted event. Also: distinguish processing-attempt exhaustion
   from queue-dispatch expiry: expiry must not burn processing retry budget.
 - **BLOCKER, new finding, absent from all four agents and from Claude's own audit verification:
@@ -398,7 +1021,7 @@ file:line citation independently checkable against this repo):**
   `edit_date` changes) as corroborating primary-source evidence, independent of this repo.
 - **MAJOR, new defect not in the sent synthesis: `ProvenanceValueSchema` doesn't match the frozen
   TDD's own `ProvenanceValue<T>` shape.** TDD names `value, provenance[], derivation_method,
-  ai_policy, sensitivity, created_at, derivation_version` across strings/numbers/datetimes/booleans/
+ai_policy, sensitivity, created_at, derivation_version` across strings/numbers/datetimes/booleans/
   enums/assignments/aggregates; the shared schema hard-codes `value` to a non-empty string and omits
   `sensitivity`/`created_at`/`derivation_version`. Needs either a generic/discriminated
   implementation matching TDD, or an explicit GPT-PM TDD erratum.
@@ -422,7 +1045,7 @@ under a new plan/GO.
 **Retrospective Rosetta debt for the acts above, and why it stays open.** The session's Stop hook
 flagged (correctly) that steps 1/3/4/6/7/9/10 above ran with no plan of their own -- the only
 approved plan covering this session's work was the pre-existing one this section closes, whose own
-scope was authored (and GO'd) in the *prior* session, before any of today's routing/daemon/close work
+scope was authored (and GO'd) in the _prior_ session, before any of today's routing/daemon/close work
 was known to be needed. Filed a retrospective plan for it
 (`personal-decision-os-2026-09-12T19-54-32-480Z-3d3a29`, hash
 `76b175a85ff8400dafe8c19f1e2e5b902bf2e6cb133085985e0b2a145cee92c5`) and attempted to send its GO
@@ -433,7 +1056,7 @@ own explicit warning that letting it send could deliver this project's content i
 project's chat.** This is the identical failure mode the prior session already hit and declined to
 work around (see the "Conversation re-registered; then this session's own routing code went stale"
 entry above) -- except this time it is not the shared daemon that is stale (a same-session restart
-fixed that transport-level issue earlier today), it is *this specific process's own* loaded routing
+fixed that transport-level issue earlier today), it is _this specific process's own_ loaded routing
 code, which cannot be refreshed from inside the same running session. Declined
 `PM_BRIDGE_BREAK_GLASS_DIRECT` for the same reason as both prior occurrences: a real, mechanically
 detected cross-project-delivery risk, not a routine hiccup.
@@ -461,11 +1084,11 @@ right on all three points:**
 1. **BLOCKER -- a retrospective GO for already-completed work is a category error.** The retrospective
    plan asked GPT-PM to `APPROVE` work whose every act (including committing `c64b6f2`) had already
    happened before the plan was even filed. Rosetta's own contract is Plan -> GO -> Act; a verdict
-   issued now cannot retroactively authorize the past. GPT-PM's own words: *"A verdict now cannot
-   retroactively make already-completed work pre-authorized."* Correct outcome, applied: the plan was
+   issued now cannot retroactively authorize the past. GPT-PM's own words: _"A verdict now cannot
+   retroactively make already-completed work pre-authorized."_ Correct outcome, applied: the plan was
    closed via `pm_rosetta_close(result: "rejected")` -- the documented exit for a plan GPT-PM refuses
-   at GO, needing no evidence, terminal. This decision-log entry itself is the *"retrospective/
-   evidence/deviation record with zero execution authority"* GPT-PM asked for in its place.
+   at GO, needing no evidence, terminal. This decision-log entry itself is the _"retrospective/
+   evidence/deviation record with zero execution authority"_ GPT-PM asked for in its place.
 
 2. **BLOCKER -- the prior plan's `pm_rosetta_close(passed)` evidence overstated its own cleanliness.**
    GPT-PM's point, verified against this repo's own git history and accepted as correct: at the
@@ -473,8 +1096,8 @@ right on all three points:**
    (`personal-decision-os-2026-09-12T17-04-33-609Z-33a708`), the two edits to `core/DECISION_LOG.md`
    and `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md` recording the G2 `BLOCKER` ruling were
    sitting **uncommitted** in the working tree -- they were committed only afterward, as `c64b6f2`,
-   which was chronologically part of *this* (the follow-up/retrospective) plan's own steps, not a
-   declared step of the *original* plan. The prior plan's own declared scope covered sending the
+   which was chronologically part of _this_ (the follow-up/retrospective) plan's own steps, not a
+   declared step of the _original_ plan. The prior plan's own declared scope covered sending the
    synthesis and reading/verifying the reply -- not writing the reply into the decision log. Calling
    that close's evidence "the plan's own two files" therefore blurred which plan those specific edits
    actually belonged to. **Correction, stated plainly: the prior plan's `passed` closure is not
@@ -491,7 +1114,7 @@ right on all three points:**
    (`git stash push --keep-index`, dropped after `git stash pop` succeeded) was recovered from the
    repository's own unreachable-object graph, still present (`git fsck --no-reflog --unreachable`
    listed commit `9c8f9d6dd721b500b614639884f138d9ab750004` -- the exact hash the original `git stash
-   push` reported as dropped). That commit's tree holds the literal pre-close content of all 13
+push` reported as dropped). That commit's tree holds the literal pre-close content of all 13
    files. Comparing it directly against the current `HEAD` (`main` at `197d25b` by the time of this
    entry) across exactly those 13 paths:
 
@@ -526,7 +1149,7 @@ Continuation of the transport-blocker entry below, same session. Operator asked 
    `6aa55285-de40-83eb-8a59-341c5cbd4191` (the conversation registered earlier today, per the
    handoff entry near the top of this log) — renamed/deleted/not in the sidebar.
 2. **Operator supplied a fresh conversation URL** (`https://chatgpt.com/c/6aa59064-c160-83eb-b803-
-   661df349ca22`); re-registered via `pm_project_register` (proper MCP tool, not a hand-edit of
+661df349ca22`); re-registered via `pm_project_register` (proper MCP tool, not a hand-edit of
    pm-bridge's `config/projects.json`). Confirmed: `e2f6b9a4-...` retried and still hit the OLD
    conversation id — its durable job record had already cached the stale `conversationId` at first
    creation, before re-registration, and reusing the same `request_id` reuses that cached binding.
