@@ -179,7 +179,9 @@ CREATE TABLE ingest_event_routing_hints (
   derivation_method TEXT NOT NULL
     CHECK (derivation_method IN ('RULE', 'STATIC_CONFIG', 'PROVIDER_METADATA', 'AI_EXTRACTION')),
   ai_policy TEXT NOT NULL CHECK (ai_policy IN ('ALLOW', 'DENY')),
-  sensitivity TEXT NOT NULL CHECK (length(trim(sensitivity)) > 0),
+  -- MAJOR fix (G2 gate review): matches packages/contracts' MAX_SENSITIVITY_LENGTH (128) at the
+  -- storage boundary, same rationale as `value`'s own CHECK above.
+  sensitivity TEXT NOT NULL CHECK (length(trim(sensitivity)) > 0 AND length(sensitivity) <= 128),
   created_at TEXT NOT NULL,
   derivation_version INTEGER NOT NULL CHECK (derivation_version > 0),
   PRIMARY KEY (event_id, hint_index)

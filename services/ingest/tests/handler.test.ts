@@ -1,3 +1,4 @@
+/* global Request, Headers */
 import { describe, expect, it, vi } from 'vitest';
 import {
   createTestD1,
@@ -221,8 +222,13 @@ describe('handleScheduled', () => {
 
     const result = await handleScheduled(env, '2026-09-13T00:05:00.000Z');
     expect(result.dispatch.dispatched).toEqual([gmailEvent().event_id]);
+    expect(result.sendFailures).toEqual([]);
     expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith({ eventId: gmailEvent().event_id });
+    expect(send).toHaveBeenCalledWith({
+      event_id: gmailEvent().event_id,
+      operation: 'PROCESS_EVENT',
+      schema_version: SCHEMA_VERSION,
+    });
   });
 
   it('reports an empty run when there is nothing due', async () => {
@@ -231,7 +237,30 @@ describe('handleScheduled', () => {
     expect(result).toEqual({
       leaseRecovery: [],
       dispatch: { dispatched: [], budgetExhausted: false },
+      sendFailures: [],
     });
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it('a throwing send() does not abort the rest of the tick, and is reported in sendFailures', async () => {
+    const { env, send } = await setupEnv();
+    send.mockRejectedValueOnce(new Error('queue unavailable'));
+    const secondEventId = 'a3f8a6de-96db-4b53-9a34-6a9f6e6b6a11';
+    const request1 = await signedRequest({ path: '/ingest/gmail', bodyObject: gmailEvent() });
+    await handleIngestRequest(request1, env, NOW);
+    const request2 = await signedRequest({
+      path: '/ingest/gmail',
+      bodyObject: gmailEvent({ event_id: secondEventId, source_event_id: 'msg-def456' }),
+      nonce: 'nonce-2',
+    });
+    await handleIngestRequest(request2, env, NOW);
+
+    const result = await handleScheduled(env, '2026-09-13T00:05:00.000Z');
+    expect(result.dispatch.dispatched.sort()).toEqual(
+      [gmailEvent().event_id, secondEventId].sort(),
+    );
+    expect(result.sendFailures).toHaveLength(1);
+    expect(result.dispatch.dispatched).toContain(result.sendFailures[0]);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });

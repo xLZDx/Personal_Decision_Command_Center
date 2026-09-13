@@ -1,4 +1,5 @@
-import { claimLease, completeProcessing, failProcessing } from '@pdos/domain';
+/* global AbortController, setTimeout, clearTimeout */
+import { claimLease, completeProcessing, failProcessing, renewLease } from '@pdos/domain';
 import type { D1Database } from '@cloudflare/workers-types';
 
 import { noopProcessor, type EventProcessor, type ProcessOutcome } from './processor.js';
@@ -16,6 +17,19 @@ export interface ProcessMessageOptions {
   processorVersion?: string;
   traceId?: string;
   process?: EventProcessor;
+  /** How often to renew the held lease while `process()` is still running. Defaults to half the
+   *  lease duration -- the same margin the claim/renewal design already assumes elsewhere, so a
+   *  single missed tick (a slow renewal call itself) still leaves room for a second attempt before
+   *  the lease actually expires. */
+  heartbeatIntervalMs?: number;
+  /** Called fresh for each heartbeat renewal tick -- defaults to the real clock. Injectable, like
+   *  every other domain function's own `now` parameter, so a long-running-processor test can drive
+   *  a genuinely slow attempt deterministically without a real wall-clock delay. Deliberately NOT
+   *  the same fixed `now` this function's own claim/complete/fail calls use: a heartbeat's entire
+   *  purpose is to reflect ACTUAL elapsed time, so reusing one frozen timestamp across every tick
+   *  would never advance the lease's expiry at all (GPT-PM BLOCKER, G2 gate review: "using a fresh
+   *  clock"). */
+  heartbeatNow?: () => string;
 }
 
 export interface ProcessMessageResult {
@@ -26,6 +40,60 @@ export interface ProcessMessageResult {
 
 function backoffMs(attemptNumber: number): number {
   return Math.min(2 ** attemptNumber * 1000, DEFAULT_BACKOFF_CAP_MS);
+}
+
+/**
+ * Runs `renewLease` on a fixed interval for as long as processing continues, using a FRESH clock
+ * reading on every tick (never the invocation's own frozen `now`) -- GPT-PM BLOCKER, G2 gate
+ * review: `renewLease` existed as a correctly-fenced helper from checkpoint 1 but nothing ever
+ * called it during processing, so ANY attempt genuinely taking longer than the fixed lease TTL
+ * (120s default) -- not a hang, just real I/O latency -- would be wrongly reclaimed by the
+ * stale-lease-recovery sweep while still actively running. Stops scheduling further ticks the
+ * moment a renewal reports the fence lost (a sweep already reclaimed this lease): a lease that is
+ * already gone will not come back by trying again.
+ *
+ * @returns a stop function the caller MUST call once `process()` settles, success or failure alike
+ * (a `finally` block), or the timer would keep firing after this invocation has nothing left to
+ * renew.
+ */
+function startHeartbeat(params: {
+  db: D1Database;
+  eventId: string;
+  token: string;
+  leaseDurationMs: number;
+  intervalMs: number;
+  nowFn: () => string;
+  onLost: () => void;
+}): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const scheduleNext = () => {
+    if (stopped) return;
+    timer = setTimeout(() => {
+      void (async () => {
+        if (stopped) return;
+        const renewed = await renewLease(params.db, {
+          eventId: params.eventId,
+          token: params.token,
+          now: params.nowFn(),
+          leaseDurationMs: params.leaseDurationMs,
+        });
+        if (stopped) return;
+        if (!renewed) {
+          params.onLost();
+          return;
+        }
+        scheduleNext();
+      })();
+    }, params.intervalMs);
+  };
+  scheduleNext();
+
+  return () => {
+    stopped = true;
+    if (timer !== undefined) clearTimeout(timer);
+  };
 }
 
 /**
@@ -45,6 +113,9 @@ export async function processMessage(
   const processorVersion = opts.processorVersion ?? 'processor-v1';
   const traceId = opts.traceId ?? opts.eventId;
   const process = opts.process ?? noopProcessor;
+  const heartbeatIntervalMs =
+    opts.heartbeatIntervalMs ?? Math.max(1000, Math.floor(leaseDurationMs / 2));
+  const heartbeatNow = opts.heartbeatNow ?? (() => new Date().toISOString());
 
   const claim = await claimLease(db, {
     eventId: opts.eventId,
@@ -53,18 +124,36 @@ export async function processMessage(
     now: opts.now,
     processorVersion,
     traceId,
+    maxAttempts,
   });
   if (!claim.claimed) return { claimed: false };
 
+  const leaseLostController = new AbortController();
+  const stopHeartbeat = startHeartbeat({
+    db,
+    eventId: opts.eventId,
+    token: claim.token,
+    leaseDurationMs,
+    intervalMs: heartbeatIntervalMs,
+    nowFn: heartbeatNow,
+    onLost: () => leaseLostController.abort(),
+  });
+
   let outcome: ProcessOutcome;
   try {
-    outcome = await process({ eventId: opts.eventId, attemptNumber: claim.attemptNumber });
+    outcome = await process({
+      eventId: opts.eventId,
+      attemptNumber: claim.attemptNumber,
+      leaseLost: leaseLostController.signal,
+    });
   } catch (error) {
     outcome = {
       outcome: 'RETRYABLE_FAILURE',
       errorClass: error instanceof Error ? error.constructor.name : 'UnknownError',
       errorCode: 'E_PROCESSOR_THREW',
     };
+  } finally {
+    stopHeartbeat();
   }
 
   if (outcome.outcome === 'SUCCESS') {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createTestD1,
   loadG2Schema,
@@ -6,6 +6,7 @@ import {
   seedEvent,
   seedOutbox,
 } from '@pdos/testkit';
+import { recoverStaleLeases } from '@pdos/domain';
 
 import { processMessage } from '../src/handler.js';
 import type { EventProcessor } from '../src/processor.js';
@@ -119,7 +120,10 @@ describe('processMessage', () => {
       attemptCount: 4,
       firstFailedAt: NOW,
     });
-    await seedOutbox(db, 'ev-6', { state: 'RETRY_PENDING' });
+    // DISPATCHED, not RETRY_PENDING: claimLease now requires a claim to correspond to a dispatch
+    // the reconciler actually authorized (GPT-PM BLOCKER, G2 gate review) -- RETRY_PENDING means
+    // still sitting in its backoff window, not yet due for delivery.
+    await seedOutbox(db, 'ev-6', { state: 'DISPATCHED', dispatchedAt: NOW });
 
     const alwaysFail: EventProcessor = async () => ({
       outcome: 'RETRYABLE_FAILURE',
@@ -134,5 +138,142 @@ describe('processMessage', () => {
       process: alwaysFail,
     });
     expect(result).toEqual({ claimed: true, transitioned: true, movedToDlq: true });
+  });
+});
+
+describe('processMessage heartbeat (GPT-PM BLOCKER, G2 gate review)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a healthy heartbeat keeps renewing the lease, so the stale-lease-recovery sweep does not reclaim a genuinely slow-but-alive attempt', async () => {
+    vi.useFakeTimers();
+    const db = await setupAccepted('ev-hb-1');
+
+    // Heartbeat fires every 500ms of (simulated) wall time; each tick reports a fresh timestamp
+    // 500ms further along than the last -- independent of the fake-timer clock, exactly like the
+    // real clock injected by default, just deterministic for this test.
+    let simulatedNowMs = Date.parse(NOW);
+    const heartbeatNow = () => {
+      simulatedNowMs += 500;
+      return new Date(simulatedNowMs).toISOString();
+    };
+
+    let resolveProcessing!: () => void;
+    const stillProcessing = new Promise<void>((resolve) => {
+      resolveProcessing = resolve;
+    });
+    const slowProcessor: EventProcessor = async () => {
+      await stillProcessing;
+      return { outcome: 'SUCCESS' };
+    };
+
+    const resultPromise = processMessage(db, {
+      eventId: 'ev-hb-1',
+      workerId: 'worker-1',
+      now: NOW,
+      leaseDurationMs: 1000,
+      heartbeatIntervalMs: 500,
+      heartbeatNow,
+      process: slowProcessor,
+    });
+
+    // Let 5 heartbeat ticks land (2500ms of renewals) -- well past the ORIGINAL 1000ms lease
+    // duration this attempt started with.
+    for (let i = 0; i < 5; i++) {
+      await vi.advanceTimersByTimeAsync(500);
+    }
+
+    // A sweep running "now" at the point the ORIGINAL (unrenewed) lease would already have
+    // expired must find nothing to reclaim: the heartbeat has kept extending the real expiry.
+    const recovered = await recoverStaleLeases(db, {
+      now: new Date(Date.parse(NOW) + 2500).toISOString(),
+      maxAttempts: 5,
+      batchSize: 10,
+      processorVersion: 'stale-lease-recovery-sweep',
+    });
+    expect(recovered).toEqual([]);
+
+    const midEvent = await db
+      .prepare('SELECT state FROM ingest_events WHERE event_id = ?')
+      .bind('ev-hb-1')
+      .first<{ state: string }>();
+    expect(midEvent?.state).toBe('PROCESSING');
+
+    resolveProcessing();
+    const result = await resultPromise;
+    expect(result).toEqual({ claimed: true, transitioned: true });
+
+    const finalEvent = await db
+      .prepare('SELECT state FROM ingest_events WHERE event_id = ?')
+      .bind('ev-hb-1')
+      .first<{ state: string }>();
+    expect(finalEvent?.state).toBe('PROCESSED');
+  });
+
+  it("a lease reclaimed out from under a still-running attempt fires leaseLost, and the stale worker's eventual completion is a safe no-op", async () => {
+    vi.useFakeTimers();
+    const db = await setupAccepted('ev-hb-2');
+
+    const heartbeatNow = () => new Date(Date.parse(NOW) + 500).toISOString();
+
+    let leaseLostSeen = false;
+    let resolveAborted!: () => void;
+    const abortedSignal = new Promise<void>((resolve) => {
+      resolveAborted = resolve;
+    });
+    // A cooperative processor: it does not finish until the lease is actually lost, mirroring the
+    // real EventProcessor contract this signal exists for (see ClaimedEvent.leaseLost's own doc).
+    const cooperativeProcessor: EventProcessor = (event) =>
+      new Promise((resolve) => {
+        event.leaseLost.addEventListener('abort', () => {
+          leaseLostSeen = true;
+          resolveAborted();
+          resolve({
+            outcome: 'RETRYABLE_FAILURE',
+            errorClass: 'Aborted',
+            errorCode: 'E_LEASE_LOST',
+          });
+        });
+      });
+
+    const resultPromise = processMessage(db, {
+      eventId: 'ev-hb-2',
+      workerId: 'worker-1',
+      now: NOW,
+      leaseDurationMs: 1000,
+      heartbeatIntervalMs: 500,
+      heartbeatNow,
+      process: cooperativeProcessor,
+    });
+
+    // Before the first heartbeat tick fires, a stale-lease sweep reclaims this event out from
+    // under it -- e.g. a genuinely much slower renewal than assumed, or an operator-triggered
+    // recovery. The row is no longer PROCESSING by the time the heartbeat tries to renew it.
+    const recovered = await recoverStaleLeases(db, {
+      now: new Date(Date.parse(NOW) + 1001).toISOString(),
+      maxAttempts: 5,
+      batchSize: 10,
+      processorVersion: 'stale-lease-recovery-sweep',
+    });
+    expect(recovered).toEqual([{ eventId: 'ev-hb-2', outcome: 'RETRYABLE_FAILED' }]);
+
+    // The pending heartbeat tick now fires, finds the fence already lost, and aborts.
+    await vi.advanceTimersByTimeAsync(500);
+    await abortedSignal;
+    expect(leaseLostSeen).toBe(true);
+
+    const result = await resultPromise;
+    // The stale worker's own eventual completion is a safe no-op: `failProcessing`'s token fence
+    // no longer matches (the sweep already moved the event to RETRYABLE_FAILED under a cleared
+    // token), so this must report transitioned: false, never silently "succeed" over the sweep's
+    // own resolution.
+    expect(result).toEqual({ claimed: true, transitioned: false, movedToDlq: false });
+
+    const event = await db
+      .prepare('SELECT state FROM ingest_events WHERE event_id = ?')
+      .bind('ev-hb-2')
+      .first<{ state: string }>();
+    expect(event?.state).toBe('RETRYABLE_FAILED');
   });
 });

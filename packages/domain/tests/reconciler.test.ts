@@ -23,6 +23,7 @@ describe('reconcileDispatch', () => {
       cap: 2500,
       maxAttempts: 5,
       batchSize: 25,
+      redispatchTimeoutMs: 300_000,
     });
     expect(result).toEqual({ dispatched: ['ev-1'], budgetExhausted: false });
 
@@ -72,6 +73,7 @@ describe('reconcileDispatch', () => {
       cap: 2500,
       maxAttempts: 5,
       batchSize: 25,
+      redispatchTimeoutMs: 300_000,
     });
     expect(result).toEqual({ dispatched: [], budgetExhausted: false });
   });
@@ -92,6 +94,7 @@ describe('reconcileDispatch', () => {
       cap: 3,
       maxAttempts: 5,
       batchSize: 25,
+      redispatchTimeoutMs: 300_000,
     });
     // 1 slot remained (2 already reserved out of cap 3) -- exactly one of the three candidates
     // dispatches, the rest are deferred, and the loop reports the cycle as budget-exhausted.
@@ -120,6 +123,7 @@ describe('reconcileDispatch', () => {
         cap: 2500,
         maxAttempts: 5,
         batchSize: 25,
+        redispatchTimeoutMs: 300_000,
       });
 
     // Two "overlapping" invocations against the SAME candidate -- before the fix, both matched the
@@ -162,6 +166,53 @@ describe('reconcileDispatch', () => {
       .bind('ev-dispatched')
       .first<{ state: string }>();
     expect(outbox?.state).toBe('DISPATCHED');
+  });
+
+  it('BLOCKER regression (G2 gate review): a DISPATCHED row a Queue send() never delivered (or a message Cloudflare silently dropped) becomes eligible for redispatch once redispatchTimeoutMs has elapsed, with dispatch_count fenced to the observed value', async () => {
+    const db = createTestD1(loadG2Schema());
+    const accounts = await seedBaselineAccounts(db);
+    await seedEvent(db, accounts, { eventId: 'ev-lost-send', state: 'ACCEPTED' });
+    await seedOutbox(db, 'ev-lost-send', {
+      state: 'DISPATCHED',
+      dispatchCount: 1,
+      dispatchedAt: '2026-09-13T00:00:00.000Z',
+      nextAttemptAt: '2026-09-13T00:05:00.000Z',
+    });
+
+    // Still within the redispatch window: not yet due.
+    const tooSoon = await reconcileDispatch(db, {
+      now: '2026-09-13T00:04:00.000Z',
+      day: '2026-09-13',
+      cap: 2500,
+      maxAttempts: 5,
+      batchSize: 25,
+      redispatchTimeoutMs: 300_000,
+    });
+    expect(tooSoon.dispatched).toEqual([]);
+
+    // Past the redispatch window: the reconciler treats the original dispatch as lost and issues a
+    // fresh one, incrementing dispatch_count and advancing next_attempt_at again -- this is how the
+    // pipeline eventually reaches PROCESSED even after a Queue.send() that threw post-D1-transition
+    // or a message Cloudflare otherwise never delivered.
+    const due = await reconcileDispatch(db, {
+      now: '2026-09-13T00:05:01.000Z',
+      day: '2026-09-13',
+      cap: 2500,
+      maxAttempts: 5,
+      batchSize: 25,
+      redispatchTimeoutMs: 300_000,
+    });
+    expect(due.dispatched).toEqual(['ev-lost-send']);
+
+    const outbox = await db
+      .prepare(
+        'SELECT state, dispatch_count, next_attempt_at FROM processing_outbox WHERE event_id = ?',
+      )
+      .bind('ev-lost-send')
+      .first<{ state: string; dispatch_count: number; next_attempt_at: string }>();
+    expect(outbox?.state).toBe('DISPATCHED');
+    expect(outbox?.dispatch_count).toBe(2);
+    expect(outbox?.next_attempt_at).toBe('2026-09-13T00:10:01.000Z');
   });
 });
 

@@ -6,6 +6,7 @@ export {
   AI_POLICIES,
   AiPolicySchema,
   SensitivitySchema,
+  MAX_SENSITIVITY_LENGTH,
   provenanceValueSchema,
   enumProvenanceValueSchema,
   StringProvenanceValueSchema,

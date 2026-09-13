@@ -3,6 +3,130 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G2 implementation, checkpoint 4: GPT-PM gate review round 1 (5 BLOCKER + 10 MAJOR),
+one-sweep remediation batch, 328 tests, all green
+
+**Context.** Checkpoint 3's diff (269,544 chars, under `review.js`'s `MAX_DIFF_CHARS` truncation
+limit) went to GPT-PM for the gate-level review §17 requires before a gate can close, with a scope
+note (`--scope-note-file`) bounding the review to this gate's own invariants. GPT-PM returned
+`VERDICT: BLOCKER` with 5 BLOCKER + 10 MAJOR findings. Every finding was verified against the
+actual source (file:line, not GPT-PM's characterization) before remediation, per §3/§23. All were
+confirmed real. Remediated as one batch, per §17.
+
+**BLOCKERs, verified and fixed:**
+- **Manifest-scope violations.** `.gitignore`, `eslint.config.js`, and `tests/schema/**` were
+  touched by checkpoint 3 outside `governance/gate-manifests/g2.yaml`'s own `allowed_paths` —
+  confirmed by direct read of the manifest, not GPT-PM's say-so. Reverted `.gitignore` and
+  `eslint.config.js` to byte-identical with base commit `714874f` (confirmed via empty `git diff`);
+  moved `tests/schema/0001_ingest_outbox.test.ts` to `tests/contract/0001_ingest_outbox.test.ts`
+  (an allowed path) via `git mv`, no content change needed. Per-file `/* global ... */` ESLint
+  directives (7 files) replace what the reverted `eslint.config.js` had tried to solve via config
+  changes — `no-undef`'s flat-config behavior respects file-level directives identically.
+- **`package-lock.json` missing the `services/processor` workspace.** Confirmed via direct
+  inspection: no `node_modules/@pdos/processor-service` resolution block existed. Regenerated via
+  `npm install` at the repo root; reproducibility verified via an isolated `npm ci` against a
+  skeleton copy in the session scratchpad (never touching the shared live checkout's own
+  `node_modules`, per this workspace's concurrent-sessions convention).
+- **Reconciler never redispatches a DISPATCHED-but-lost message.** The root cause was pre-existing,
+  not introduced by checkpoint 3: `next_attempt_at` was never advanced on a successful dispatch, so
+  under the ORIGINAL code a DISPATCHED-but-unclaimed row would be re-selected and re-dispatched on
+  literally every cron tick (double-dispatch), while checkpoint 3's own CAS-scope fix (restricting
+  dispatch to `PENDING`/`RETRY_PENDING`/`BUDGET_DEFERRED`) accidentally suppressed that symptom by
+  introducing the opposite defect: a genuinely lost dispatch would never redispatch at all. Fixed
+  both at once in `reconciler.ts`: every dispatch now sets `next_attempt_at = now +
+  REDISPATCH_TIMEOUT_MS`, and a new CAS branch redispatches a due DISPATCHED row fenced on the
+  OBSERVED `dispatch_count`. `REDISPATCH_TIMEOUT_MS` added as a runtime var
+  (`infra/cloudflare/ingest.wrangler.toml`). Regression test added proving a lost dispatch becomes
+  redispatch-eligible past the timeout, with `dispatch_count` incrementing correctly.
+- **`claimLease` had no defense against a delayed/duplicate Queue redelivery.** Cloudflare Queues'
+  at-least-once semantics can redeliver a message for an event now sitting in its `RETRY_PENDING`
+  backoff window, or already at the attempt cap — neither case was checked. Fixed by requiring
+  `processing_outbox.state = 'DISPATCHED'` (ties a claim to a delivery the reconciler actually just
+  authorized) and `processing_attempt_count < maxAttempts` (independent backstop) in `claimLease`'s
+  own fenced UPDATE. Two regression tests added (`packages/domain/tests/lease.test.ts`): a
+  delayed-duplicate cannot claim while RETRY_PENDING; a duplicate cannot claim once at cap even with
+  a DISPATCHED row.
+- **Heartbeat/renewal existed but was never wired into live processing.** `renewLease` was a
+  correctly-fenced helper from checkpoint 1 that nothing ever called during an actual processing
+  attempt — any attempt genuinely exceeding the fixed lease TTL (real I/O latency, not a hang) would
+  be wrongly reclaimed by `recoverStaleLeases` while still alive. Fixed: `processMessage`
+  (`services/processor/src/handler.ts`) now runs a self-rescheduling `setTimeout`-based heartbeat
+  for the full duration `process()` runs, using a FRESH clock reading per tick (never the frozen
+  `now` param). `ClaimedEvent` gained a `leaseLost: AbortSignal` so a cooperative processor can
+  abandon further external work once a renewal reports the fence already lost — the D1 layer stays
+  safe regardless (`completeProcessing`/`failProcessing` are token-fenced). Two regression tests
+  added (`services/processor/tests/handler.test.ts`, using injectable `heartbeatNow` + Vitest fake
+  timers): a healthy heartbeat prevents sweep reclamation of a slow-but-alive attempt; a lease
+  reclaimed out from under a running attempt fires `leaseLost` and the stale worker's eventual
+  completion safely reports `transitioned: false`.
+
+**MAJORs, verified and fixed (selected — full list in the round-1 receipt):**
+- `packages/domain/src/ingest.ts`'s INSERT never populated `source_thread_id` despite the column
+  existing and `NormalizedEvent` carrying it. Fixed; regression test added.
+- `lookupSigningKeyStatus` fell through to `'VALID'` for a malformed `valid_from`/`valid_until`
+  (`Date.parse` returns `NaN`, which fails every comparison silently) — fail-open on corrupted
+  timestamp data. Fixed with explicit `Number.isNaN()` checks, returning `'UNKNOWN'`. Two regression
+  tests added.
+- `cleanupExpiredNonces` purged at `1×windowMs`, but `isTimestampWithinWindow`'s symmetric
+  `abs(now - signedTimestamp) <= windowMs` check tolerates a signed timestamp up to `windowMs`
+  ahead of server-now, so the real acceptance interval extends to `2×windowMs` after reservation —
+  opening a replay window between the two. Fixed to purge at `2×windowMs`. Regression test added at
+  the 1.5×-window boundary.
+- `services/ingest/src/handler.ts` read/hashed/buffered the full request body BEFORE any
+  authentication check ran, letting an unauthenticated-looking caller force CPU/memory spend on an
+  arbitrarily large body. Split `authenticateIngestRequest` into `checkKeyAndTimestamp` (no body
+  needed) and `checkSignatureAndNonce` (body-dependent); the handler now runs the cheap check first,
+  then reads the body through a new byte-capped `readBodyWithLimit` (413 on overflow), then the
+  expensive check.
+- `packages/contracts/src/queue.ts`'s `QueuePayloadSchema` existed from an earlier gate but neither
+  side of the Queue adopted it — both `services/ingest` and `services/processor` used an ad hoc
+  `{eventId}` shape with no runtime validation on the consumer side. Adopted on both sides;
+  `services/processor`'s consumer now `safeParse`s every inbound message and acks-and-skips one that
+  fails the contract (D1 remains the source of truth, so nothing is lost). Regression test added
+  proving a non-conforming message is skipped without touching D1.
+- `services/ingest/src/handler.ts`'s scheduled handler awaited each `INGEST_QUEUE.send()` with no
+  try/catch — one throwing send would abort every remaining dispatch in that tick. Fixed: each send
+  wrapped individually, failures collected in a new `sendFailures` array rather than propagating.
+  Regression test added.
+- `handleScheduled` never called `cleanupExpiredNonces` — wired in, run last, after dispatch.
+- `SensitivitySchema` (`packages/contracts/src/provenance.ts`) was `z.string().min(1)`: accepted a
+  whitespace-only string, and had no upper bound. Fixed with the same non-mutating trimmed-nonempty
+  predicate `SourceVersionSchema` already established, plus a 128-char ceiling
+  (`MAX_SENSITIVITY_LENGTH`), matching the DB CHECK added to `ingest_event_routing_hints.sensitivity`
+  in the same migration. Three regression tests added.
+
+**Also added this checkpoint, closing gaps in the gate's own DoD (TDD §35/§71), not GPT-PM findings:**
+- `packages/domain/src/metrics.ts`: `getOldestUnprocessedEvent` — the "oldest accepted-unprocessed
+  metric exists" line item, querying `ingest_events` for the oldest non-terminal row. Two tests.
+- `core/adr/ADR-006-durable-ingest-outbox.md`: an addendum (not a rewrite, per that ADR's own
+  amendment convention) documenting the `CLOSED` terminal outbox state, the
+  `dispatch_count`/`processing_attempt_count` split, the redispatch protocol, the heartbeat
+  protocol, and the adopted Queue wire contract — none of which the original decision recorded.
+- `tests/quota/budget.test.ts`: an end-to-end 200-event and 1000-event simulation running the REAL
+  `handleIngestRequest` → `handleScheduled` (looped to drain, matching production's per-minute
+  cron/`RECONCILER_BATCH_SIZE` behavior) → the real Queue consumer, counting actual D1 statement
+  executions (reads vs. writes, classified by leading SQL keyword — explicitly documented as an
+  operation-count estimate, not Cloudflare's row-based billing unit, since the test D1 shim never
+  populates `rows_read`), Queue sends, and HTTP requests, all per-event. `Analytics
+  datapoints/event` reported honestly as 0 (G2 has no Analytics Engine binding in scope — not
+  estimated, not invented).
+
+**Verification:** `npx tsc --build --force`, `npx eslint .` both clean repo-wide; `npx prettier
+--check .` clean for every file this checkpoint touched (the same 6 pre-existing, untouched
+governance/ADR/plan documents from earlier checkpoints remain non-conforming, confirmed unchanged);
+full `npx vitest run` — 328/328 passing across the whole repo (21 new this checkpoint: 2 lease
+BLOCKER-3 regressions, 1 redispatch BLOCKER-2 regression, 2 heartbeat BLOCKER-4 regressions, 1
+ingest source_thread_id regression, 2 signing-key fail-closed regressions, 1 nonce-window
+regression, 1 throwing-send regression, 1 malformed-Queue-message regression, 3 sensitivity
+regressions, 2 metrics tests, 3 budget-simulation tests, plus the pre-existing 307 from checkpoint
+3). Manifest scope re-verified by hand against `governance/gate-manifests/g2.yaml`'s own
+`allowed_paths`/`forbidden_paths` for every changed path (the mechanical checker
+`scripts/verify/check-gate-scope.mjs` needs committed `BASE_SHA`/`HEAD_SHA` refs, so this was cross-
+checked directly against the manifest text pending the actual commit).
+
+**Not yet done:** GPT-PM round 2 (verification of this remediation, per §17 — nothing else in
+scope unless a genuine regression from this batch surfaces).
+
 ## 2026-09-13 — G2 implementation, checkpoint 3: internal specialist review (database/security/
 type-design), one-sweep remediation batch, 315 tests, all green
 

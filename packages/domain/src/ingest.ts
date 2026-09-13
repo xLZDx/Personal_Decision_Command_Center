@@ -25,17 +25,18 @@ export async function ingestEvent(db: D1Database, event: NormalizedEvent): Promi
     db
       .prepare(
         `INSERT INTO ingest_events
-          (event_id, source, source_account_id, source_event_id, event_type, direction,
-           occurred_at, received_at, content_locator_ref, source_policy_id, trace_id,
+          (event_id, source, source_account_id, source_event_id, source_thread_id, event_type,
+           direction, occurred_at, received_at, content_locator_ref, source_policy_id, trace_id,
            schema_version, source_version, idempotency_key, state,
            processing_attempt_count, created_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ACCEPTED',0,?)`,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ACCEPTED',0,?)`,
       )
       .bind(
         event.event_id,
         event.source,
         event.source_account_id,
         event.source_event_id,
+        event.source_thread_id,
         event.event_type,
         event.direction,
         event.occurred_at,

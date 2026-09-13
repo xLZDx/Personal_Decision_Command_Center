@@ -239,7 +239,8 @@ describe('ProvenanceValue', () => {
   });
 
   it('rejects a missing sensitivity (M5: required, non-optional)', () => {
-    const { sensitivity: _sensitivity, ...withoutSensitivity } = allowHint;
+    const withoutSensitivity: Partial<typeof allowHint> = { ...allowHint };
+    delete withoutSensitivity.sensitivity;
     expect(ProvenanceValueSchema.safeParse(withoutSensitivity).success).toBe(false);
   });
 
@@ -247,10 +248,30 @@ describe('ProvenanceValue', () => {
     expect(ProvenanceValueSchema.safeParse({ ...allowHint, sensitivity: '' }).success).toBe(false);
   });
 
+  it('rejects a whitespace-only sensitivity string without mutating it (G2 gate review MAJOR)', () => {
+    const result = ProvenanceValueSchema.safeParse({ ...allowHint, sensitivity: '   ' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a sensitivity string over MAX_SENSITIVITY_LENGTH (G2 gate review MAJOR)', () => {
+    const tooLong = 'x'.repeat(129);
+    const result = ProvenanceValueSchema.safeParse({ ...allowHint, sensitivity: tooLong });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a sensitivity string exactly at MAX_SENSITIVITY_LENGTH, unmutated', () => {
+    const atLimit = 'x'.repeat(128);
+    const result = ProvenanceValueSchema.safeParse({ ...allowHint, sensitivity: atLimit });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.sensitivity).toBe(atLimit);
+  });
+
   it('rejects a missing created_at or derivation_version', () => {
-    const { created_at: _createdAt, ...withoutCreatedAt } = allowHint;
+    const withoutCreatedAt: Partial<typeof allowHint> = { ...allowHint };
+    delete withoutCreatedAt.created_at;
     expect(ProvenanceValueSchema.safeParse(withoutCreatedAt).success).toBe(false);
-    const { derivation_version: _dv, ...withoutDerivationVersion } = allowHint;
+    const withoutDerivationVersion: Partial<typeof allowHint> = { ...allowHint };
+    delete withoutDerivationVersion.derivation_version;
     expect(ProvenanceValueSchema.safeParse(withoutDerivationVersion).success).toBe(false);
   });
 

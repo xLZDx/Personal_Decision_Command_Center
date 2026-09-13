@@ -1,3 +1,9 @@
+/* global crypto, TextEncoder */
+// Web Platform APIs ambient under both Node (tests) and the Cloudflare Workers runtime
+// (production) -- no import needed either way. eslint.config.js has no runtime-globals
+// declaration for this gate's own manifest scope (governance/gate-manifests/g2.yaml does not
+// list eslint.config.js among G2's allowed_paths), hence the per-file directive instead of a
+// shared config block.
 const encoder = new TextEncoder();
 
 function toHex(bytes: ArrayBuffer): string {

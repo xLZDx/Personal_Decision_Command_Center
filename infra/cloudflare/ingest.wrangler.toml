@@ -41,3 +41,6 @@ MAX_PROCESSING_ATTEMPTS = "5"
 RECONCILER_BATCH_SIZE = "25"
 LEASE_RECOVERY_BATCH_SIZE = "25"
 HMAC_TIMESTAMP_WINDOW_MS = "300000"
+# How long a DISPATCHED-but-unclaimed outbox row waits before it is treated as lost and becomes
+# eligible for a fresh, dispatch_count-fenced redispatch attempt (packages/domain/src/reconciler.ts).
+REDISPATCH_TIMEOUT_MS = "300000"

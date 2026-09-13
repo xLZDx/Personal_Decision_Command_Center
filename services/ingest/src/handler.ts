@@ -1,7 +1,10 @@
+/* global Request, Response, URL, TextDecoder */
 import {
   HARD_BUDGET_CEILING,
-  authenticateIngestRequest,
   canonicalSigningPayload,
+  checkKeyAndTimestamp,
+  checkSignatureAndNonce,
+  cleanupExpiredNonces,
   ingestEvent,
   reconcileDispatch,
   recoverStaleLeases,
@@ -9,7 +12,7 @@ import {
   type RecoveredLease,
   type ReconcileDispatchResult,
 } from '@pdos/domain';
-import { NormalizedEventSchema } from '@pdos/contracts';
+import { NormalizedEventSchema, SCHEMA_VERSION, type QueuePayload } from '@pdos/contracts';
 
 import { resolveSecret, type IngestEnv } from './env.js';
 
@@ -25,6 +28,18 @@ const DEFAULT_MAX_PROCESSING_ATTEMPTS = 5;
 const DEFAULT_RECONCILER_BATCH_SIZE = 25;
 const DEFAULT_LEASE_RECOVERY_BATCH_SIZE = 25;
 const DEFAULT_HMAC_TIMESTAMP_WINDOW_MS = 5 * 60_000;
+/** `reconcileDispatch`'s own redispatch-due window: how long a DISPATCHED-but-unclaimed outbox row
+ *  waits before it is treated as lost and becomes eligible for redispatch (a new `dispatch_count`-
+ *  fenced attempt), not "how long a Queue message may sit before Cloudflare drops it" -- see
+ *  `reconciler.ts`'s own doc comment for why this must be tracked independently of the Queue's own
+ *  retention. */
+const DEFAULT_REDISPATCH_TIMEOUT_MS = 5 * 60_000;
+/** Ingest events carry a pointer, never source content (INV-11/INV-12, ADR-004) -- a genuine
+ *  request body is a handful of short fields and stays well under this. The cap bounds how much a
+ *  caller that has already cleared the cheap key/timestamp check (see `checkKeyAndTimestamp`, run
+ *  BEFORE any body read below) can still force this Worker to buffer for the body-dependent
+ *  signature check -- a caller that fails the cheap check never reaches this read at all. */
+const MAX_INGEST_BODY_BYTES = 64 * 1024;
 
 const INGEST_PATH_RE = /^\/ingest\/(gmail|telegram)$/;
 
@@ -44,6 +59,44 @@ function jsonResponse(status: number, body: unknown): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+/**
+ * Reads `request.body` as text, aborting as soon as the accumulated byte count exceeds `maxBytes`
+ * -- never buffering more than one chunk past the limit. Security fix (G2 gate review MAJOR): the
+ * previous `await request.text()` fully buffered an arbitrarily large body before ANY check ran
+ * against it, so a caller presenting syntactically valid but bogus auth headers could still force
+ * this Worker to spend CPU/memory buffering a huge body for a request that was always going to be
+ * rejected. Called only AFTER `checkKeyAndTimestamp` has already passed.
+ */
+async function readBodyWithLimit(
+  request: Request,
+  maxBytes: number,
+): Promise<{ ok: true; text: string } | { ok: false }> {
+  const body = request.body;
+  if (!body) return { ok: true, text: '' };
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return { ok: false };
+    }
+    chunks.push(value);
+  }
+
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, text: new TextDecoder().decode(combined) };
 }
 
 /**
@@ -80,7 +133,25 @@ export async function handleIngestRequest(
     return jsonResponse(401, { error: 'INVALID_KEY_VERSION' });
   }
 
-  const bodyText = await request.text();
+  const timestampWindowMs = Number(
+    env.HMAC_TIMESTAMP_WINDOW_MS ?? DEFAULT_HMAC_TIMESTAMP_WINDOW_MS,
+  );
+  // Cheap half first (security fix, G2 gate review MAJOR): key status + timestamp window need no
+  // body at all, so a caller with syntactically valid but bogus/expired auth is rejected before
+  // this Worker ever reads, buffers, or hashes a potentially-large body.
+  const preBodyResult = await checkKeyAndTimestamp(env.DB, {
+    connectorId,
+    keyVersion,
+    timestamp,
+    now,
+    timestampWindowMs,
+  });
+  if (!preBodyResult.ok) return jsonResponse(401, { error: preBodyResult.reason });
+
+  const bodyRead = await readBodyWithLimit(request, MAX_INGEST_BODY_BYTES);
+  if (!bodyRead.ok) return jsonResponse(413, { error: 'BODY_TOO_LARGE' });
+  const bodyText = bodyRead.text;
+
   const bodyHash = await sha256Hex(bodyText);
   const payload = canonicalSigningPayload({
     method: request.method,
@@ -93,16 +164,14 @@ export async function handleIngestRequest(
   const secret = resolveSecret(env, { connectorId, keyVersion });
   if (!secret) return jsonResponse(401, { error: 'UNKNOWN_KEY' });
 
-  const authResult = await authenticateIngestRequest(env.DB, {
+  const authResult = await checkSignatureAndNonce(env.DB, {
     connectorId,
     keyVersion,
     secret,
-    timestamp,
     nonce,
     signatureHex,
     payload,
     now,
-    timestampWindowMs: Number(env.HMAC_TIMESTAMP_WINDOW_MS ?? DEFAULT_HMAC_TIMESTAMP_WINDOW_MS),
   });
   if (!authResult.ok) return jsonResponse(401, { error: authResult.reason });
 
@@ -138,6 +207,12 @@ export async function handleIngestRequest(
 export interface ScheduledRunResult {
   leaseRecovery: RecoveredLease[];
   dispatch: ReconcileDispatchResult;
+  /** event_ids `reconcileDispatch` marked DISPATCHED for which `INGEST_QUEUE.send()` itself threw.
+   *  Never re-thrown (see the loop below) -- the D1 dispatch transition already happened and is the
+   *  source of truth; a send failure here just means this event waits for the NEXT scheduled tick's
+   *  redispatch-due window rather than getting an immediate retry, exactly like a message Cloudflare
+   *  silently dropped in transit. */
+  sendFailures: string[];
 }
 
 /**
@@ -146,7 +221,8 @@ export interface ScheduledRunResult {
  * RETRYABLE_FAILED is immediately eligible for Phase 2's own due-query, not stranded an extra
  * cron tick. Queue sends happen ONLY for event_ids `reconcileDispatch` already marked DISPATCHED
  * (budget reserved, outbox updated) -- never before, which is the HARD_ZERO fix `reconciler.ts`
- * documents.
+ * documents. Nonce cleanup runs last: it is unrelated to dispatch and must never block or fail this
+ * tick's actual work.
  */
 export async function handleScheduled(
   env: IngestEnv,
@@ -169,11 +245,30 @@ export async function handleScheduled(
     cap,
     maxAttempts,
     batchSize: Number(env.RECONCILER_BATCH_SIZE ?? DEFAULT_RECONCILER_BATCH_SIZE),
+    redispatchTimeoutMs: Number(env.REDISPATCH_TIMEOUT_MS ?? DEFAULT_REDISPATCH_TIMEOUT_MS),
   });
 
+  // MAJOR fix (G2 gate review): one throwing send() must not abort the rest of this tick's
+  // dispatches -- each event already committed its own DISPATCHED transition independently in D1,
+  // so a Queue outage partway through must not strand every event AFTER the failing one as well.
+  const sendFailures: string[] = [];
   for (const eventId of dispatch.dispatched) {
-    await env.INGEST_QUEUE.send({ eventId });
+    const message: QueuePayload = {
+      event_id: eventId,
+      operation: 'PROCESS_EVENT',
+      schema_version: SCHEMA_VERSION,
+    };
+    try {
+      await env.INGEST_QUEUE.send(message);
+    } catch {
+      sendFailures.push(eventId);
+    }
   }
 
-  return { leaseRecovery, dispatch };
+  await cleanupExpiredNonces(env.DB, {
+    now,
+    windowMs: Number(env.HMAC_TIMESTAMP_WINDOW_MS ?? DEFAULT_HMAC_TIMESTAMP_WINDOW_MS),
+  });
+
+  return { leaseRecovery, dispatch, sendFailures };
 }

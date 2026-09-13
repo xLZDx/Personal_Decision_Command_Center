@@ -48,6 +48,16 @@ export interface FailureContext {
   errorCode: string;
   processorVersion: string;
   traceId: string;
+  /**
+   * The ACTUAL terminal cause -- GPT-PM MAJOR, G2 gate review: this primitive is shared by the live
+   * processor's own genuine PERMANENT_FAILURE outcome AND by a RETRYABLE_FAILURE that merely hit
+   * the attempt cap (this call's own `shouldMoveToDlq` predicate) or a stale-lease expiry (the
+   * sweep's own synthetic classification) -- three distinct real causes that all end in the SAME
+   * `ingest_events.state = 'DLQ'`, but are not the same event for operational/incident-diagnosis
+   * purposes. The `processing_attempts` audit row must record which one actually happened, not a
+   * single hardcoded label that erases the distinction for every DLQ arrival.
+   */
+  terminalOutcome: 'RETRYABLE_FAILURE' | 'PERMANENT_FAILURE';
 }
 
 /**
@@ -110,13 +120,13 @@ export async function moveToDlq(db: D1Database, ctx: FailureContext): Promise<bo
       ),
     db
       .prepare(
-        `UPDATE processing_attempts SET finished_at = ?, outcome = 'PERMANENT_FAILURE',
+        `UPDATE processing_attempts SET finished_at = ?, outcome = ?,
            error_class = ?, error_code = ?
          WHERE event_id = ?
            AND attempt_number = (SELECT processing_attempt_count FROM ingest_events WHERE event_id = ?)
            AND finished_at IS NULL`,
       )
-      .bind(ctx.now, ctx.errorClass, ctx.errorCode, ctx.eventId, ctx.eventId),
+      .bind(ctx.now, ctx.terminalOutcome, ctx.errorClass, ctx.errorCode, ctx.eventId, ctx.eventId),
   ]);
   const first = results[0];
   return first !== undefined && first.meta.changes === 1;
@@ -135,33 +145,54 @@ export interface RetryableFailureContext {
  * Moves an event back to RETRYABLE_FAILED (below the attempt cap) -- shared by the live processor
  * and the stale-lease-recovery sweep, same shape as `moveToDlq` but with no durable side-table
  * write, since a non-terminal outcome needs no operational record beyond the state itself.
+ *
+ * Structurally DIFFERENT from `moveToDlq` in one deliberate way (GPT-PM MAJOR, G2 gate review):
+ * the fenced `ingest_events` transition runs FIRST, alone, and its own `meta.changes` is checked
+ * BEFORE the outbox/audit statements are even issued -- a LOSER returns `false` immediately,
+ * touching nothing else. `moveToDlq` can safely batch all four statements together because every
+ * concurrent DLQ caller writes an equivalent terminal outcome (the outbox CLOSE is idempotent, and
+ * the `dead_letter_events` INSERT's own `NOT EXISTS` guard makes it "first writer wins," so a loser
+ * clobbering nothing DLQ-specific). This function cannot rely on the same idempotency: its outbox
+ * UPDATE carries a caller-specific `nextAttemptAt` (a live processor's real per-attempt backoff vs.
+ * the sweep's own "retry immediately"), which VARIES between callers. Batching it behind only a
+ * "current state is RETRYABLE_FAILED" guard (as the DLQ primitive's own siblings do) let a LOSING
+ * caller's statement still match and overwrite the WINNING caller's chosen `nextAttemptAt` --
+ * concretely: live processor wins, sets a real backoff; the stale sweep's own batch runs next,
+ * its statement 1 loses the fence (0 rows) but its outbox statement still matched "state is
+ * RETRYABLE_FAILED" and clobbered the winner's backoff with the sweep's own `now`. Checking the
+ * transition's own result before ever building the follow-up statements closes that: once
+ * `ingest_events.state` is no longer 'PROCESSING', no OTHER caller of this same function can still
+ * be "in the running" for it (their own statement 1 would need `state = 'PROCESSING'`, no longer
+ * true), so the outbox/audit statements below only ever run for the confirmed, sole winner.
  */
 export async function moveToRetryableFailed(
   db: D1Database,
   ctx: RetryableFailureContext,
 ): Promise<boolean> {
   const { sql: fenceSql, params: fenceParams } = fenceClause(ctx.fence);
-  const results = await db.batch([
+  const transition = await db
+    .prepare(
+      `UPDATE ingest_events SET state = 'RETRYABLE_FAILED',
+         first_failed_at = COALESCE(first_failed_at, ?),
+         processing_lease_owner = NULL, processing_lease_token = NULL, processing_lease_expires_at = NULL
+       WHERE event_id = ? AND state = 'PROCESSING' AND ${fenceSql}`,
+    )
+    .bind(ctx.now, ctx.eventId, ...fenceParams)
+    .run();
+  if (transition.meta.changes !== 1) return false;
+
+  await db.batch([
     db
       .prepare(
-        `UPDATE ingest_events SET state = 'RETRYABLE_FAILED',
-           first_failed_at = COALESCE(first_failed_at, ?),
-           processing_lease_owner = NULL, processing_lease_token = NULL, processing_lease_expires_at = NULL
-         WHERE event_id = ? AND state = 'PROCESSING' AND ${fenceSql}`,
-      )
-      .bind(ctx.now, ctx.eventId, ...fenceParams),
-    db
-      .prepare(
-        // Guarded on state <> 'CLOSED' for defense-in-depth consistency with every sibling
-        // terminal-transition statement in this file (moveToDlq's own outbox close, and
-        // completeProcessing's in lease.ts) -- database review, G2: unreachable today given the
-        // current call graph, but a future replay/re-open path must not silently reopen a CLOSED
-        // outbox row.
+        // No longer needs to re-verify ingest_events' own state (the standalone transition above
+        // already proved THIS call won it, and no concurrent caller of this function can still be
+        // racing for the same event once state has left PROCESSING) -- state <> 'CLOSED' remains
+        // for defense-in-depth consistency with every sibling terminal-transition statement in this
+        // file, against an unrelated code path closing the outbox in the same narrow window.
         `UPDATE processing_outbox SET state = 'RETRY_PENDING', next_attempt_at = ?, updated_at = ?
-         WHERE event_id = ? AND state <> 'CLOSED'
-           AND EXISTS (SELECT 1 FROM ingest_events e WHERE e.event_id = ? AND e.state = 'RETRYABLE_FAILED')`,
+         WHERE event_id = ? AND state <> 'CLOSED'`,
       )
-      .bind(ctx.nextAttemptAt, ctx.now, ctx.eventId, ctx.eventId),
+      .bind(ctx.nextAttemptAt, ctx.now, ctx.eventId),
     db
       .prepare(
         `UPDATE processing_attempts SET finished_at = ?, outcome = 'RETRYABLE_FAILURE',
@@ -172,6 +203,5 @@ export async function moveToRetryableFailed(
       )
       .bind(ctx.now, ctx.errorClass, ctx.errorCode, ctx.eventId, ctx.eventId),
   ]);
-  const first = results[0];
-  return first !== undefined && first.meta.changes === 1;
+  return true;
 }

@@ -59,6 +59,18 @@ describe('ingestEvent', () => {
     expect(outbox).toEqual({ state: 'PENDING' });
   });
 
+  it('MAJOR regression (G2 gate review): persists a non-null source_thread_id, not silently discarding it', async () => {
+    const { db, accounts } = await setup();
+    const event = buildEvent(accounts, { source_thread_id: 'thread-xyz-789' });
+    await ingestEvent(db, event);
+
+    const row = await db
+      .prepare('SELECT source_thread_id FROM ingest_events WHERE event_id = ?')
+      .bind(event.event_id)
+      .first<{ source_thread_id: string | null }>();
+    expect(row?.source_thread_id).toBe('thread-xyz-789');
+  });
+
   it('is idempotent: a duplicate submission (same idempotency key) is a no-op, not an error', async () => {
     const { db, accounts } = await setup();
     const first = await ingestEvent(db, buildEvent(accounts));

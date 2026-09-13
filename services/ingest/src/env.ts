@@ -1,8 +1,5 @@
 import type { D1Database, Queue } from '@cloudflare/workers-types';
-
-export interface DispatchMessage {
-  eventId: string;
-}
+import type { QueuePayload } from '@pdos/contracts';
 
 /**
  * Static Workers bindings (wrangler.toml / `wrangler secret put`). A new connector or key version
@@ -13,7 +10,7 @@ export interface DispatchMessage {
  */
 export interface IngestEnv {
   DB: D1Database;
-  INGEST_QUEUE: Queue<DispatchMessage>;
+  INGEST_QUEUE: Queue<QueuePayload>;
   GMAIL_V1_HMAC_SECRET?: string;
   TELEGRAM_V1_HMAC_SECRET?: string;
   /** Runtime-configurable, always <= the schema's absolute ceiling (HARD_BUDGET_CEILING). */
@@ -22,6 +19,7 @@ export interface IngestEnv {
   RECONCILER_BATCH_SIZE?: string;
   LEASE_RECOVERY_BATCH_SIZE?: string;
   HMAC_TIMESTAMP_WINDOW_MS?: string;
+  REDISPATCH_TIMEOUT_MS?: string;
 }
 
 export interface ResolveSecretOptions {

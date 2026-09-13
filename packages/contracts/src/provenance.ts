@@ -41,8 +41,23 @@ export type AiPolicy = z.infer<typeof AiPolicySchema>;
  * member of `ProvenanceValue<T>`, but its VALUE SET is not ratified anywhere -- so this is a
  * required, non-empty opaque string, not an invented LOW/MEDIUM/HIGH enum. A closed vocabulary is
  * a separate, later decision GPT-PM explicitly declined to make on this project's behalf.
+ *
+ * MAJOR fix (G2 gate review): `z.string().min(1)` alone accepts a whitespace-only string ("   ")
+ * as non-empty, and has no upper bound -- an unbounded field stored straight into
+ * `ingest_event_routing_hints.sensitivity` (migration 0001) could be used to inflate row size with
+ * no schema-level ceiling. Uses the same NON-MUTATING trimmed-nonempty predicate as
+ * `SourceVersionSchema` (packages/contracts/src/event.ts) rather than `.trim().min(1)`, which would
+ * silently alter the parsed value away from what is actually stored. The upper bound matches the
+ * DB CHECK constraint added alongside this fix (migration 0001).
  */
-export const SensitivitySchema = z.string().min(1);
+export const MAX_SENSITIVITY_LENGTH = 128;
+
+export const SensitivitySchema = z
+  .string()
+  .max(MAX_SENSITIVITY_LENGTH)
+  .refine((v) => v.trim().length > 0, {
+    message: 'sensitivity must not be empty or whitespace-only',
+  });
 export type Sensitivity = z.infer<typeof SensitivitySchema>;
 
 /**

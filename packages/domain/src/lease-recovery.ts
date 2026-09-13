@@ -67,6 +67,12 @@ export async function recoverStaleLeases(
         now: opts.now,
         errorClass: 'LEASE_EXPIRED',
         errorCode: 'STALE_LEASE_RECOVERY_AT_CAP',
+        // The sweep can never observe a genuine PERMANENT_FAILURE verdict (only the live processor
+        // itself ever makes that call) -- an abandoned lease reaching the cap here is always
+        // RETRYABLE_FAILURE-class from the sweep's own point of view, per this file's own module
+        // comment. Recorded accurately in the processing_attempts audit row rather than the
+        // previously-hardcoded PERMANENT_FAILURE (GPT-PM MAJOR, G2 gate review).
+        terminalOutcome: 'RETRYABLE_FAILURE',
         processorVersion: opts.processorVersion,
         traceId: row.trace_id,
       });

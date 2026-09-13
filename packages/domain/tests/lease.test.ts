@@ -27,6 +27,7 @@ describe('claimLease', () => {
       now: '2026-09-13T00:00:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     expect(result.claimed).toBe(true);
     if (!result.claimed) throw new Error('unreachable');
@@ -63,6 +64,7 @@ describe('claimLease', () => {
       now: '2026-09-13T00:00:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     expect(first.claimed).toBe(true);
 
@@ -73,6 +75,7 @@ describe('claimLease', () => {
       now: '2026-09-13T00:00:05.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     expect(second.claimed).toBe(false);
   });
@@ -86,6 +89,10 @@ describe('claimLease', () => {
       attemptCount: 1,
       firstFailedAt: '2026-09-13T00:00:00.000Z',
     });
+    // claimLease now requires a DISPATCHED outbox row (GPT-PM BLOCKER, G2 gate review): a claim
+    // must correspond to a delivery the reconciler itself just authorized, not any RETRYABLE_FAILED
+    // event regardless of dispatch state.
+    await seedOutbox(db, 'ev-3', { state: 'DISPATCHED', dispatchedAt: '2026-09-13T00:00:00.000Z' });
     const result = await claimLease(db, {
       eventId: 'ev-3',
       workerId: 'worker-1',
@@ -93,10 +100,67 @@ describe('claimLease', () => {
       now: '2026-09-13T00:05:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     expect(result.claimed).toBe(true);
     if (!result.claimed) throw new Error('unreachable');
     expect(result.attemptNumber).toBe(2);
+  });
+
+  it('BLOCKER regression (G2 gate review): a delayed/duplicate delivery cannot claim while the outbox is still RETRY_PENDING in its backoff window, even though the event itself is RETRYABLE_FAILED', async () => {
+    const db = createTestD1(loadG2Schema());
+    const accounts = await seedBaselineAccounts(db);
+    await seedEvent(db, accounts, {
+      eventId: 'ev-delayed-dup',
+      state: 'RETRYABLE_FAILED',
+      attemptCount: 1,
+      firstFailedAt: '2026-09-13T00:00:00.000Z',
+    });
+    // The reconciler has NOT yet redispatched this -- it is still sitting in its backoff window,
+    // due only at 00:05:00, not before. A stale/duplicate Queue redelivery of the ORIGINAL
+    // dispatch arriving early must not be able to claim an attempt the reconciler never
+    // authorized for this point in time.
+    await seedOutbox(db, 'ev-delayed-dup', {
+      state: 'RETRY_PENDING',
+      nextAttemptAt: '2026-09-13T00:05:00.000Z',
+    });
+
+    const result = await claimLease(db, {
+      eventId: 'ev-delayed-dup',
+      workerId: 'worker-1',
+      leaseDurationMs: 60_000,
+      now: '2026-09-13T00:01:00.000Z',
+      processorVersion: 'proc-v1',
+      traceId: 'trace-1',
+      maxAttempts: 5,
+    });
+    expect(result.claimed).toBe(false);
+  });
+
+  it('BLOCKER regression (G2 gate review): a duplicate delivery cannot claim once processing_attempt_count already reached maxAttempts, even with a DISPATCHED outbox row', async () => {
+    const db = createTestD1(loadG2Schema());
+    const accounts = await seedBaselineAccounts(db);
+    await seedEvent(db, accounts, {
+      eventId: 'ev-at-cap',
+      state: 'RETRYABLE_FAILED',
+      attemptCount: 5,
+      firstFailedAt: '2026-09-13T00:00:00.000Z',
+    });
+    await seedOutbox(db, 'ev-at-cap', {
+      state: 'DISPATCHED',
+      dispatchedAt: '2026-09-13T00:00:00.000Z',
+    });
+
+    const result = await claimLease(db, {
+      eventId: 'ev-at-cap',
+      workerId: 'worker-1',
+      leaseDurationMs: 60_000,
+      now: '2026-09-13T00:01:00.000Z',
+      processorVersion: 'proc-v1',
+      traceId: 'trace-1',
+      maxAttempts: 5,
+    });
+    expect(result.claimed).toBe(false);
   });
 });
 
@@ -110,6 +174,7 @@ describe('renewLease', () => {
       now: '2026-09-13T00:00:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     if (!claim.claimed) throw new Error('unreachable');
 
@@ -140,6 +205,7 @@ describe('renewLease', () => {
       now: '2026-09-13T00:00:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     if (!claim.claimed) throw new Error('unreachable');
 
@@ -171,6 +237,7 @@ describe('completeProcessing', () => {
       now: '2026-09-13T00:00:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     if (!claim.claimed) throw new Error('unreachable');
 
@@ -211,6 +278,7 @@ describe('failProcessing', () => {
       now: '2026-09-13T00:00:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     if (!claim.claimed) throw new Error('unreachable');
 
@@ -245,6 +313,7 @@ describe('failProcessing', () => {
       now: '2026-09-13T00:00:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     if (!claim.claimed) throw new Error('unreachable');
 
@@ -279,6 +348,7 @@ describe('failProcessing', () => {
       now: '2026-09-12T23:00:00.000Z',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      maxAttempts: 5,
     });
     if (!claimA.claimed) throw new Error('unreachable');
 

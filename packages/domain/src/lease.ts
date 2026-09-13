@@ -1,3 +1,4 @@
+/* global crypto */
 import type { D1Database } from '@cloudflare/workers-types';
 
 import {
@@ -14,6 +15,14 @@ export interface ClaimOptions {
   now: string;
   processorVersion: string;
   traceId: string;
+  /**
+   * The attempt cap. GPT-PM BLOCKER, G2 gate review: `reconcileDispatch` already enforces this
+   * before ever marking an outbox row DISPATCHED, but a delayed/duplicate Queue message delivered
+   * OUTSIDE that dispatch decision (Cloudflare Queues' own at-least-once semantics can redeliver a
+   * message more than once even without a nack) must not be able to claim past the cap on its own
+   * -- defense-in-depth at the one place that actually grants a processing attempt.
+   */
+  maxAttempts: number;
 }
 
 export type ClaimResult =
@@ -26,10 +35,17 @@ export type ClaimResult =
  * PROCESSING under a live lease is not re-claimed by a duplicate/racing delivery of the same
  * dispatch.
  *
- * The `processing_attempts` audit row is written as a separate, non-batched call after the claim
- * succeeds: the attempt number it needs only exists once the claim's own RETURNING has resolved,
- * and losing this purely-observational row to an inter-call crash is an acceptable, deliberate
- * scope decision -- it never affects the state machine's own correctness.
+ * Two additional conditions (GPT-PM BLOCKER, G2 gate review) close a real gap: `event_id` and
+ * `ingest_events.state` alone said nothing about WHY this specific delivery is entitled to an
+ * attempt right now. A delayed/duplicate Queue message for an event that failed retryably and is
+ * sitting in its backoff window (`ingest_events.state = 'RETRYABLE_FAILED'`, `processing_outbox`
+ * reopened to `RETRY_PENDING` with a future `next_attempt_at`) would otherwise be claimable
+ * immediately, bypassing the reconciler's own backoff/budget decision entirely -- repeated
+ * redeliveries of an old message could then burn through attempts and reach DLQ with no new
+ * budgeted dispatch ever having authorized any of them. Requiring `processing_outbox.state =
+ * 'DISPATCHED'` ties a claim to a delivery the reconciler itself just authorized; requiring
+ * `processing_attempt_count < maxAttempts` is a second, independent backstop against a delivery
+ * that arrives after the cap was already reached by some other path.
  */
 export async function claimLease(db: D1Database, opts: ClaimOptions): Promise<ClaimResult> {
   const token = crypto.randomUUID();
@@ -41,9 +57,14 @@ export async function claimLease(db: D1Database, opts: ClaimOptions): Promise<Cl
          processing_attempt_count = processing_attempt_count + 1,
          processing_lease_owner = ?, processing_lease_token = ?, processing_lease_expires_at = ?
        WHERE event_id = ? AND state IN ('ACCEPTED', 'RETRYABLE_FAILED')
+         AND processing_attempt_count < ?
+         AND EXISTS (
+           SELECT 1 FROM processing_outbox o WHERE o.event_id = ingest_events.event_id
+             AND o.state = 'DISPATCHED'
+         )
        RETURNING processing_attempt_count`,
     )
-    .bind(opts.workerId, token, expiresAt, opts.eventId)
+    .bind(opts.workerId, token, expiresAt, opts.eventId, opts.maxAttempts)
     .first<{ processing_attempt_count: number }>();
 
   if (!claimed) return { claimed: false };
@@ -162,6 +183,7 @@ export async function failProcessing(db: D1Database, opts: FailOptions): Promise
       errorCode: opts.errorCode,
       processorVersion: opts.processorVersion,
       traceId: opts.traceId,
+      terminalOutcome: opts.outcome,
     });
     return { transitioned, movedToDlq: true };
   }

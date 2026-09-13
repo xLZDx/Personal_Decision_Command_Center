@@ -27,9 +27,25 @@ export async function lookupSigningKeyStatus(
 
   if (!row) return 'UNKNOWN';
   if (row.status === 'REVOKED') return 'REVOKED';
-  if (Date.parse(opts.now) < Date.parse(row.valid_from)) return 'NOT_YET_VALID';
-  if (row.valid_until !== null && Date.parse(opts.now) > Date.parse(row.valid_until)) {
-    return 'EXPIRED';
+
+  // Security fix (G2 gate review MAJOR): `valid_from`/`valid_until` are unconstrained TEXT in D1
+  // (metadata this table stores, never validated against a schema before this function reads it --
+  // provisioning tooling or a corrupted row could write anything). `Date.parse` on a genuinely
+  // malformed value returns NaN, and NaN fails EVERY comparison (`<`/`>`), so both guards below
+  // would silently fall through to VALID for a key whose validity window can no longer be
+  // evaluated at all -- fail OPEN on exactly the data a fail-CLOSED check exists to police. Treated
+  // as UNKNOWN (never trust an unparseable validity window), the same outcome as a key that does
+  // not exist -- both mean "cannot be verified as currently valid."
+  const validFromMs = Date.parse(row.valid_from);
+  if (Number.isNaN(validFromMs)) return 'UNKNOWN';
+  const nowMs = Date.parse(opts.now);
+  if (nowMs < validFromMs) return 'NOT_YET_VALID';
+
+  if (row.valid_until !== null) {
+    const validUntilMs = Date.parse(row.valid_until);
+    if (Number.isNaN(validUntilMs)) return 'UNKNOWN';
+    if (nowMs > validUntilMs) return 'EXPIRED';
   }
+
   return 'VALID';
 }

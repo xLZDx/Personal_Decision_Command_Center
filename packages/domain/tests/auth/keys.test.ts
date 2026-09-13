@@ -78,4 +78,38 @@ describe('lookupSigningKeyStatus', () => {
     });
     expect(status).toBe('EXPIRED');
   });
+
+  it('security fix (G2 gate review MAJOR): UNKNOWN, not VALID, for a malformed valid_from -- fails closed rather than open', async () => {
+    const db = createTestD1(loadG2Schema());
+    // Bypasses the typed seedSigningKey fixture on purpose: this simulates corrupted/malformed
+    // provisioning data landing directly in D1, which is exactly the scenario the fix guards.
+    await db
+      .prepare(
+        'INSERT INTO ingest_signing_keys (connector_id, key_version, status, valid_from, valid_until) VALUES (?,?,?,?,?)',
+      )
+      .bind('gmail-connector', 'v1', 'ACTIVE', 'not-a-real-date', null)
+      .run();
+    const status = await lookupSigningKeyStatus(db, {
+      connectorId: 'gmail-connector',
+      keyVersion: 'v1',
+      now: '2026-09-13T00:00:00.000Z',
+    });
+    expect(status).toBe('UNKNOWN');
+  });
+
+  it('security fix (G2 gate review MAJOR): UNKNOWN, not VALID, for a malformed valid_until -- fails closed rather than open', async () => {
+    const db = createTestD1(loadG2Schema());
+    await db
+      .prepare(
+        'INSERT INTO ingest_signing_keys (connector_id, key_version, status, valid_from, valid_until) VALUES (?,?,?,?,?)',
+      )
+      .bind('gmail-connector', 'v1', 'ACTIVE', '2026-08-01T00:00:00.000Z', 'garbage')
+      .run();
+    const status = await lookupSigningKeyStatus(db, {
+      connectorId: 'gmail-connector',
+      keyVersion: 'v1',
+      now: '2026-09-13T00:00:00.000Z',
+    });
+    expect(status).toBe('UNKNOWN');
+  });
 });

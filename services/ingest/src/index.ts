@@ -1,3 +1,4 @@
+/* global Request */
 import type {
   ExportedHandler,
   Response as WorkersResponse,
@@ -10,7 +11,7 @@ import type { IngestEnv } from './env.js';
 export { handleIngestRequest, handleScheduled } from './handler.js';
 export type { ScheduledRunResult } from './handler.js';
 export { resolveSecret } from './env.js';
-export type { IngestEnv, DispatchMessage } from './env.js';
+export type { IngestEnv } from './env.js';
 
 /**
  * The only place this service's code touches the Workers-specific `Request`/`Response` types:

@@ -81,6 +81,7 @@ describe('moveToDlq', () => {
       errorCode: 'E_TIMEOUT',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      terminalOutcome: 'PERMANENT_FAILURE',
     });
     expect(ok).toBe(true);
 
@@ -120,6 +121,7 @@ describe('moveToDlq', () => {
       errorCode: 'E_TIMEOUT',
       processorVersion: 'proc-v1',
       traceId: 'trace-1',
+      terminalOutcome: 'PERMANENT_FAILURE',
     });
     expect(ok).toBe(false);
 
@@ -141,6 +143,7 @@ describe('moveToDlq', () => {
         errorCode: 'E_TIMEOUT',
         processorVersion: 'proc-v1',
         traceId: 'trace-1',
+        terminalOutcome: 'PERMANENT_FAILURE',
       });
 
     // Two "concurrent" attempts against the SAME fence -- the test D1 shim serializes writers just
@@ -177,6 +180,7 @@ describe('moveToDlq', () => {
       errorCode: 'STALE_LEASE_RECOVERY_AT_CAP',
       processorVersion: 'sweep',
       traceId: 'trace-1',
+      terminalOutcome: 'RETRYABLE_FAILURE',
     });
     expect(ok).toBe(false);
 
@@ -185,6 +189,27 @@ describe('moveToDlq', () => {
       .bind('ev-4')
       .first<{ state: string }>();
     expect(event?.state).toBe('PROCESSING');
+  });
+
+  it('MAJOR regression (G2 gate review): records the ACTUAL terminal cause in the attempt audit row, not a hardcoded PERMANENT_FAILURE', async () => {
+    const db = await setupProcessingEvent('ev-audit', 5);
+    const ok = await moveToDlq(db, {
+      eventId: 'ev-audit',
+      fence: { kind: 'LIVE', token: 'token-A' },
+      now: '2026-09-13T00:03:00.000Z',
+      errorClass: 'LEASE_EXPIRED',
+      errorCode: 'STALE_LEASE_RECOVERY_AT_CAP',
+      processorVersion: 'sweep',
+      traceId: 'trace-1',
+      terminalOutcome: 'RETRYABLE_FAILURE',
+    });
+    expect(ok).toBe(true);
+
+    const attempt = await db
+      .prepare('SELECT outcome FROM processing_attempts WHERE event_id = ?')
+      .bind('ev-audit')
+      .first<{ outcome: string }>();
+    expect(attempt?.outcome).toBe('RETRYABLE_FAILURE');
   });
 });
 
@@ -227,5 +252,40 @@ describe('moveToRetryableFailed', () => {
       .prepare('SELECT COUNT(*) as n FROM dead_letter_events')
       .first<{ n: number }>();
     expect(dlqRows?.n).toBe(0);
+  });
+
+  it("MAJOR regression (G2 gate review): a loser cannot clobber the winner's chosen backoff -- a stale sweep call after a live-processor win touches nothing", async () => {
+    const db = await setupProcessingEvent('ev-race-backoff', 2, 'token-A');
+
+    const liveWon = await moveToRetryableFailed(db, {
+      eventId: 'ev-race-backoff',
+      fence: { kind: 'LIVE', token: 'token-A' },
+      now: '2026-09-13T00:03:00.000Z',
+      nextAttemptAt: '2026-09-13T00:08:00.000Z', // the live processor's real per-attempt backoff
+      errorClass: 'NetworkError',
+      errorCode: 'E_NET',
+    });
+    expect(liveWon).toBe(true);
+
+    // A stale sweep call for the SAME event arrives after the live processor already won --
+    // ingest_events is no longer PROCESSING, so its own fenced transition cannot match regardless
+    // of the token/expiry it presents.
+    const sweepLost = await moveToRetryableFailed(db, {
+      eventId: 'ev-race-backoff',
+      fence: { kind: 'SWEEP', token: 'token-A', requireExpiredAsOf: '2026-09-13T00:03:00.000Z' },
+      now: '2026-09-13T00:03:01.000Z',
+      nextAttemptAt: '2026-09-13T00:03:01.000Z', // the sweep's own "retry immediately"
+      errorClass: 'LEASE_EXPIRED',
+      errorCode: 'STALE_LEASE_RECOVERY',
+    });
+    expect(sweepLost).toBe(false);
+
+    // The winner's backoff must survive untouched -- before this fix, the loser's own outbox
+    // UPDATE matched merely on "state is RETRYABLE_FAILED" and would have overwritten it.
+    const outbox = await db
+      .prepare('SELECT next_attempt_at FROM processing_outbox WHERE event_id = ?')
+      .bind('ev-race-backoff')
+      .first<{ next_attempt_at: string }>();
+    expect(outbox?.next_attempt_at).toBe('2026-09-13T00:08:00.000Z');
   });
 });

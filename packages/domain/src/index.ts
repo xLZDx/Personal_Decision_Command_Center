@@ -25,6 +25,9 @@ export type { ReserveBudgetOptions, ReserveBudgetResult } from './budget.js';
 export { reconcileDispatch } from './reconciler.js';
 export type { ReconcileDispatchOptions, ReconcileDispatchResult } from './reconciler.js';
 
+export { getOldestUnprocessedEvent } from './metrics.js';
+export type { OldestUnprocessedEvent } from './metrics.js';
+
 export {
   verifyHmacSignature,
   signHmac,
@@ -36,8 +39,15 @@ export { reserveNonce, cleanupExpiredNonces } from './auth/nonce.js';
 export type { ReserveNonceOptions } from './auth/nonce.js';
 export { lookupSigningKeyStatus } from './auth/keys.js';
 export type { SigningKeyLookupOptions, SigningKeyStatus } from './auth/keys.js';
-export { authenticateIngestRequest } from './auth/authenticate.js';
+export {
+  authenticateIngestRequest,
+  checkKeyAndTimestamp,
+  checkSignatureAndNonce,
+} from './auth/authenticate.js';
 export type {
   AuthenticateIngestRequestOptions,
+  AuthenticateIngestRequestReason,
   AuthenticateIngestRequestResult,
+  CheckKeyAndTimestampOptions,
+  CheckSignatureAndNonceOptions,
 } from './auth/authenticate.js';
