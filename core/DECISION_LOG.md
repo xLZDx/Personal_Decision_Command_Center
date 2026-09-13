@@ -3,6 +3,37 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 7 implemented: selected Workers AI model, terms snapshot, and fail-closed Gmail-only AI boundary
+
+**External preflight completed against primary sources:** the selected callable model is
+`@cf/meta/llama-3.1-8b-instruct-fast`; Cloudflare currently lists it as hosted, 128K context, and
+JSON-Mode-capable. Cloudflare's current Customer Content statement, free 10,000-Neuron/day
+allocation/reset, pricing table, and Meta's Llama 3.1 Community License/AUP were re-fetched live.
+The dated evidence and production re-check rule are in
+`packages/policy/WORKERS_AI_MODEL_TERMS.md`.
+
+**Conservative HARD_ZERO decision:** Cloudflare's callable `...instruct-fast` model name and the
+pricing table's cheaper `...instruct-fp8-fast` label are not identical, so the implementation does
+not assume they are billing aliases. It reserves/reconciles using the higher published non-fast
+Llama 3.1 8B rates (25,608 input / 75,147 output Neurons per million tokens), caps the entire
+serialized request at 16,000 UTF-8 bytes, adds 2,048 provider-template tokens, and reserves the
+full 256-token output. The maximum admitted request deterministically reserves 482 Neurons before
+the provider call. Missing/partial provider usage leaves the conservative reservation untouched.
+
+**AI boundary implemented:** new `@pdos/policy` exports the sole
+`GmailAIContextBuilder.build(GmailEvidenceBundle) -> AIRequest` entry point, a strict output schema,
+provider interface, and `NoAIProvider`. Runtime enforcement requires an exact matching Gmail source
+policy with explicit `ALLOW`, walks the full reachable provenance DAG using `assertAiSafe`, rejects
+unknown/mixed/Telegram ancestry and even disconnected Telegram nodes in the bundle, requires a
+reachable Gmail source root, strips bounded quoted history/signature boilerplate, redacts configured
+literal secrets, and bounds the fully JSON-escaped request. The builder never accepts Topic/Stream/
+Person/Decision/generic-derived inputs; compile-time and runtime tests cover that restriction.
+
+**Verification before independent checkpoint review:** 27 new policy tests pass; repository total
+530/530; typecheck, ESLint, secret scan, Prettier, and `git diff --check` pass. No production Gmail
+content or credentials were used. Checkpoint remains implementation-complete but not independently
+closed until specialist/GPT-PM review receipts are recorded.
+
 ## 2026-09-14 — Operator GO widened to autonomous completion of MVP1 through G10
 
 **Operator instruction (verbatim):** "продолжай автономно до конца мвп1 ГО".
@@ -114,6 +145,7 @@ part of every `loadG3Schema()` quota test, so its tables, constraints, indexes, 
 exercised against the Node SQLite D1 adapter rather than syntax-checked only.
 
 ## 2026-09-13 — G3 checkpoint 6: quota limiter primitives (proposal §2.9) implemented, 4-specialist
+
 internal review completed and fully remediated in one batch, about to enter GPT-PM round 1 (3-round
 hard cap, told to GPT-PM up front per standing operator instruction)
 
@@ -122,10 +154,11 @@ resources the proposal names -- `reserveGmailRateWindow` (60s per-account window
 `gmail_rate_reservations`, 6,000 units/min), `reserveGmailApiUnits` (daily project-wide,
 `gmail_api_budget_counters`, 80,000,000 units/day), `reserveGmailAiNeurons` +
 `reconcileGmailAiNeurons` (daily, `gmail_ai_neuron_budget`, 10,000 Neurons/day, reserve-before-call
-+ reconcile-after-call). New file `packages/domain/src/gmail/quota.ts`, mirroring
-`packages/domain/src/budget.ts`'s `reserveBudget` UPSERT shape. PRIMITIVES ONLY -- no real caller
-exists yet (`services/gmail-connector` Worker is a later checkpoint), confirmed inert via
-repo-wide grep before and after remediation.
+
+- reconcile-after-call). New file `packages/domain/src/gmail/quota.ts`, mirroring
+  `packages/domain/src/budget.ts`'s `reserveBudget` UPSERT shape. PRIMITIVES ONLY -- no real caller
+  exists yet (`services/gmail-connector` Worker is a later checkpoint), confirmed inert via
+  repo-wide grep before and after remediation.
 
 **Internal review (4 specialists in parallel, per CLAUDE.md §17 "run internal review BEFORE
 GPT-PM")**: database-reviewer, type-design-analyzer, functional-test-reviewer, code-reviewer.
@@ -178,7 +211,7 @@ marked so):
    and the worked counter-example precisely, replacing the prior overclaiming language ("the day's
    real remaining budget reflects real usage"). A new test
    (`documents (does not assert as correct) the known accepted concurrent-reconciliation ordering
-   limitation`) reproduces the exact counter-example against the real implementation (verified: 9900
+limitation`) reproduces the exact counter-example against the real implementation (verified: 9900
    vs. 9950, confirming the reviewer's arithmetic was correct) so the limitation stays honest against
    the code rather than only asserted in prose. **Why this is being escalated rather than fixed
    unilaterally**: the reviewer's own words were "a design tradeoff to hand back to the plan owner,
@@ -213,6 +246,7 @@ review ran before any commit, matching CLAUDE.md §17's sequencing rule ("run th
 reviewers BEFORE GPT-PM... this is sequencing, not a suggestion").
 
 ## 2026-09-13 — G3 checkpoint 5 GATE CLOSED: round 3 (FINAL) verdict MAJOR (0 BLOCKER / 2 MAJOR /
+
 1 MINOR), gate-ruled closed by GPT-PM under the operator's 3-round hard cap; MINOR fixed, both
 MAJORs logged as accepted residual risk / mandatory follow-up backlog, push deferred pending a
 `--final` receipt
@@ -220,9 +254,9 @@ MAJORs logged as accepted residual risk / mandatory follow-up backlog, push defe
 **GPT-PM round 3 (final) verdict: MAJOR.** Full reply archived at
 `D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\tasks\bqwg0q0js.output`
 (`reviewInputHash a2f637bd...`, `replyId 379dcf58-8ebd-4867-9fce-636e762f32e5`). **GPT-PM's own
-explicit closing ruling, quoted verbatim**: *"Gate ruling: checkpoint 5 closes after this Round 3
+explicit closing ruling, quoted verbatim**: _"Gate ruling: checkpoint 5 closes after this Round 3
 as required by the hard-cap policy. Log MAJOR #1 and MAJOR #2 as accepted residual risks /
-mandatory follow-up backlog; MINOR #3 is a documentation cleanup. No Round 4."* This matches the
+mandatory follow-up backlog; MINOR #3 is a documentation cleanup. No Round 4."_ This matches the
 operator's own instruction this segment (§17 tightened to an explicit 3-round hard cap,
 `feedback-review-round-hard-cap-3.md`): round 3 is verification-only and the gate closes after it
 regardless of outcome, with any residual item logged as accepted risk rather than triggering a
@@ -299,6 +333,7 @@ checkpoint 6 per the standing autonomous-through-G6 authorization; push happens 
 gate's own review cycle produces a final receipt, not held open as a separate blocker.
 
 ## 2026-09-13 — G3 checkpoint 5, GPT-PM round 2 (0 BLOCKER / 3 MAJOR) remediated in one batch,
+
 30 tests, 6 new mutation-tested guards, shared `NormalizedEvent` contract extended
 (`occurred_at_quality`) per GPT-PM's explicit ruling, ready for round 3 (final, verification-only)
 
@@ -386,6 +421,7 @@ This is round-2 remediation under the operator's 3-round hard cap; round 3 (fina
 verification per GPT-PM's own stated scope) is next.
 
 ## 2026-09-13 — G3 checkpoint 5, GPT-PM round 1 (BLOCKER + 2 MAJOR) remediated in one batch,
+
 24 tests, 3 new mutation-tested guards, MAJOR #2 escalated to GPT-PM round 2 rather than decided
 unilaterally
 
@@ -477,6 +513,7 @@ the prior two passes. This is round-1 remediation under the operator's 3-round h
 next, carrying this log entry's finding #3 question explicitly.
 
 ## 2026-09-13 — G3 checkpoint 5 (cursor/history-list sync + normalization, proposal §2.2/§2.3):
+
 implementation + internal review complete (BLOCKER + 5 MAJOR + 6 MINOR found and remediated in one
 batch), 22 tests, 8 mutation-tested guards, ready for GPT-PM round 1 under the new 3-round hard cap
 
@@ -495,13 +532,14 @@ yet-built `services/gmail-connector` Worker's real Gmail API client and ingest-s
 
 **Design decisions made where the proposal's own §2.2/§2.3 text is silent** (documented in the
 module's own header comment, not invented silently):
+
 1. `occurred_at` for `MESSAGE_CREATED` = `messages.get`'s `internalDate` (the proposal's own §2.9
    quota budget -- "`messages.get` (20 units) per new message" -- confirms this call is already
    accounted for). `occurred_at` for `MESSAGE_DELETED`/`MESSAGE_UPDATED` = the sync's own processing
    time, since Gmail exposes no per-signal timestamp for either and the budget model does not
    account for an extra `messages.get` on those paths.
 2. `direction` for `MESSAGE_CREATED` derives from the same `messages.get` call (`labelIds.includes
-   ('SENT')`); `MESSAGE_DELETED`/`MESSAGE_UPDATED` default to `INBOUND` (not part of
+('SENT')`); `MESSAGE_DELETED`/`MESSAGE_UPDATED` default to `INBOUND` (not part of
    `idempotencyKey()`, so this cannot cause a duplicate/dropped event, only a wrong UI hint).
 3. `content_locator.ref = message.id` -- NOT a gap; proposal §2.8 states this explicitly.
 4. Per-event permanent-failure handling and per-invocation work bounding are explicitly NOT built
@@ -511,7 +549,7 @@ module's own header comment, not invented silently):
 any GPT-PM round per CLAUDE.md §17) found, verified, and closed in one remediation batch:**
 
 - **BLOCKER (database-reviewer, confirmed FACT via direct repo grep)**: `gmail_connections.
-  watch_history_id` is never written anywhere in the codebase (not by `connectGmailAccount`, which
+watch_history_id` is never written anywhere in the codebase (not by `connectGmailAccount`, which
   omits the column from its INSERT entirely, nor by anything else -- `startWatch` doesn't even exist
   yet as a `GoogleOAuthClient` method). The bootstrap branch's hard dependency on that column being
   non-null meant EVERY real account's first sync would throw `GmailHistoryCursorMissingBootstrapError`
@@ -723,7 +761,7 @@ was explicitly NOT reopened.
 error classification and result-value fidelity):**
 
 1. **`LifecycleLockRecoveryFailedError`** (new exported error class, `packages/domain/src/gmail/
-   oauth.ts`): thrown whenever a `gmail_oauth_lifecycle` recovery/release write fails WHILE already
+oauth.ts`): thrown whenever a `gmail_oauth_lifecycle` recovery/release write fails WHILE already
    handling an earlier caught failure. Carries `lockToken`, `context` (which code path), the original
    error (`originalError`), and the recovery write's own failure (`cause`) -- nothing is lost.
    `runAcquisitionWrite`'s inner catch no longer swallows a failed re-read/release; it throws this
@@ -731,7 +769,7 @@ error classification and result-value fidelity):**
    `releaseLifecycleLockInFailurePath` helper wraps `releaseLifecycleLock` for every caller already
    inside a `catch` block (`connectGmailAccount`'s catch-all: `'connectGmailAccount-catch-all'`;
    `disconnectGmailAccount`'s not-started/stop-settled release: `'disconnectGmailAccount-catch-
-   release'`); the revoke-settled repair UPDATE is wrapped inline
+release'`); the revoke-settled repair UPDATE is wrapped inline
    (`'disconnectGmailAccount-revoke-settled-repair'`). This is an explicit, accepted terminal boundary
    for the regress GPT-PM's own finding named: a THIRD failure (of whatever force-recovery procedure
    reads this error) is not itself specially handled -- classifying and surfacing a double fault is
@@ -802,7 +840,7 @@ finding targets before designing a fix) before acting on it; all 3 confirmed rea
    automatically retried, so a transient write error leaves the caller unable to tell whether the
    write actually landed before failing locally. GPT-PM's more severe concrete scenario:
    `disconnectGmailAccount`'s ambiguous-catch branch performs a SECOND write (`SET recovery_state =
-   ...`) before throwing `DisconnectAmbiguousExternalCallError` -- if THAT write itself fails, the
+...`) before throwing `DisconnectAmbiguousExternalCallError` -- if THAT write itself fails, the
    lock correctly stays held (the original ambiguity is unresolved), but `recovery_state` was never
    persisted, so `listWedgedGmailDisconnectLocks` (which filters on it) can never find the account --
    "every account is now blocked by the singleton and the advertised safe recovery API has no
