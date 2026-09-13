@@ -45,9 +45,20 @@ new/modified file (the 60-file warning list from an unrelated `npm run format` r
 Windows-checkout CRLF debt, confirmed by grepping the warning output for any touched path and
 finding none).
 
-**How to apply.** This checkpoint is internally reviewed and ready for a GPT-PM gate-review round
-before the next G3 checkpoint (OAuth lifecycle, §2.5) begins, per the same one-sweep discipline
-(§17) used to close G2 and the G3 plan itself.
+**GPT-PM gate review, round 1: genuine `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR**, correlated to the
+exact checkpoint commit `f2c6612` (`reviewInputHash
+b7f8e8156373ec9bb7d88d00ded1ff5d8a3d3d111564dad80cb61e0d696c82a4`, `replyId
+e2024a3e-1f35-4bb5-b55b-b43d520252e5`). Confirmed the three-part fence, the genuine partial index,
+the bounded/indexed sweep, the forward-looking reclaim duration, the source-scoped composite FKs,
+and the pruning implementation all close as designed, with no scoped defect — explicitly noting the
+still-unimplemented OAuth/sync/AI/crypto/drill-down/quota pieces are out of this checkpoint's scope
+and were not used to withhold the verdict. Not marked `--final` (that designation is reserved for
+the whole gate's closing review before PR/merge, per §24 and the pattern G2 used — individual
+checkpoints do not each need their own final marker, only a genuine APPROVE on their own scope, per
+§15's repo-scoped-receipt mechanics already satisfying the mandatory commit/push gate).
+
+**How to apply.** Checkpoint 1 is closed. Continue to G3's next implementation checkpoint per the
+standing autonomous-through-G6 authorization, same one-sweep discipline (§17) throughout.
 
 ## 2026-09-13 — G3 Gmail Connector architecture proposal APPROVEd (GPT-PM round 6, `VERDICT: APPROVE`)
 
