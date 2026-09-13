@@ -3,6 +3,97 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 5, GPT-PM round 1 (BLOCKER + 2 MAJOR) remediated in one batch,
+24 tests, 3 new mutation-tested guards, MAJOR #2 escalated to GPT-PM round 2 rather than decided
+unilaterally
+
+**GPT-PM round 1 verdict: BLOCKER.** Full reply archived at
+`D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\tasks\bzu4pyyz5.output`
+(`reviewInputHash 9094c534...`, `replyId c5a35288-369b-4a0a-ba09-9342a65f9f9c`). Findings, each
+independently verified against this repo/Gmail's/Cloudflare's actual documentation before acting
+on it (CLAUDE.md §3/§13/§15/§23 -- a reviewer's claim is not proof until its cited source is
+opened):
+
+1. **BLOCKER: first-ever POLL-mode bootstrap silently lost the connectedAt→getCurrentHistoryId()
+   gap.** The round-1-internal-review fix for the earlier BLOCKER (watch_history_id never written)
+   used a freshly-read `getCurrentHistoryId()` value directly as `startHistoryId` for a brand-new
+   POLL-mode account -- `history.list(startHistoryId=H)` only returns changes AFTER H, and H by
+   construction already reflects everything that happened before it was read, so any message that
+   arrived between `connectedAt` and that read was silently and permanently dropped while the
+   cursor still reported success. GPT-PM correctly noted the existing bootstrap test could not have
+   caught this (it scripted an empty history after the captured ID). **Fix**: this exact bootstrap
+   sub-case (`gmail_connections` row exists, `watch_history_id IS NULL`) now routes through
+   `recoverFromInvalidCursor` -- the SAME bounded `messages.list`/`messages.get` recovery mechanism
+   already built (and already correctly fixed in the prior internal-review pass) for the 404 case,
+   which covers `[connectedAt, getCurrentHistoryId())` before any cursor becomes durable.
+   `packages/domain/src/gmail/history-sync.ts` lines ~469-482. Regression test rewritten (was:
+   "falls back to getCurrentHistoryId()", scripted with an empty post-recovery history/window, so it
+   passed against the buggy code too; now: "routes a first-ever POLL-mode sync... through bounded
+   recovery instead of dropping the gap", seeds a message discoverable ONLY via the recovery window,
+   asserts `listHistory` is never called, asserts the message is accepted exactly once, and asserts
+   a SECOND sync call does not re-submit it) -- `packages/domain/tests/gmail/history-sync.test.ts`.
+   Mutation-tested: flipping `=== null` to `!== null` on the routing guard kills the new test with
+   `fakeHistoryClient: no scripted page for call 1` (proves the guard actually routes, not just that
+   the fallback path exists).
+
+2. **MAJOR: unbounded per-invocation work is a measured Cloudflare Workers Free-plan liveness
+   failure, not an unmeasured hypothesis** (GPT-PM rejected the earlier "accepted, unmeasured
+   limitation" framing on this exact basis). Independently verified via WebSearch + WebFetch
+   against `developers.cloudflare.com/workers/platform/limits/` (current as of the fetch, dated
+   2026-09-05) and Cloudflare's Feb-2026 change notice: Workers Free is capped at 50
+   subrequests/invocation (general/external), confirming GPT-PM's citation was accurate before
+   acting on it. Every `MESSAGE_CREATED` costs one `messages.get` subrequest on top of
+   `history.list` itself, so an ordinary ~50-message backlog can exceed the ceiling before ever
+   reaching a page with no `nextPageToken` -- and because nothing was durable until the WHOLE
+   traversal finished, every retry re-attempted the identical doomed traversal with zero progress.
+   **Fix**: new table `gmail_history_sync_progress`
+   (`infra/migrations/0006_gmail_history_sync_progress.sql`) holds a resumable, best-effort,
+   NON-authoritative page-granularity checkpoint OUTSIDE `cursor_value` (does not violate §2.2,
+   which forbids advancing the AUTHORITATIVE cursor mid-traversal, not persisting other resume
+   state) -- fenced by `(start_history_id, prev_cursor_json)` against the CURRENT `source_cursors`
+   state read at the START of each call, so a checkpoint left behind by a superseded traversal is
+   discarded rather than resumed from. New `SyncGmailAccountHistoryOptions.maxPagesPerInvocation`
+   (optional, `undefined` = unbounded, the original behavior -- every existing caller/test is
+   unaffected) and new result outcome `PARTIAL_PROGRESS`. Deliberately scoped to the MAIN
+   `history.list` traversal only -- `recoverFromInvalidCursor`'s bounded gap-recovery window is NOT
+   checkpointed (its own subrequest growth is bounded by the SIZE of one gap, not an open-ended live
+   stream; judged a narrower, acceptable residual risk and stated plainly in the module header and
+   this log rather than silently decided). Two new tests: (a) a 1-page budget against a
+   multi-page backlog checkpoints after page 1 with `cursor_value` untouched, then a second
+   invocation resumes from `next_page_token` (asserted via captured call args, never re-fetching
+   page 1) and completes with the checkpoint row deleted; (b) a checkpoint anchored to a different
+   `start_history_id`/`prev_cursor_json` than the current state is discarded, not resumed from.
+   Mutation-tested: the fencing conjunction (`=== null` guard flattened) and the budget comparison
+   (`>=` → `>`) each kill their respective new test.
+   `packages/testkit/src/schema.ts`'s `loadG3Schema()` now concatenates migration 0006.
+
+3. **MAJOR: `occurred_at === received_at` for MESSAGE_DELETED/MESSAGE_UPDATED violates
+   `NormalizedEvent`'s own provenance split -- NOT remediated in this checkpoint, escalated to
+   GPT-PM round 2 instead of decided unilaterally.** This was already a documented, accepted
+   limitation before round 1; GPT-PM's finding is that documentation alone is insufficient and a
+   real fix is needed (a nullable/qualified occurrence time, or an explicit provenance/quality
+   field). Not implemented here because `NormalizedEvent`
+   (`packages/contracts/src/event.ts`, `.strict()`, `SCHEMA_VERSION = 4`) is shared with the
+   Telegram connector and `services/ingest` -- a schema change is real scope beyond this
+   checkpoint's own §2.2/§2.3 boundary, touching every other event producer/consumer and every
+   `NormalizedEvent` test fixture in the repo, not just Gmail's. Per CLAUDE.md §17 ("never silently
+   reinterpret a product requirement... disagree out loud, with evidence") this is presented back to
+   GPT-PM as product owner with two concrete options for round 2's ruling rather than decided here:
+   (a) accept as a documented, narrowly-scoped checkpoint-5 limitation with a tracked cross-cutting
+   follow-up gate to design the contract's own provenance/quality field for every producer, not just
+   Gmail; or (b) require the contract change now, in which case the concrete additive field is
+   `occurred_at_quality: 'ESTIMATED_FROM_RECEIPT'` on these two paths, default
+   `'PROVIDER_REPORTED'` everywhere else so no existing producer/consumer needs to change. Module
+   header (`history-sync.ts` design decision #1) updated to state this explicitly rather than merely
+   naming the consequence.
+
+**Verification**: 24 tests in `history-sync.test.ts` (455 total repo-wide), all passing. tsc/eslint/
+prettier clean. 3 new guards mutation-tested (backup/mutate/confirm exact expected test
+fails/restore/diff-verify byte-identical restoration), on top of the 12 already mutation-tested in
+the prior two passes. This is round-1 remediation under the operator's 3-round hard cap
+(`feedback-review-round-hard-cap-3.md`) -- round 2 (the single remediation-verification round) is
+next, carrying this log entry's finding #3 question explicitly.
+
 ## 2026-09-13 — G3 checkpoint 5 (cursor/history-list sync + normalization, proposal §2.2/§2.3):
 implementation + internal review complete (BLOCKER + 5 MAJOR + 6 MINOR found and remediated in one
 batch), 22 tests, 8 mutation-tested guards, ready for GPT-PM round 1 under the new 3-round hard cap

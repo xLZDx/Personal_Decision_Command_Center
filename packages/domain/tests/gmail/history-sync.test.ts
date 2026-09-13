@@ -776,13 +776,23 @@ describe('syncGmailAccountHistory -- §2.2 crash-safe accept-then-advance cursor
     });
   });
 
-  it('falls back to getCurrentHistoryId() when gmail_connections exists but watch_history_id is null (POLL mode, no watch ever registered)', async () => {
+  it('routes a first-ever POLL-mode sync (watch_history_id null) through bounded recovery instead of dropping the connectedAt-to-getCurrentHistoryId() gap', async () => {
+    // GPT-PM round-1 BLOCKER (2026-09-13): the prior version of this test scripted an EMPTY
+    // history/window after the captured current-history-id, so it could not expose the loss
+    // window at all -- it passed even against the buggy code that used getCurrentHistoryId()
+    // directly as startHistoryId. This version seeds a real message discoverable ONLY via the
+    // bounded messages.list/messages.get recovery enumeration (never via listHistory, which is
+    // never even called), proving the connectedAt -> current-historyId interval is genuinely
+    // covered rather than silently discarded.
     const { db, accounts } = await setup({ watchHistoryId: null }); // no cursorValue -> no row either
     const { client, calls } = fakeHistoryClient({
-      historyPages: [{ historyId: 'h-after-bootstrap', records: [] }],
+      windowPages: [{ messages: [{ messageId: 'm-gap', threadId: 't-gap' }] }],
+      metadataByMessageId: {
+        'm-gap': { internalDate: '2026-09-13T01:45:00.000Z', labelIds: [] },
+      },
       currentHistoryId: 'h-poll-bootstrap',
     });
-    const { submitter } = fakeSubmitter();
+    const { submitter, submitted } = fakeSubmitter();
 
     const result = await syncGmailAccountHistory(db, client, submitter, {
       sourceAccountId: accounts.gmailAccountId,
@@ -791,12 +801,36 @@ describe('syncGmailAccountHistory -- §2.2 crash-safe accept-then-advance cursor
       now: '2026-09-13T02:00:00.000Z',
     });
 
-    expect(result.outcome).toBe('SYNCED');
+    expect(result.outcome).toBe('RECOVERED_FROM_INVALID_CURSOR');
+    expect(calls.listHistory).toBe(0); // no durable history baseline exists yet -- never attempted
     expect(calls.getCurrentHistoryId).toBe(1);
+    expect(submitted).toHaveLength(1);
+    const event = NormalizedEventSchema.parse(submitted[0]);
+    expect(event.event_type).toBe('MESSAGE_CREATED');
+    expect(event.source_event_id).toBe('m-gap');
+    if (result.outcome === 'RECOVERED_FROM_INVALID_CURSOR') {
+      expect(result.counts).toEqual({ accepted: 1, alreadyAccepted: 0 });
+    }
     const row = await readCursorRow(db, accounts.gmailAccountId);
     expect(JSON.parse(row!.cursor_value as string)).toMatchObject({
-      historyId: 'h-after-bootstrap',
+      historyId: 'h-poll-bootstrap',
     });
+
+    // Re-running the sync must not re-submit the same message as a fresh ACCEPTED -- it is now
+    // durably behind the recovered cursor's historyId, so a repeat call must use the normal
+    // listHistory path and see nothing new.
+    const { client: client2, calls: calls2 } = fakeHistoryClient({
+      historyPages: [{ historyId: 'h-poll-bootstrap', records: [] }],
+    });
+    const result2 = await syncGmailAccountHistory(db, client2, submitter, {
+      sourceAccountId: accounts.gmailAccountId,
+      sourcePolicyId: accounts.gmailPolicyId,
+      connectedAt: FIXTURE_NOW,
+      now: '2026-09-13T02:05:00.000Z',
+    });
+    expect(result2.outcome).toBe('SYNCED');
+    expect(calls2.listHistory).toBe(1);
+    expect(submitted).toHaveLength(1); // still just the one message from the first call
   });
 
   it('throws GmailHistoryCursorMissingBootstrapError when no gmail_connections row exists at all (the account was never actually connected)', async () => {
@@ -1019,5 +1053,199 @@ describe('syncGmailAccountHistory -- §2.2 step 6: bounded 404/invalid-cursor re
       historyId: 'h-recovery-bootstrap',
       lastSeenInternalDate: '2026-09-13T01:40:00.000Z', // max across both pages
     });
+  });
+});
+
+describe('syncGmailAccountHistory -- resumable per-invocation page budget (GPT-PM round-1 MAJOR #1)', () => {
+  it('checkpoints progress outside cursor_value when the page budget is exhausted, then resumes from the checkpoint on the next invocation instead of restarting page 1', async () => {
+    const { db, accounts } = await setup({
+      cursorValue: JSON.stringify({ historyId: 'h0', lastSeenInternalDate: FIXTURE_NOW }),
+    });
+    const { submitter, submitted } = fakeSubmitter();
+
+    // --- Invocation 1: budget of 1 page, backlog spans (at least) 2 pages. ---
+    const calls1: Array<{ startHistoryId: string; pageToken?: string }> = [];
+    const client1: GmailHistoryClient = {
+      async listHistory(opts) {
+        calls1.push(opts);
+        if (calls1.length === 1) {
+          return {
+            historyId: 'IGNORED',
+            nextPageToken: 'page2',
+            records: [
+              {
+                historyRecordId: 'r1',
+                messagesAdded: [{ messageId: 'm1', threadId: 't1' }],
+                messagesDeleted: [],
+                labelsAdded: [],
+                labelsRemoved: [],
+              },
+            ],
+          };
+        }
+        throw new Error('invocation 1 must not fetch a second page under a 1-page budget');
+      },
+      async getMessageMetadata(opts) {
+        if (opts.messageId === 'm1') {
+          return { internalDate: '2026-09-13T01:10:00.000Z', labelIds: [] };
+        }
+        throw new Error(`unexpected messageId ${opts.messageId}`);
+      },
+      async listMessagesInWindow() {
+        throw new Error('not used in this test');
+      },
+      async getCurrentHistoryId() {
+        throw new Error('not used in this test');
+      },
+    };
+
+    const result1 = await syncGmailAccountHistory(db, client1, submitter, {
+      sourceAccountId: accounts.gmailAccountId,
+      sourcePolicyId: accounts.gmailPolicyId,
+      connectedAt: FIXTURE_NOW,
+      now: '2026-09-13T02:00:00.000Z',
+      maxPagesPerInvocation: 1,
+    });
+
+    expect(result1.outcome).toBe('PARTIAL_PROGRESS');
+    if (result1.outcome === 'PARTIAL_PROGRESS') {
+      expect(result1.counts).toEqual({ accepted: 1, alreadyAccepted: 0 });
+    }
+    expect(calls1).toHaveLength(1);
+    expect(calls1[0]).toEqual({ startHistoryId: 'h0' });
+
+    // cursor_value is UNTOUCHED -- §2.2's own invariant, preserved by the checkpoint mechanism.
+    const rowAfter1 = await readCursorRow(db, accounts.gmailAccountId);
+    expect(JSON.parse(rowAfter1!.cursor_value as string)).toEqual({
+      historyId: 'h0',
+      lastSeenInternalDate: FIXTURE_NOW,
+    });
+
+    const progressRow = await db
+      .prepare('SELECT * FROM gmail_history_sync_progress WHERE source_account_id = ?')
+      .bind(accounts.gmailAccountId)
+      .first<Record<string, unknown>>();
+    expect(progressRow).toMatchObject({
+      start_history_id: 'h0',
+      next_page_token: 'page2',
+      accumulated_newest_internal_date: '2026-09-13T01:10:00.000Z',
+    });
+
+    // --- Invocation 2: must resume from the checkpoint (pageToken:'page2' on its FIRST call,
+    //     never a re-fetch of page 1) and complete the traversal. ---
+    const calls2: Array<{ startHistoryId: string; pageToken?: string }> = [];
+    const client2: GmailHistoryClient = {
+      async listHistory(opts) {
+        calls2.push(opts);
+        if (calls2.length === 1) {
+          return {
+            historyId: 'h-final',
+            records: [
+              {
+                historyRecordId: 'r2',
+                messagesAdded: [{ messageId: 'm2', threadId: 't2' }],
+                messagesDeleted: [],
+                labelsAdded: [],
+                labelsRemoved: [],
+              },
+            ],
+          };
+        }
+        throw new Error('invocation 2 must complete in a single page');
+      },
+      async getMessageMetadata(opts) {
+        if (opts.messageId === 'm2') {
+          return { internalDate: '2026-09-13T01:20:00.000Z', labelIds: [] };
+        }
+        throw new Error(`unexpected messageId ${opts.messageId}`);
+      },
+      async listMessagesInWindow() {
+        throw new Error('not used in this test');
+      },
+      async getCurrentHistoryId() {
+        throw new Error('not used in this test');
+      },
+    };
+
+    const result2 = await syncGmailAccountHistory(db, client2, submitter, {
+      sourceAccountId: accounts.gmailAccountId,
+      sourcePolicyId: accounts.gmailPolicyId,
+      connectedAt: FIXTURE_NOW,
+      now: '2026-09-13T02:05:00.000Z',
+      maxPagesPerInvocation: 5,
+    });
+
+    expect(result2.outcome).toBe('SYNCED');
+    expect(calls2).toHaveLength(1);
+    expect(calls2[0]).toEqual({ startHistoryId: 'h0', pageToken: 'page2' }); // resumed, not restarted
+    expect(submitted.map((e) => e.source_event_id)).toEqual(['m1', 'm2']); // invocation-1 work preserved
+
+    const rowAfter2 = await readCursorRow(db, accounts.gmailAccountId);
+    expect(JSON.parse(rowAfter2!.cursor_value as string)).toEqual({
+      historyId: 'h-final',
+      lastSeenInternalDate: '2026-09-13T01:20:00.000Z', // max across BOTH invocations' work
+    });
+
+    const progressRowAfter2 = await db
+      .prepare('SELECT * FROM gmail_history_sync_progress WHERE source_account_id = ?')
+      .bind(accounts.gmailAccountId)
+      .first();
+    expect(progressRowAfter2).toBeNull(); // checkpoint cleaned up on successful completion
+  });
+
+  it('discards a checkpoint that no longer matches the current cursor state instead of resuming from stale assumptions', async () => {
+    const { db, accounts } = await setup({
+      cursorValue: JSON.stringify({ historyId: 'h0', lastSeenInternalDate: FIXTURE_NOW }),
+    });
+    // A checkpoint left behind by a superseded traversal -- anchored to a DIFFERENT
+    // start_history_id/prev_cursor_json than the current source_cursors state.
+    await db
+      .prepare(
+        `INSERT INTO gmail_history_sync_progress
+           (source_account_id, start_history_id, prev_cursor_json, next_page_token,
+            accumulated_newest_internal_date, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        accounts.gmailAccountId,
+        'stale-history-id',
+        JSON.stringify({
+          historyId: 'stale-history-id',
+          lastSeenInternalDate: '2026-09-01T00:00:00.000Z',
+        }),
+        'stale-page-token',
+        '2026-09-01T00:00:00.000Z',
+        '2026-09-01T00:00:00.000Z',
+      )
+      .run();
+
+    const calls: Array<{ startHistoryId: string; pageToken?: string }> = [];
+    const client: GmailHistoryClient = {
+      async listHistory(opts) {
+        calls.push(opts);
+        return { historyId: 'h-final', records: [] };
+      },
+      async getMessageMetadata() {
+        throw new Error('not used in this test');
+      },
+      async listMessagesInWindow() {
+        throw new Error('not used in this test');
+      },
+      async getCurrentHistoryId() {
+        throw new Error('not used in this test');
+      },
+    };
+    const { submitter } = fakeSubmitter();
+
+    const result = await syncGmailAccountHistory(db, client, submitter, {
+      sourceAccountId: accounts.gmailAccountId,
+      sourcePolicyId: accounts.gmailPolicyId,
+      connectedAt: FIXTURE_NOW,
+      now: '2026-09-13T02:00:00.000Z',
+    });
+
+    expect(result.outcome).toBe('SYNCED');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual({ startHistoryId: 'h0' }); // fresh start, NOT resumed from 'stale-page-token'
   });
 });
