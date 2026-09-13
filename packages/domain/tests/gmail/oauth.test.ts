@@ -434,6 +434,7 @@ describe('connectGmailAccount', () => {
           disconnectResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
             sourceAccountId: accounts.gmailAccountId,
             now: FIXTURE_NOW,
+            clock: () => FIXTURE_NOW,
           });
           return { refreshToken: '1//reconnect-token', gmailEmail: 'owner@example.com' };
         },
@@ -479,6 +480,7 @@ describe('connectGmailAccount', () => {
       const disconnectResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
       expect(disconnectResult).toEqual({ outcome: 'DISCONNECTED' });
 
@@ -522,6 +524,7 @@ describe('disconnectGmailAccount', () => {
     const result = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
       sourceAccountId: accounts.gmailAccountId,
       now: FIXTURE_NOW,
+      clock: () => FIXTURE_NOW,
     });
     expect(result).toEqual({ outcome: 'DISCONNECTED' });
 
@@ -543,6 +546,7 @@ describe('disconnectGmailAccount', () => {
     const result = await disconnectGmailAccount(db, kek, client, {
       sourceAccountId: accounts.gmailAccountId,
       now: FIXTURE_NOW,
+      clock: () => FIXTURE_NOW,
     });
     expect(result).toEqual({ outcome: 'NOT_CONNECTED' });
     expect(calls).toEqual([]);
@@ -587,6 +591,7 @@ describe('disconnectGmailAccount', () => {
       await disconnectGmailAccount(db, kek, client, {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
 
       expect(calls).toEqual(['stopWatch', 'revokeToken']);
@@ -631,6 +636,7 @@ describe('disconnectGmailAccount', () => {
         await disconnectGmailAccount(db, kek, failingClient, {
           sourceAccountId: accounts.gmailAccountId,
           now: FIXTURE_NOW,
+          clock: () => FIXTURE_NOW,
         });
       } catch (error) {
         caught = error;
@@ -654,6 +660,7 @@ describe('disconnectGmailAccount', () => {
       const retryDisconnect = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
       expect(retryDisconnect).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
 
@@ -698,6 +705,7 @@ describe('disconnectGmailAccount', () => {
         await disconnectGmailAccount(db, kek, failingClient, {
           sourceAccountId: accounts.gmailAccountId,
           now: FIXTURE_NOW,
+          clock: () => FIXTURE_NOW,
         });
       } catch (error) {
         caught = error;
@@ -714,6 +722,7 @@ describe('disconnectGmailAccount', () => {
       const retryDisconnect = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
       expect(retryDisconnect).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
 
@@ -756,6 +765,7 @@ describe('disconnectGmailAccount', () => {
         disconnectGmailAccount(db, kek, fakeGoogleClient(), {
           sourceAccountId: accounts.gmailAccountId,
           now: FIXTURE_NOW,
+          clock: () => FIXTURE_NOW,
         }),
       ).rejects.toThrow();
 
@@ -829,6 +839,7 @@ describe('disconnectGmailAccount', () => {
       const result = await disconnectGmailAccount(db, kek, client, {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
 
       expect(reconnectResult).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
@@ -863,6 +874,7 @@ describe('disconnectGmailAccount', () => {
           secondResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
             sourceAccountId: accounts.gmailAccountId,
             now: FIXTURE_NOW,
+            clock: () => FIXTURE_NOW,
           });
         },
       });
@@ -870,6 +882,7 @@ describe('disconnectGmailAccount', () => {
       const firstResult = await disconnectGmailAccount(db, kek, client, {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
 
       expect(secondResult).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
@@ -921,6 +934,7 @@ describe('disconnectGmailAccount', () => {
       const result = await disconnectGmailAccount(db, kek, client, {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
 
       expect(reconnectResult).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
@@ -952,8 +966,8 @@ describe('disconnectGmailAccount', () => {
       await db
         .prepare(
           `UPDATE gmail_oauth_lifecycle
-           SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?
-           WHERE source_account_id = ?`,
+           SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?, source_account_id = ?
+           WHERE source = 'gmail'`,
         )
         .bind('abandoned-lock', FIXTURE_NOW, accounts.gmailAccountId)
         .run();
@@ -971,14 +985,14 @@ describe('disconnectGmailAccount', () => {
       const disconnectTakeoverAttempt = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
       expect(disconnectTakeoverAttempt).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
 
       // Still stuck: the abandoned lock token is still exactly what was seeded, proving neither
       // attempt above silently cleared or replaced it.
       const lifecycle = await db
-        .prepare('SELECT lock_token FROM gmail_oauth_lifecycle WHERE source_account_id = ?')
-        .bind(accounts.gmailAccountId)
+        .prepare("SELECT lock_token FROM gmail_oauth_lifecycle WHERE source = 'gmail'")
         .first<{ lock_token: string }>();
       expect(lifecycle?.lock_token).toBe('abandoned-lock');
     },
@@ -1017,6 +1031,7 @@ describe('disconnectGmailAccount', () => {
         disconnectGmailAccount(failingBatchDb, kek, fakeGoogleClient(), {
           sourceAccountId: accounts.gmailAccountId,
           now: FIXTURE_NOW,
+          clock: () => FIXTURE_NOW,
         }),
       ).rejects.toThrow(batchFailure);
 
@@ -1055,6 +1070,7 @@ describe('disconnectGmailAccount', () => {
       const retryResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
       expect(retryResult).toEqual({ outcome: 'NOT_CONNECTED' });
     },
@@ -1076,8 +1092,8 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
           await db
             .prepare(
               `UPDATE gmail_oauth_lifecycle
-               SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?
-               WHERE source_account_id = ?`,
+               SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?, source_account_id = ?
+               WHERE source = 'gmail'`,
             )
             .bind('other-holder-token', FIXTURE_NOW, accounts.gmailAccountId)
             .run();
@@ -1097,10 +1113,7 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
       ).rejects.toThrow(exchangeFails);
 
       const lifecycle = await db
-        .prepare(
-          'SELECT lock_token, lock_kind FROM gmail_oauth_lifecycle WHERE source_account_id = ?',
-        )
-        .bind(accounts.gmailAccountId)
+        .prepare("SELECT lock_token, lock_kind FROM gmail_oauth_lifecycle WHERE source = 'gmail'")
         .first<{ lock_token: string; lock_kind: string }>();
       expect(lifecycle?.lock_token).toBe('other-holder-token');
       expect(lifecycle?.lock_kind).toBe('DISCONNECT');
@@ -1124,6 +1137,7 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
       await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
       });
 
       const exactlyAtBuffer = new Date(Date.parse(FIXTURE_NOW) + 5 * 60_000).toISOString();
@@ -1159,8 +1173,8 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
       await db
         .prepare(
           `UPDATE gmail_oauth_lifecycle
-           SET lock_token = ?, lock_kind = 'CONNECT', lock_acquired_at = ?
-           WHERE source_account_id = ?`,
+           SET lock_token = ?, lock_kind = 'CONNECT', lock_acquired_at = ?, source_account_id = ?
+           WHERE source = 'gmail'`,
         )
         .bind('abandoned-connect-lock', FIXTURE_NOW, accounts.gmailAccountId)
         .run();
@@ -1168,6 +1182,7 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
       const tooSoon = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: new Date(Date.parse(FIXTURE_NOW) + 60_000).toISOString(),
+        clock: () => new Date(Date.parse(FIXTURE_NOW) + 60_000).toISOString(),
       });
       expect(tooSoon).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
 
@@ -1175,6 +1190,7 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
       const result = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: afterStale,
+        clock: () => afterStale,
       });
       expect(result).toEqual({ outcome: 'DISCONNECTED' });
     },
@@ -1195,10 +1211,7 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
       });
 
       await expect(
-        db
-          .prepare('DELETE FROM gmail_oauth_lifecycle WHERE source_account_id = ?')
-          .bind(accounts.gmailAccountId)
-          .run(),
+        db.prepare("DELETE FROM gmail_oauth_lifecycle WHERE source = 'gmail'").run(),
       ).rejects.toThrow();
     },
   );
@@ -1219,8 +1232,8 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
           await db
             .prepare(
               `UPDATE gmail_oauth_lifecycle
-               SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?
-               WHERE source_account_id = ?`,
+               SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?, source_account_id = ?
+               WHERE source = 'gmail'`,
             )
             .bind('someone-else-token', FIXTURE_NOW, accounts.gmailAccountId)
             .run();
@@ -1248,8 +1261,7 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
       // The other holder's lock is untouched -- the catch block's own release attempt (with our
       // now-stale token) was a safe fenced no-op, not a clobber.
       const lifecycle = await db
-        .prepare('SELECT lock_token FROM gmail_oauth_lifecycle WHERE source_account_id = ?')
-        .bind(accounts.gmailAccountId)
+        .prepare("SELECT lock_token FROM gmail_oauth_lifecycle WHERE source = 'gmail'")
         .first<{ lock_token: string }>();
       expect(lifecycle?.lock_token).toBe('someone-else-token');
     },
@@ -1324,31 +1336,31 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
               throw revokeFails;
             },
           }),
-          { sourceAccountId: accounts.gmailAccountId, now: FIXTURE_NOW },
+          { sourceAccountId: accounts.gmailAccountId, now: FIXTURE_NOW, clock: () => FIXTURE_NOW },
         ),
       ).rejects.toThrow(DisconnectAmbiguousExternalCallError);
 
+      // Uses ONLY the exported primitives -- no raw SQL backdoor to fetch lock_token (round-10 fix,
+      // GPT-PM full-sweep MAJOR: an earlier revision of listWedgedGmailDisconnectLocks omitted
+      // lockToken, forcing exactly the raw-SQL step this test now proves is unnecessary).
       const wedged = await listWedgedGmailDisconnectLocks(db);
       expect(wedged).toHaveLength(1);
       expect(wedged[0]?.sourceAccountId).toBe(accounts.gmailAccountId);
 
-      const lockRow = await db
-        .prepare('SELECT lock_token FROM gmail_oauth_lifecycle WHERE source_account_id = ?')
-        .bind(accounts.gmailAccountId)
-        .first<{ lock_token: string }>();
-
       const confirmedAt = new Date(Date.parse(FIXTURE_NOW) + 3600_000).toISOString();
-      await reconcileWedgedGmailDisconnectLock(db, {
+      const reconcileResult = await reconcileWedgedGmailDisconnectLock(db, {
         sourceAccountId: accounts.gmailAccountId,
-        lockToken: lockRow!.lock_token,
+        lockToken: wedged[0]!.lockToken,
         now: confirmedAt,
         googleConfirmedOutcome: 'REVOKE_CONFIRMED',
       });
+      expect(reconcileResult).toBe('RECONCILED');
 
       // The lock is clear...
       const afterReconcile = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: confirmedAt,
+        clock: () => confirmedAt,
       });
       expect(afterReconcile).toEqual({ outcome: 'DISCONNECTED' });
 
@@ -1363,6 +1375,252 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
         now: confirmedAt,
       });
       expect(immediateReconnect).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+    },
+  );
+
+  it(
+    'GPT-PM round-9 full-sweep MAJOR #1: the project-wide lock closes the cross-account race the ' +
+      'per-source_account_id design could not -- a DIFFERENT account (B) attempting to connect ' +
+      "while account A's disconnect is mid-revokeToken() is refused, even though A and B are " +
+      'different source_account_id rows for different Gmail addresses',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-a',
+        codeVerifier: 'verifier-a',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const secondAccountId = 'acc-gmail-second';
+      await db
+        .prepare(
+          'INSERT INTO source_accounts (source_account_id, user_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        )
+        .bind(secondAccountId, accounts.userId, 'gmail', FIXTURE_NOW, FIXTURE_NOW)
+        .run();
+
+      let connectBResult: ConnectGmailAccountResult | null = null;
+      const client = fakeGoogleClient({
+        revokeToken: async () => {
+          connectBResult = await connectGmailAccount(
+            db,
+            kek,
+            fakeGoogleClient({
+              exchangeCode: async () => ({
+                refreshToken: '1//account-b-token',
+                gmailEmail: 'other@example.com',
+              }),
+            }),
+            {
+              sourceAccountId: secondAccountId,
+              code: 'auth-code-b',
+              codeVerifier: 'verifier-b',
+              collectionMode: 'PUSH',
+              kekVersion: KEK_VERSION,
+              now: FIXTURE_NOW,
+            },
+          );
+        },
+      });
+
+      const disconnectAResult = await disconnectGmailAccount(db, kek, client, {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
+      });
+
+      expect(connectBResult).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+      expect(disconnectAResult).toEqual({ outcome: 'DISCONNECTED' });
+
+      const bRow = await db
+        .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
+        .bind(secondAccountId)
+        .first();
+      expect(bRow).toBeNull();
+    },
+  );
+
+  it(
+    "GPT-PM round-9 full-sweep MAJOR #2: revoke_settled_at reflects opts.clock()'s post-revokeToken() " +
+      "reading, not this call's entry-time now -- a slow stopWatch+revokeToken no longer silently " +
+      'shrinks REVOKE_PROPAGATION_BUFFER_MS',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      // stopWatch + revokeToken together take 4 real minutes, simulated via clock() returning a
+      // reading 4 minutes after this call's own entry-time `now`.
+      const settledAt = new Date(Date.parse(FIXTURE_NOW) + 4 * 60_000).toISOString();
+      await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+        clock: () => settledAt,
+      });
+
+      // 5 minutes after ENTRY time, but only 1 minute after the REAL settlement -- if
+      // revoke_settled_at had wrongly been recorded as entry-time `now`, this would already be
+      // eligible; it must still be refused.
+      const fiveMinAfterEntry = new Date(Date.parse(FIXTURE_NOW) + 5 * 60_000).toISOString();
+      const tooSoon = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: fiveMinAfterEntry,
+      });
+      expect(tooSoon).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+
+      // 5 minutes after the REAL settlement -- now eligible.
+      const fiveMinAfterSettle = new Date(Date.parse(settledAt) + 5 * 60_000).toISOString();
+      const afterBuffer = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-3',
+        codeVerifier: 'verifier-3',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: fiveMinAfterSettle,
+      });
+      expect(afterBuffer).toEqual({ outcome: 'CONNECTED' });
+    },
+  );
+
+  it(
+    'GPT-PM round-9 full-sweep MAJOR #3: reconcileWedgedGmailDisconnectLock reports STALE_LOCK ' +
+      "(not a silent success) when the supplied lockToken no longer matches the row's current " +
+      'holder, instead of returning void unconditionally',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const revokeFails = new Error('google unavailable');
+      await expect(
+        disconnectGmailAccount(
+          db,
+          kek,
+          fakeGoogleClient({
+            revokeToken: async () => {
+              throw revokeFails;
+            },
+          }),
+          { sourceAccountId: accounts.gmailAccountId, now: FIXTURE_NOW, clock: () => FIXTURE_NOW },
+        ),
+      ).rejects.toThrow(DisconnectAmbiguousExternalCallError);
+
+      const result = await reconcileWedgedGmailDisconnectLock(db, {
+        sourceAccountId: accounts.gmailAccountId,
+        lockToken: 'definitely-not-the-real-token',
+        now: FIXTURE_NOW,
+        googleConfirmedOutcome: 'REVOKE_CONFIRMED',
+      });
+      expect(result).toBe('STALE_LOCK');
+
+      // Still wedged -- the bogus reconcile attempt did not clear it.
+      const stillWedged = await listWedgedGmailDisconnectLocks(db);
+      expect(stillWedged).toHaveLength(1);
+    },
+  );
+
+  it(
+    'GPT-PM round-9 full-sweep MAJOR #4: listWedgedGmailDisconnectLocks does NOT list a disconnect ' +
+      'that is still legitimately executing (holds the DISCONNECT lock but has not hit the ' +
+      "ambiguous-failure catch branch) -- lock_kind = 'DISCONNECT' alone cannot distinguish that " +
+      'from a genuinely wedged account; recovery_state can',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      let sawWhileInFlight: unknown[] | null = null;
+      const client = fakeGoogleClient({
+        stopWatch: async () => {
+          // Still mid-flight, holding the DISCONNECT lock, no error yet -- must not appear here.
+          sawWhileInFlight = await listWedgedGmailDisconnectLocks(db);
+        },
+      });
+
+      await disconnectGmailAccount(db, kek, client, {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
+      });
+
+      expect(sawWhileInFlight).toEqual([]);
+    },
+  );
+
+  it(
+    'GPT-PM round-9 full-sweep MAJOR #5: a purely local D1 read failure (the credential SELECT) is ' +
+      'now inside the protected release path -- no Google call was ever attempted, so the lock ' +
+      'releases immediately instead of wedging the account forever',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const selectFails = new Error('transient D1 read failure');
+      const flakyDb: D1Database = {
+        prepare: (sql: string) => {
+          if (sql.includes('SELECT encrypted_refresh_token')) {
+            return {
+              bind: () => ({
+                first: async () => {
+                  throw selectFails;
+                },
+              }),
+            };
+          }
+          return db.prepare(sql);
+        },
+        batch: (statements: unknown) =>
+          (db as unknown as { batch: (s: unknown) => unknown }).batch(statements),
+      } as unknown as D1Database;
+
+      await expect(
+        disconnectGmailAccount(flakyDb, kek, fakeGoogleClient(), {
+          sourceAccountId: accounts.gmailAccountId,
+          now: FIXTURE_NOW,
+          clock: () => FIXTURE_NOW,
+        }),
+      ).rejects.toThrow(selectFails);
+
+      // The lock WAS released (this failure never touched Google) -- an immediate retry against
+      // the real db succeeds.
+      const retry = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
+      });
+      expect(retry).toEqual({ outcome: 'DISCONNECTED' });
     },
   );
 });

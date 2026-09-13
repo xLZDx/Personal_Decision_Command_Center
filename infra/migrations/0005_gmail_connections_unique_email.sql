@@ -1,7 +1,7 @@
 -- Migration 0005: G3 checkpoint 4, round-9 remediation -- lock-granularity-vs-revocation-blast-
--- radius fix (architect, internal review MAJOR #3, the finding explicitly flagged as needing
--- Google's own primary documentation opened before deciding, per this project's evidence-over-
--- inference discipline -- not GPT-PM's or this module's own prior restatement of the claim).
+-- radius, DEFENSE-IN-DEPTH layer (architect, internal review MAJOR #3, the finding explicitly
+-- flagged as needing Google's own primary documentation opened before deciding, per this project's
+-- evidence-over-inference discipline -- not GPT-PM's or this module's own prior restatement of it).
 --
 -- Verified against the primary source (developers.google.com/identity/protocols/oauth2/native-app,
 -- "Token revocation" section, fetched and independently re-confirmed 2026-09-13):
@@ -10,33 +10,28 @@
 --   "Following a successful revocation response, it might take some time before the revocation has
 --    full effect."
 -- This CONFIRMS (not merely restates) oauth.ts's existing "project-wide, not scoped to one token"
--- claim and the propagation-delay claim behind REVOKE_PROPAGATION_BUFFER_MS -- both are now FACT,
--- verified against Google's own words, not inference from a reviewer's or this module's own prior
--- summary of them.
+-- claim and the propagation-delay claim behind REVOKE_PROPAGATION_BUFFER_MS.
 --
--- The gap this migration closes: `gmail_oauth_lifecycle` (migration 0004) coordinates connect vs.
--- disconnect PER `source_account_id` -- but Google's revoke endpoint invalidates tokens for the
--- underlying Google ACCOUNT project-wide, not per `source_account_id`. Nothing in this schema
--- before this migration prevented two different `source_account_id` rows (same or different
--- `user_id` -- `source_accounts` has no uniqueness on the real external identity at all) from both
--- holding a live connection to the SAME real Gmail address. In that state the two rows' lifecycle
--- locks never contend (different primary keys), so disconnecting/revoking through one
--- `source_account_id` silently invalidates the OTHER `source_account_id`'s live token at Google,
--- with neither `gmail_oauth_lifecycle`'s lock nor its `revoke_settled_at` propagation buffer ever
--- learning about it -- the other row keeps looking CONNECTED locally while actually dead at Google.
+-- **Round 10 correction, important: this index is NOT the synchronization primitive, and round 9's
+-- own header comment here overstated what it closes.** GPT-PM's round-9 full-sweep review (see
+-- migration 0004's own header, and core/DECISION_LOG.md) demonstrated this index does not actually
+-- close the cross-`source_account_id` revocation race: the real failure shape is TWO different
+-- `source_account_id` rows for the SAME Google identity, one (A) disconnecting/revoking while the
+-- other (B) is independently mid-`exchangeCode()`. If A's disconnect completes -- revoking at
+-- Google AND deleting A's `gmail_connections` row -- BEFORE B's own write lands, this index sees no
+-- conflict at all (A's row is already gone), so B's write succeeds, reporting CONNECTED with a
+-- credential that may already be invalidated by A's revoke. A UNIQUE index can only reject two rows
+-- that exist AT THE SAME TIME; it cannot serialize operations that never overlap in the table but
+-- DO overlap at Google.
 --
--- Fix, chosen over re-keying `gmail_oauth_lifecycle` itself (which would have been a much larger
--- change, and per architect's own framing was only one of two options): a UNIQUE index on
--- `gmail_connections.gmail_email` (case-folded, since Google account identity is not
--- case-sensitive) makes it structurally impossible for two `source_account_id` rows to hold a LIVE
--- connection to the same Gmail address at once -- the only reachable shape of the actual bug above
--- requires exactly that. `connectGmailAccount`'s own reconnect path (same `source_account_id`,
--- `ON CONFLICT (source_account_id) DO UPDATE`) is unaffected, since a row updating itself never
--- conflicts with its own prior value. A genuinely NEW `source_account_id` attempting to connect an
--- ALREADY-connected Gmail address now fails the write outright (a raw constraint-violation error
--- propagates, safe-by-default: refuses silently aliasing, does not corrupt state) rather than
--- succeeding and creating the exact aliasing this migration exists to prevent -- a friendlier typed
--- outcome for that case (e.g. `DUPLICATE_GMAIL_ACCOUNT`) is reasonable future UX work, out of this
--- checkpoint's scope (tracked risk, not a defect, same framing this module already uses for the
--- key-ring-resolution gap in disconnectGmailAccount's own doc comment).
+-- The actual fix (migration 0004, this round): `gmail_oauth_lifecycle` is now a project-wide
+-- singleton lock, so A's disconnect and B's connect genuinely contend on the SAME lock regardless
+-- of `source_account_id` -- this closes the race migration 0004's own header describes in full.
+--
+-- This index REMAINS as defense in depth (GPT-PM's own words: "The unique-email index can remain
+-- defense in depth, but it cannot be the synchronization primitive") -- it still prevents two
+-- `source_account_id` rows from both holding a persisted, simultaneously-live connection to the
+-- same Gmail address via any path that bypasses the lifecycle lock (a bug elsewhere, a manual DB
+-- edit, a future code path that forgets to acquire the lock) -- but the project-wide lock in
+-- migration 0004 is what actually enforces the invariant during normal operation.
 CREATE UNIQUE INDEX idx_gmail_connections_unique_email ON gmail_connections(LOWER(gmail_email));

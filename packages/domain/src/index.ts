@@ -111,4 +111,5 @@ export type {
   DisconnectGmailAccountResult,
   WedgedGmailDisconnectLock,
   ReconcileWedgedGmailDisconnectLockOptions,
+  ReconcileWedgedGmailDisconnectLockResult,
 } from './gmail/oauth.js';

@@ -3,6 +3,116 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 4 round 10: GPT-PM's round-9 full-sweep review found the round-9
+
+remediation's lock design was STILL wrong (5 MAJOR, none anticipated by internal review) --
+`gmail_oauth_lifecycle` redesigned from per-`source_account_id` to a project-wide singleton, plus 4
+further fixes, all in one batch
+
+**Sent round 9 (commit `b779f0c`, diffed against `826f8cf`) to GPT-PM via `review.js --base
+826f8cf --round 9`, with an explicit full-sweep scope note** (`--scope-note-file`, per operator
+standing instruction and CLAUDE.md §17: check the whole gate/mechanism/integrations, not just the
+fixed findings). **Result: `VERDICT: MAJOR`, 0 BLOCKER / 5 MAJOR / 0 MINOR** -- GPT-PM explicitly
+stated it "performed the requested full sweep of the mechanism rather than limiting review to the
+nine described remediations." Every finding was verified directly against the actual source before
+acting on it (CLAUDE.md §3/§7/§23) -- all 5 confirmed real, none were confabulated or misapplied:
+
+1. **The unique-email index (migration 0005) does NOT close the cross-`source_account_id`
+   revocation race, because the durable lifecycle/propagation state was still keyed by
+   `source_account_id`.** Failure scenario GPT-PM demonstrated: account A is connected as
+   `owner@gmail...`; a DIFFERENT `source_account_id` B independently starts OAuth for the SAME
+   Google identity and acquires its OWN lifecycle lock (different PK, no contention with A's lock).
+   While B is inside `exchangeCode()`, A's disconnect acquires A's own lock, revokes at Google
+   (project-wide), and deletes A's `gmail_connections` row. B's subsequent write then sees NO
+   conflicting row (A's is already gone) and the unique index catches nothing -- B commits
+   `CONNECTED` with a credential that may already be dead at Google. The unique index only prevents
+   two rows existing SIMULTANEOUSLY; it does not serialize operations that never overlap in the
+   table but DO overlap at Google. **Required change GPT-PM specified: "coordinate at Google's
+   actual revocation identity/blast radius... a conservative project-level Gmail OAuth lifecycle
+   lock for the whole exchange/revoke window" if the real Google identity cannot be known before
+   code exchange (it can't -- `exchangeCode()` is the only way to learn `gmailEmail`).**
+2. **`REVOKE_PROPAGATION_BUFFER_MS`'s clock started before the Google calls, not when revocation
+   actually settled.** `opts.now` (this call's ENTRY-time) was written as `revoke_settled_at` after
+   `revokeToken()` resolved, instead of a clock sampled AT that resolution. Failure scenario:
+   `stopWatch` + `revokeToken` take 4 real minutes; `revoke_settled_at` records the call's original
+   entry timestamp, leaving only ~1 minute of the nominal 5-minute buffer once the response actually
+   arrives -- if the external calls take over 5 minutes, reconnect becomes immediately eligible. GPT-PM
+   also separately flagged the deeper tension: a fixed best-effort buffer against an undocumented
+   Google SLA cannot literally satisfy an absolute "must never reopen while propagation might
+   remain" reading of the invariant, and asked for an explicit decision on which one governs.
+3. **The exported reconciliation API was internally unusable**: `listWedgedGmailDisconnectLocks`
+   did not return `lock_token`, while `reconcileWedgedGmailDisconnectLock` required it as "the EXACT
+   token" -- provable directly from this project's own round-9 test, which had to fall back to a raw
+   SQL query to obtain it. The write side also returned `void` unconditionally, so a stale/wrong
+   token silently no-opped -- "operations can therefore report reconciliation complete while the
+   account remains permanently locked."
+4. **`listWedgedGmailDisconnectLocks` could not distinguish a genuinely wedged account from a
+   disconnect that is simply, legitimately still executing** -- it filtered on `lock_kind =
+'DISCONNECT'` alone, which is also true for the entire normal duration of every healthy
+   disconnect. "Clearing its lock permits another connect/disconnect while the first external
+   request may still complete later -- the exact invariant this entire mechanism is intended to
+   enforce."
+5. **A purely local D1 read failure (the credential `SELECT`) sat OUTSIDE `disconnectGmailAccount`'s
+   protected try/catch/release block**, acquired the lock, then could throw with no route to
+   release it -- permanently wedging an account for a failure that never touched Google at all.
+
+**GPT-PM also independently confirmed 3 things survived the sweep without new defects:** the
+round-9 `WHERE EXISTS(lock_token)` credential-write fence "correctly prevents a late CONNECT writer
+from persisting after losing ownership"; the never-delete trigger is mechanically compatible with
+`db.batch()` (a failed statement rolls back the whole batch, so a hypothetical `DELETE` inside one
+would not partially commit); and `oauth_flows`' whole-table-clear under MVP1's single-account scope
+has no new scoped defect.
+
+**Remediation, one batch (per §17's "fix the whole reported package, then verify"):**
+
+1. **`gmail_oauth_lifecycle` redesigned as a project-wide SINGLETON** (`infra/migrations/
+0004_gmail_oauth_lifecycle_lock.sql`, rewritten): `source = 'gmail'` (CHECK-constrained) is now
+   its sole primary key value, seeded once by the migration, never inserted by application code --
+   EVERY connect and disconnect attempt, for EVERY account, now contends on the SAME row, matching
+   Google's actual project-wide revocation grain. `source_account_id` is now a nullable, purely
+   diagnostic column (which account currently holds the lock), with a nullable FK to
+   `source_accounts` (not enforced while free). `connectGmailAccount`'s and `disconnectGmailAccount`'s
+   acquisition queries became plain conditional `UPDATE`s (no more `INSERT ... ON CONFLICT`, since
+   the row always exists). Migration `0005`'s header comment corrected: the unique-email index is
+   now explicitly documented as defense-in-depth, never the synchronization primitive, per GPT-PM's
+   own framing.
+2. **`DisconnectGmailAccountOptions` gained a required `clock: () => string`**, sampled immediately
+   after `revokeToken()` resolves and used for `revoke_settled_at` in both the success-path batch
+   and the catch's `revoke-settled` branch -- `opts.now` (entry-time) is no longer used for this
+   value. Matches this module's existing now-injection discipline (no bare `Date.now()` reads
+   anywhere in the package): production wires a real clock, tests supply a fixed/advancing stub. All
+   22 existing `disconnectGmailAccount` call sites across `oauth.test.ts` updated.
+3. **`REVOKE_PROPAGATION_BUFFER_MS`'s doc comment now explicitly names the accepted product
+   decision**: no authoritative provider/reconciliation barrier is achievable (Google publishes no
+   propagation SLA; a real reconciliation capability is a materially bigger feature deferred to
+   `services/gmail-connector`, §2.1) -- the checkpoint's accepted posture is a fixed, conservative,
+   honestly-documented best-effort delay, not an absolute guarantee.
+4. **`listWedgedGmailDisconnectLocks` now returns `lockToken` directly** (new `recovery_state`
+   column, migration 0004) **and filters on `recovery_state = 'EXTERNAL_OUTCOME_UNKNOWN'`**, written
+   ONLY in `disconnectGmailAccount`'s ambiguous-failure catch branches -- a currently-executing,
+   non-ambiguous disconnect never appears. A crash-abandoned lock (never reached its own `catch`, so
+   never wrote `recovery_state`) deliberately does NOT appear either -- documented as needing a
+   separate, heavier force-recovery procedure with independent evidence, out of scope.
+5. **`reconcileWedgedGmailDisconnectLock` now returns `'RECONCILED' | 'STALE_LOCK'`** (checks
+   `meta.changes`) instead of `void` unconditionally, and fences on BOTH `sourceAccountId` and
+   `lockToken`.
+6. **The credential `SELECT` moved inside `disconnectGmailAccount`'s `try`, under a new initial
+   `externalPhase` value `'not-started'`**, treated identically to `'stop-settled'` in the `catch`
+   (safe to release immediately, no Google call was ever attempted).
+
+**Verification:** 40/40 `oauth.test.ts` tests pass (5 new: cross-account race closure, `clock()`
+timestamp correctness with an exact-boundary demonstration, `STALE_LOCK` reconciliation result,
+in-flight-disconnect exclusion from the wedged listing, pre-try SELECT-failure release), 421/421
+workspace-wide, `tsc --noEmit` clean, `eslint .` clean. Mutation-tested the two highest-risk new
+guards by reverting each to its pre-fix behavior and confirming the corresponding new test fails:
+`listWedgedGmailDisconnectLocks`'s `recovery_state` filter (reverted to `lock_kind = 'DISCONNECT'`
+alone -- the in-flight-exclusion test then failed, listing a legitimately-executing disconnect as
+wedged) and the `clock()`-sourced `revoke_settled_at` (reverted to `opts.now` -- the timestamp test
+then failed, allowing a premature reconnect). Both reverted after confirming the kill.
+
+**Not yet done:** this round has not yet been sent back to GPT-PM as round 10. This entry and the
+commit that carries it happen first, per the operator's standing autonomous-through-G6 authorization.
+
 ## 2026-09-13 — G3 checkpoint 4 round 8 (full-sweep fix) + round 9 (internal review + remediation
 
 in one batch): `gmail_oauth_lifecycle`, a never-deleted mutual-exclusion lock shared by connect and
