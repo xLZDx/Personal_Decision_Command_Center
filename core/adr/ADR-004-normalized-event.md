@@ -26,7 +26,11 @@ source_event_id     string
 source_thread_id    string | null
 event_type          'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED'
 direction           'INBOUND' | 'OUTBOUND'
-occurred_at         ISO datetime, provider-reported (source provenance, TDD §13)
+occurred_at         ISO datetime, event occurrence timestamp — provenance/quality is defined by
+                    occurred_at_quality below; do NOT read this field alone as guaranteed provider
+                    provenance (GPT-PM round-3 MINOR, 2026-09-13: the original "provider-reported"
+                    wording here still read as unconditional even after occurred_at_quality was
+                    added, the exact ambiguity that field exists to remove)
 occurred_at_quality 'PROVIDER_REPORTED' (default) | 'ESTIMATED_FROM_RECEIPT' — added G3 checkpoint
                     5, GPT-PM round-2 MAJOR (2026-09-13): whether `occurred_at` above is genuinely
                     the source's own reported time, or a connector's best estimate (its own

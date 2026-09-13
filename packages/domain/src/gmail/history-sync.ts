@@ -95,6 +95,41 @@ import { NormalizedEventSchema, SCHEMA_VERSION, type NormalizedEvent } from '@pd
  *    `advanceCursor` already uses for `source_cursors`: a stale caller's mutation naturally affects
  *    zero rows because the row's anchor no longer matches what that caller expects.
  *
+ *    GPT-PM round-3 (FINAL, 2026-09-13) found this fencing incomplete and gate-ruled it ACCEPTED
+ *    RESIDUAL RISK / mandatory follow-up backlog (not a blocker for this checkpoint, under the
+ *    operator's hard 3-round cap -- "checkpoint 5 closes after this Round 3... No Round 4"), TWO
+ *    real gaps, both left UNFIXED here, deliberately, for a future gate to close:
+ *
+ *    (a) **Same-anchor concurrent-traversal race can permanently block checkpointing, not just
+ *    duplicate work.** `writeMainProgress`/`writeRecoveryProgress` fence an UPDATE against an
+ *    EXISTING conflicting row's anchor, but a plain INSERT (no existing row) is unconditional --
+ *    it never re-checks that `source_cursors.cursor_value` still equals the anchor the WRITER
+ *    itself observed at its own start. Concretely: T1 and T2 both read cursor A; T2 finishes first,
+ *    deletes its own (possibly nonexistent) A-checkpoint, and CAS-advances A->B; T1, still running
+ *    under stale anchor A, later hits its budget and writes an A-anchored checkpoint into the now-
+ *    EMPTY table -- nothing stopped that INSERT, because nothing there checks cursor_value at
+ *    write time. Every subsequent legitimate B-anchored write (from a fresh T3 reading the CURRENT
+ *    cursor B) is then fenced OUT by this stale A row's mismatched anchor, and both `writeMainProgress`
+ *    /`writeRecoveryProgress`'s own boolean "did this actually write" return value is silently
+ *    IGNORED by both call sites, which unconditionally return `PARTIAL_PROGRESS` either way -- so a
+ *    permanently-orphaned stale row can silently block this account's checkpointing forever, not
+ *    merely cause redundant idempotent resubmission as round-1/round-2's own "accepted, only
+ *    inefficient" framing assumed. Real fix needs either an authoritative-cursor-fenced INSERT (not
+ *    just the UPDATE branch) or a genuine per-traversal generation/invocation token, plus actually
+ *    acting on write*Progress()'s return value (at minimum: don't report `PARTIAL_PROGRESS` when a
+ *    write silently failed -- re-read state and report a CAS-loss-shaped outcome instead).
+ *
+ *    (b) **The external-call budget is opt-in, not a real ceiling, even when set.**
+ *    `maxExternalCallsPerInvocation` defaults to `undefined` (unbounded) rather than defaulting to
+ *    `RECOMMENDED_MAX_EXTERNAL_CALLS_PER_INVOCATION` -- a caller that simply omits the option gets
+ *    the exact unbounded liveness exposure this whole mechanism exists to eliminate. And even when
+ *    set, the budget is only checked BEFORE processing each individual change, never before the
+ *    `listHistory`/`listMessagesInWindow` PAGE FETCH itself that starts a new page -- a page whose
+ *    own fetch happens to land exactly at the budget boundary is still fetched (its cost accounted
+ *    for only AFTER the fact), so the option is not a strict ceiling. Real fix: default to the
+ *    recommended constant unless a caller explicitly opts into unbounded (e.g. `Infinity`, a named
+ *    mode), and reserve/check budget before every external call, page/window fetches included.
+ *
  * `content_locator.ref = message.id`: NOT a gap -- proposal §2.8 states the drill-down endpoint
  * "resolves the opaque `content_locator.ref` to a real Gmail `message.id`/`thread.id`", so this is
  * the proposal's own stated design, merely applied here rather than restated.

@@ -83,7 +83,13 @@ const NormalizedEventBaseSchema = z
     source_thread_id: z.string().min(1).nullable(),
     event_type: EventTypeSchema,
     direction: DirectionSchema,
-    /** Provider-reported time the event happened. Source provenance (TDD 13). */
+    /**
+     * Event occurrence timestamp. Provenance/quality is defined by `occurred_at_quality` below --
+     * do NOT treat this field alone as guaranteed provider provenance (GPT-PM round-3 MINOR,
+     * 2026-09-13: the original "provider-reported" wording here still read as an unconditional
+     * claim even after `occurred_at_quality` was added, which is exactly the semantic ambiguity
+     * that field exists to remove).
+     */
     occurred_at: z.string().datetime({ offset: true }),
     /**
      * Whether `occurred_at` above is genuinely the SOURCE's own reported time
