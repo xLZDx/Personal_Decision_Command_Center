@@ -13,6 +13,7 @@ import {
   disconnectGmailAccount,
   DisconnectAmbiguousExternalCallError,
   DisconnectRecoveryMarkerWriteFailedError,
+  LifecycleLockRecoveryFailedError,
   ConnectLockLostBeforeWriteError,
   listWedgedGmailDisconnectLocks,
   reconcileWedgedGmailDisconnectLock,
@@ -1903,10 +1904,12 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
   );
 
   it(
-    'GPT-PM round-10 full-sweep MAJOR B: REVOKE_NOT_APPLICABLE (Google confirms the revoke never ' +
-      'reached it) only releases the lock, like the STOP phase -- it must NOT take the ' +
-      'REVOKE_CONFIRMED atomic-finalize path, and must NOT touch gmail_connections or ' +
-      'revoke_settled_at',
+    'GPT-PM round-10 full-sweep MAJOR B, result corrected round 12 (GPT-PM round-11 full-sweep ' +
+      'MAJOR): REVOKE_NOT_APPLICABLE (Google confirms the revoke never reached it) only releases ' +
+      'the lock (must NOT take the REVOKE_CONFIRMED atomic-finalize path, must NOT touch ' +
+      'gmail_connections or revoke_settled_at) -- but stopWatch() already succeeded before this ' +
+      'phase was ever reached, so the result is RECONCILED_RETRY_DISCONNECT_REQUIRED, not plain ' +
+      'RECONCILED',
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -1941,7 +1944,7 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
         now: FIXTURE_NOW,
         outcome: { phase: 'REVOKE_OUTCOME_UNKNOWN', confirmed: 'REVOKE_NOT_APPLICABLE' },
       });
-      expect(reconcileResult).toBe('RECONCILED');
+      expect(reconcileResult).toBe('RECONCILED_RETRY_DISCONNECT_REQUIRED');
 
       const connectionRow = await db
         .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
@@ -1957,6 +1960,318 @@ describe('round-9 remediation (internal review: architect, database-reviewer, fu
         clock: () => FIXTURE_NOW,
       });
       expect(freshDisconnect).toEqual({ outcome: 'DISCONNECTED' });
+    },
+  );
+
+  it(
+    'GPT-PM round-10 full-sweep MAJOR B, result corrected round 12: STOP_CONFIRMED (Google confirms ' +
+      'the watch WAS actually stopped) releases the lock but reports ' +
+      'RECONCILED_RETRY_DISCONNECT_REQUIRED, not plain RECONCILED, since Gmail push has genuinely ' +
+      'stopped while gmail_connections still says connected',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const stopFails = new Error('google unavailable (stopWatch)');
+      await expect(
+        disconnectGmailAccount(
+          db,
+          kek,
+          fakeGoogleClient({
+            stopWatch: async () => {
+              throw stopFails;
+            },
+          }),
+          { sourceAccountId: accounts.gmailAccountId, now: FIXTURE_NOW, clock: () => FIXTURE_NOW },
+        ),
+      ).rejects.toThrow(DisconnectAmbiguousExternalCallError);
+
+      const wedged = await listWedgedGmailDisconnectLocks(db);
+      expect(wedged[0]?.outcomeUnknown).toBe('STOP_WATCH_OUTCOME_UNKNOWN');
+
+      const reconcileResult = await reconcileWedgedGmailDisconnectLock(db, {
+        sourceAccountId: accounts.gmailAccountId,
+        lockToken: wedged[0]!.lockToken,
+        now: FIXTURE_NOW,
+        outcome: { phase: 'STOP_WATCH_OUTCOME_UNKNOWN', confirmed: 'STOP_CONFIRMED' },
+      });
+      expect(reconcileResult).toBe('RECONCILED_RETRY_DISCONNECT_REQUIRED');
+
+      // Local state untouched -- the caller is expected to retry disconnectGmailAccount, whose own
+      // stopWatch retry is assumed idempotent.
+      const connectionRow = await db
+        .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
+        .bind(accounts.gmailAccountId)
+        .first();
+      expect(connectionRow).not.toBeNull();
+
+      const freshDisconnect = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+        clock: () => FIXTURE_NOW,
+      });
+      expect(freshDisconnect).toEqual({ outcome: 'DISCONNECTED' });
+    },
+  );
+
+  it(
+    'GPT-PM round-11 full-sweep MAJOR A (round-12 fix, acquisition write commits then throws, AND ' +
+      'the recovery release itself also fails -- a double D1 failure): LifecycleLockRecoveryFailedError ' +
+      'is thrown, carrying lockToken and BOTH errors, instead of silently rethrowing only the ' +
+      'generic original acquisition error with no way to locate the lock',
+    async () => {
+      const { db, accounts, kek } = await setup();
+
+      const acquireFails = new Error('transient D1 write error (acquisition)');
+      const releaseFails = new Error('transient D1 write error (release, same incident)');
+      const flakyDb: D1Database = {
+        prepare: (sql: string) => {
+          const normalized = sql.replace(/\s+/g, ' ');
+          if (normalized.includes("lock_kind = 'CONNECT'")) {
+            return {
+              bind: (...args: unknown[]) => ({
+                run: async () => {
+                  await db
+                    .prepare(sql)
+                    .bind(...args)
+                    .run();
+                  throw acquireFails;
+                },
+              }),
+            };
+          }
+          if (normalized.includes('source_account_id = NULL, recovery_state = NULL')) {
+            return {
+              bind: () => ({
+                run: async () => {
+                  throw releaseFails;
+                },
+              }),
+            };
+          }
+          return db.prepare(sql);
+        },
+        batch: (statements: unknown) =>
+          (db as unknown as { batch: (s: unknown) => unknown }).batch(statements),
+      } as unknown as D1Database;
+
+      let thrown: unknown;
+      try {
+        await connectGmailAccount(flakyDb, kek, fakeGoogleClient(), {
+          sourceAccountId: accounts.gmailAccountId,
+          code: 'auth-code',
+          codeVerifier: 'verifier',
+          collectionMode: 'PUSH',
+          kekVersion: KEK_VERSION,
+          now: FIXTURE_NOW,
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(LifecycleLockRecoveryFailedError);
+      const typed = thrown as LifecycleLockRecoveryFailedError;
+      expect(typed.context).toBe('acquisition-write-release');
+      expect(typed.originalError).toBe(acquireFails);
+      expect(typed.cause).toBe(releaseFails);
+      expect(typeof typed.lockToken).toBe('string');
+      expect(typed.lockToken.length).toBeGreaterThan(0);
+    },
+  );
+
+  it(
+    'GPT-PM round-11 full-sweep MAJOR A (round-12 fix, local disconnect failure -- release also ' +
+      "fails): the same LifecycleLockRecoveryFailedError contract applies to disconnectGmailAccount's " +
+      'own catch-block release, not only the acquisition helper',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const selectFails = new Error('transient D1 read failure (credential SELECT)');
+      const releaseFails = new Error('transient D1 write error (release)');
+      const flakyDb: D1Database = {
+        prepare: (sql: string) => {
+          if (sql.includes('SELECT encrypted_refresh_token')) {
+            return {
+              bind: () => ({
+                first: async () => {
+                  throw selectFails;
+                },
+              }),
+            };
+          }
+          const normalized = sql.replace(/\s+/g, ' ');
+          if (normalized.includes('source_account_id = NULL, recovery_state = NULL')) {
+            return {
+              bind: () => ({
+                run: async () => {
+                  throw releaseFails;
+                },
+              }),
+            };
+          }
+          return db.prepare(sql);
+        },
+        batch: (statements: unknown) =>
+          (db as unknown as { batch: (s: unknown) => unknown }).batch(statements),
+      } as unknown as D1Database;
+
+      let thrown: unknown;
+      try {
+        await disconnectGmailAccount(flakyDb, kek, fakeGoogleClient(), {
+          sourceAccountId: accounts.gmailAccountId,
+          now: FIXTURE_NOW,
+          clock: () => FIXTURE_NOW,
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(LifecycleLockRecoveryFailedError);
+      const typed = thrown as LifecycleLockRecoveryFailedError;
+      expect(typed.context).toBe('disconnectGmailAccount-catch-release');
+      expect(typed.originalError).toBe(selectFails);
+      expect(typed.cause).toBe(releaseFails);
+    },
+  );
+
+  it(
+    'GPT-PM round-11 full-sweep MAJOR A (round-12 fix): the revoke-settled repair write, run after ' +
+      'revokeToken() genuinely succeeded but the local batch failed, is ALSO protected -- its own ' +
+      'failure throws LifecycleLockRecoveryFailedError rather than silently replacing the batch error',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const batchFails = new Error('local batch failure after revokeToken() resolved');
+      const repairFails = new Error('transient D1 write error (revoke-settled repair)');
+      const flakyDb: D1Database = {
+        prepare: (sql: string) => {
+          const normalized = sql.replace(/\s+/g, ' ');
+          if (
+            normalized.includes('revoke_settled_at = ?') &&
+            normalized.includes("WHERE source = 'gmail' AND lock_token = ?")
+          ) {
+            return {
+              bind: () => ({
+                run: async () => {
+                  throw repairFails;
+                },
+              }),
+            };
+          }
+          return db.prepare(sql);
+        },
+        batch: async () => {
+          throw batchFails;
+        },
+      } as unknown as D1Database;
+
+      let thrown: unknown;
+      try {
+        await disconnectGmailAccount(flakyDb, kek, fakeGoogleClient(), {
+          sourceAccountId: accounts.gmailAccountId,
+          now: FIXTURE_NOW,
+          clock: () => FIXTURE_NOW,
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(LifecycleLockRecoveryFailedError);
+      const typed = thrown as LifecycleLockRecoveryFailedError;
+      expect(typed.context).toBe('disconnectGmailAccount-revoke-settled-repair');
+      expect(typed.originalError).toBe(batchFails);
+      expect(typed.cause).toBe(repairFails);
+    },
+  );
+
+  it(
+    'GPT-PM round-11 full-sweep MINOR (round-12 fix): a recovery_state marker write that actually ' +
+      'COMMITS before its response is lost still throws DisconnectRecoveryMarkerWriteFailedError, but ' +
+      'the lock IS then genuinely discoverable via listWedgedGmailDisconnectLocks -- the error must ' +
+      'not claim it definitely is not',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const markerWriteFails = new Error('transient D1 write error (response lost after commit)');
+      const flakyDb: D1Database = {
+        prepare: (sql: string) => {
+          if (sql.includes('SET recovery_state = ?')) {
+            return {
+              bind: (...args: unknown[]) => ({
+                run: async () => {
+                  // Simulate: the write genuinely landed at D1, but the response was lost locally.
+                  await db
+                    .prepare(sql)
+                    .bind(...args)
+                    .run();
+                  throw markerWriteFails;
+                },
+              }),
+            };
+          }
+          return db.prepare(sql);
+        },
+        batch: (statements: unknown) =>
+          (db as unknown as { batch: (s: unknown) => unknown }).batch(statements),
+      } as unknown as D1Database;
+
+      const revokeFails = new Error('google unavailable');
+      let thrown: unknown;
+      try {
+        await disconnectGmailAccount(
+          flakyDb,
+          kek,
+          fakeGoogleClient({
+            revokeToken: async () => {
+              throw revokeFails;
+            },
+          }),
+          { sourceAccountId: accounts.gmailAccountId, now: FIXTURE_NOW, clock: () => FIXTURE_NOW },
+        );
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(DisconnectRecoveryMarkerWriteFailedError);
+
+      // Unlike the round-11 marker test above (write never even attempted), the marker DID commit
+      // here -- the lock is genuinely discoverable via the normal listing despite the thrown error,
+      // proving the error's corrected wording ("whether it committed is UNKNOWN") rather than round
+      // 11's wrong "UNDISCOVERABLE" claim.
+      const wedged = await listWedgedGmailDisconnectLocks(db);
+      expect(wedged).toHaveLength(1);
+      expect(wedged[0]?.outcomeUnknown).toBe('REVOKE_OUTCOME_UNKNOWN');
     },
   );
 });

@@ -3,6 +3,134 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 4 round 12: operator flagged the round count as excessive (rounds 1-11);
+
+GPT-PM's round-11 review (2 MAJOR + 1 MINOR, both MAJOR found in machinery round 11's OWN
+remediation had just added) was fixed in one bounded batch with NO new fallible D1 writes, and a
+hard stop was set: one more verification round, then close regardless of outcome, documenting
+anything still open as accepted residual risk instead of continuing to sweep
+
+**Process note, recorded because it matters as much as the fix.** The operator reacted directly and
+sharply ("round 11???") to this checkpoint's review-round count. The reaction was correct: 11 rounds
+on a single checkpoint is exactly the Gate A spiral pattern CLAUDE.md §17 exists to prevent, even
+though every round's findings were individually genuine and independently verified against the
+actual source before acting on them (never confabulated, never misapplied). The mechanism kept
+re-opening itself: round 8/10 fully redesigned the lock (per-account -> project-wide singleton),
+round 9/11 fully redesigned the recovery state machine -- each redesign created fresh surface for
+the NEXT round's full-sweep to find something new in. GPT-PM's own round-11 transport was
+unreachable when this session tried to ask it a process question ("No compatible orchestrator is
+active"), so this decision -- fix round 11's findings in one bounded batch, then hard-cap at one
+verification round regardless of outcome -- was made by the session itself, as principal
+implementation engineer (CLAUDE.md §17), and reported to the operator rather than presented as a
+GPT-PM ruling.
+
+**GPT-PM's round-11 review (commit `79c6fb9`, diffed against `17bdb28`) returned `VERDICT: MAJOR`,
+0 BLOCKER / 2 MAJOR / 1 MINOR.** It opened by confirming round 11's remediation held: "The singleton
+grain, phase-specific reconciliation fence, post-revoke clock sampling, stale-CONNECT fencing, and
+REVOKE_CONFIRMED atomic finalization all survive adversarial review." Both MAJOR were independently
+re-verified against the actual current source (CLAUDE.md §3/§7/§23) before acting on them -- both
+confirmed real:
+
+1. **`runAcquisitionWrite`'s own recovery attempt (the re-read-and-release-if-owned logic added in
+   round 11) could ITSELF fail, and that secondary failure was swallowed**, rethrowing only the
+   original acquisition error -- which carries neither `lockToken` nor any recovery classification.
+   GPT-PM's failure scenario: acquisition UPDATE commits, response lost -> helper re-reads, sees this
+   call's token, attempts release -> release ALSO fails (same D1 incident still active) -> the nested
+   catch suppresses that failure and throws only the generic original error. The singleton stays held
+   with `recovery_state = NULL`, invisible to every exported recovery primitive -- a project-wide
+   deadlock. GPT-PM additionally noted the SAME unguarded-bare-write pattern existed in
+   `releaseLifecycleLock`'s other callers (the catch-all release, the revoke-settled repair UPDATE).
+   Required change: recovery writes need their own token-aware failure contract -- throw a distinct
+   exported error carrying `lockToken`, holder kind/account, and both the original and recovery
+   failures, applied consistently everywhere `releaseLifecycleLock`/the repair UPDATE run inside a
+   `catch` block. Add correlated-failure tests for both "acquisition commit then throw, release also
+   throws" and "local disconnect failure, release also throws."
+2. **`STOP_CONFIRMED` and `REVOKE_NOT_APPLICABLE` reconciliation outcomes still returned plain
+   `'RECONCILED'`** while leaving a known-stopped Gmail watch and a required follow-up disconnect as
+   an unenforced caller obligation -- the exact contract problem round 10/11 had just fixed for
+   `REVOKE_CONFIRMED`, not carried through symmetrically. GPT-PM's point: `revokeToken()` is only ever
+   reached AFTER `stopWatch()` has already resolved successfully, so reaching the
+   `REVOKE_OUTCOME_UNKNOWN` phase AT ALL means push delivery has genuinely already stopped at Google
+   in EVERY sub-outcome -- `REVOKE_NOT_APPLICABLE` is in the SAME degraded state as `STOP_CONFIRMED`.
+   Only `STOP_NOT_APPLICABLE` genuinely needs no follow-up (previous connected state never disturbed).
+   Required change: return a distinct mandatory-transition result (GPT-PM's own suggested name,
+   adopted verbatim: `RECONCILED_RETRY_DISCONNECT_REQUIRED`) for `STOP_CONFIRMED` and
+   `REVOKE_NOT_APPLICABLE`, leaving plain `RECONCILED` only for `STOP_NOT_APPLICABLE`.
+
+**MINOR (accepted, not gating):** the round-11 marker-write fault-injection test threw immediately
+without first executing the real underlying write, so it did not actually exercise the
+"response-lost-after-commit" scenario its own narrative claimed, and `DisconnectRecoveryMarkerWriteFailedError`'s
+message wrongly asserted the lock was definitely `UNDISCOVERABLE` -- a write that commits and then
+still reports an error would in fact be visible via `listWedgedGmailDisconnectLocks`. Required
+change: add a second marker test that performs the real write before throwing, and correct the
+error's wording to say the marker's outcome is UNKNOWN, not definitely lost.
+
+**GPT-PM also answered outstanding process/design questions in the same reply, unprompted:**
+`REVOKE_CONFIRMED`'s full atomic finalization (round 11) is confirmed as "the stronger fix," preferred
+over a retry-required result value, and the EXISTS-fencing on `source_account_id` alone (rather than
+the exact credential tuple `disconnectGmailAccount`'s own DELETE uses) was confirmed safe because the
+held singleton makes a normal guarded reconnect unable to race it. The still-unbuilt crash-abandoned-
+lock force-recovery facility remains acceptable to defer under the prior MVP1 ruling -- but the
+double-D1-failure case above could not be left as a generic, token-less error, since it creates
+another route into that same global dead-end state. The previously accepted fixed propagation buffer
+was explicitly NOT reopened.
+
+**Remediation, one batch, deliberately adding NO new fallible D1 writes to any failure path (only
+error classification and result-value fidelity):**
+
+1. **`LifecycleLockRecoveryFailedError`** (new exported error class, `packages/domain/src/gmail/
+   oauth.ts`): thrown whenever a `gmail_oauth_lifecycle` recovery/release write fails WHILE already
+   handling an earlier caught failure. Carries `lockToken`, `context` (which code path), the original
+   error (`originalError`), and the recovery write's own failure (`cause`) -- nothing is lost.
+   `runAcquisitionWrite`'s inner catch no longer swallows a failed re-read/release; it throws this
+   error with context `'acquisition-write-ownership-check'` or `'acquisition-write-release'`. A new
+   `releaseLifecycleLockInFailurePath` helper wraps `releaseLifecycleLock` for every caller already
+   inside a `catch` block (`connectGmailAccount`'s catch-all: `'connectGmailAccount-catch-all'`;
+   `disconnectGmailAccount`'s not-started/stop-settled release: `'disconnectGmailAccount-catch-
+   release'`); the revoke-settled repair UPDATE is wrapped inline
+   (`'disconnectGmailAccount-revoke-settled-repair'`). This is an explicit, accepted terminal boundary
+   for the regress GPT-PM's own finding named: a THIRD failure (of whatever force-recovery procedure
+   reads this error) is not itself specially handled -- classifying and surfacing a double fault is
+   the required fix, not eliminating every possible depth, the same class of decision already made
+   for the deferred crash-abandoned-lock procedure.
+2. **`ReconcileWedgedGmailDisconnectLockResult` gained `'RECONCILED_RETRY_DISCONNECT_REQUIRED'`**:
+   returned for `STOP_CONFIRMED` and `REVOKE_NOT_APPLICABLE` (both leave push genuinely stopped at
+   Google with local state stale); plain `'RECONCILED'` is now reserved for `STOP_NOT_APPLICABLE`
+   only. `REVOKE_CONFIRMED`'s atomic-finalize path and its `'RECONCILED_DISCONNECT_FINALIZED'` result
+   are unchanged.
+3. **`DisconnectRecoveryMarkerWriteFailedError`'s message and doc comment corrected**: no longer
+   claims the lock is definitely `UNDISCOVERABLE` -- states the marker's persisted-or-not outcome is
+   UNKNOWN and instructs the caller to check `listWedgedGmailDisconnectLocks` FIRST before falling
+   back to a direct-by-`lockToken` force-recovery procedure. `listWedgedGmailDisconnectLocks`'s own
+   doc comment corrected to match.
+
+**Verification:** 50 tests in `oauth.test.ts` (174 across `packages/domain`), all passing -- 5 new
+this round: 3 `LifecycleLockRecoveryFailedError` fault-injection tests (acquisition commit-then-
+release-fails; local disconnect failure with release-fails; revoke-settled repair-fails -- the first
+two are GPT-PM's own explicitly named scenarios), 1 marker-write test proving the corrected "outcome
+UNKNOWN, not definitely lost" claim (write actually commits, error still thrown, lock IS discoverable
+afterward), 1 `STOP_CONFIRMED` reconciliation test (new coverage, `RECONCILED_RETRY_DISCONNECT_
+REQUIRED`); plus the pre-existing `REVOKE_NOT_APPLICABLE` test's expected result updated to match.
+`npx tsc --noEmit` (whole workspace) and `npx eslint` on touched files both clean; `npx prettier
+--write` applied. **Mutation-tested all 4 new/changed guards** (temporarily reverted, confirmed the
+corresponding new test fails, restored): (1) reverting `runAcquisitionWrite`'s release-failure
+handling back to swallowing -- the acquisition double-fault test failed (plain `Error` instead of
+`LifecycleLockRecoveryFailedError`); (2) forcing `requiresRetryDisconnect` to always be `false` --
+both the `STOP_CONFIRMED` and `REVOKE_NOT_APPLICABLE` tests failed (`'RECONCILED'` instead of the
+required result); (3) reverting `disconnectGmailAccount`'s catch-release call to the unwrapped
+`releaseLifecycleLock` -- the local-disconnect-failure double-fault test failed; (4) removing the
+try/catch around the revoke-settled repair write -- the repair-fails double-fault test failed.
+
+**The hard stop, stated explicitly so it is not silently abandoned under pressure to keep going:**
+this round's remediation is followed by exactly ONE verification round (round 13), scoped ONLY to
+confirming these specific fixes and any DIRECT regression they introduce -- not a fresh full sweep.
+Whatever round 13 returns, the gate closes after it: a clean result closes as `APPROVE`; any
+remaining BLOCKER/MAJOR is logged here as an explicitly accepted residual risk and the gate closes
+anyway, per the operator's own reaction to the round count and CLAUDE.md §17's actual review-budget
+design (one sweep, one remediation, one verification -- a third round only for a genuine regression
+from THAT remediation, never an open-ended re-sweep). No further request for permission to stop --
+this is the stated plan, executing autonomously.
+
 ## 2026-09-13 — G3 checkpoint 4 round 11: GPT-PM's round-10 full-sweep review found 3 further MAJOR,
 
 all concentrated in the recovery state machine and its own D1 failure boundaries -- lifecycle-control
@@ -126,8 +254,8 @@ assertion failed (a bogus token would have deleted a live credential); (4) remov
 around the marker write -- the fault-injection test failed (`instanceof
 DisconnectRecoveryMarkerWriteFailedError` false, raw error surfaced instead).
 
-**Committed as `<pending>`.** Sent to GPT-PM as round 11 (`review.js --base 17bdb28 --round 11`)
-with a fresh full-sweep scope note. Result pending.
+Sent to GPT-PM as round 11 (`review.js --base 17bdb28 --round 11`) with a fresh full-sweep scope
+note. Result pending.
 
 ## 2026-09-13 — G3 checkpoint 4 round 10: GPT-PM's round-9 full-sweep review found the round-9
 

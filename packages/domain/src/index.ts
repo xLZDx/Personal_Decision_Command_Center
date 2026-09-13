@@ -95,6 +95,7 @@ export {
   disconnectGmailAccount,
   DisconnectAmbiguousExternalCallError,
   DisconnectRecoveryMarkerWriteFailedError,
+  LifecycleLockRecoveryFailedError,
   ConnectLockLostBeforeWriteError,
   listWedgedGmailDisconnectLocks,
   reconcileWedgedGmailDisconnectLock,
