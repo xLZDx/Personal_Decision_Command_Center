@@ -62,13 +62,25 @@ new `enrichment.test.ts`'s 10 tests plus edits to existing `index.test.ts`/`hand
 fixtures for the new `leaseToken` field). `npm run typecheck`/`npm run lint` both clean.
 `prettier --write` applied to every touched file.
 
-**How to apply.** Checkpoint 2 is closed pending GPT-PM's own gate-review round on this diff (to
-follow before continuing to the next checkpoint, per §17's "internal review before GPT-PM" and
-"one sweep" discipline). Remaining G3 checkpoints per the APPROVEd V6 design: KEK crypto (§2.7),
-OAuth lifecycle (§2.5), cursor/history-list sync + normalization (§2.2/§2.3), quota limiter wiring
-(schema exists from checkpoint 1, no reservation-function code yet, §2.9), drill-down endpoints
-(§2.8), and the `services/gmail-connector` Worker itself with the `/ingest/gmail` service-binding
-call (§2.1).
+**GPT-PM gate review, round 1: genuine `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR**, correlated to the
+exact checkpoint commit `5756484` (full SHA `57564844233621e3202c01d5160b13485dc64e64`, matched
+byte-for-byte against `git rev-parse HEAD` before logging), `reviewInputHash
+6b59d2748e1d76d53b1f032bc569645ba40d676d8dce18ccdb23be8698eecef5`, `replyId
+5ebced47-7cb4-49e3-97a1-d377708154e5`. Confirmed the `leaseToken` propagation and its live-DB-column
+regression test, the enrichment INSERT's fence (stale claimant -> zero rows -> `LEASE_LOST`, existing
+row -> `ALREADY_PERSISTED` narrowly via the UNIQUE catch, non-UNIQUE errors rethrown not swallowed),
+the tightened CHECK's airtightness on both branches (raw-SQL bypass test), and explicitly endorsed
+the "structurally impossible fixture, proven directly instead of fabricated" resolution as correct
+rather than a shortcut. OAuth/KEK/sync/quota/drill-down/Worker pieces explicitly out of scope and
+not used to withhold the verdict, per the scope note. Not marked `--final` (reserved for the whole
+gate's closing review, same as checkpoint 1).
+
+**How to apply.** Checkpoint 2 is closed. Continue to G3's next implementation checkpoint per the
+standing autonomous-through-G6 authorization. Remaining G3 checkpoints per the APPROVEd V6 design:
+KEK crypto (§2.7), OAuth lifecycle (§2.5), cursor/history-list sync + normalization (§2.2/§2.3),
+quota limiter wiring (schema exists from checkpoint 1, no reservation-function code yet, §2.9),
+drill-down endpoints (§2.8), and the `services/gmail-connector` Worker itself with the
+`/ingest/gmail` service-binding call (§2.1).
 
 ## 2026-09-13 — G3 implementation checkpoint 1: Pub/Sub push-delivery lease/fence + migration 0002
 
