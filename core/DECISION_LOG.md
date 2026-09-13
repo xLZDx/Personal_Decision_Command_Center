@@ -3,6 +3,26 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — Operator GO widened to autonomous completion of MVP1 through G10
+
+**Operator instruction (verbatim):** "продолжай автономно до конца мвп1 ГО".
+
+**Decision:** the earlier standing authorization only through G6 is superseded. The implementer may
+now continue autonomously across every remaining MVP1 gate, G3 through G10, without stopping for a
+new implementation GO between gates. This widens continuity, not safety or approval authority:
+each gate still follows Recon → Plan → review → implementation → verification → independent final
+verdict → closure evidence; the implementer remains unable to self-approve a gate, weaken an
+invariant, edit operator-owned gate manifests/approvals, use production credentials, perform an
+unsafe deployment, or merge to `main` without the repository's independently approved mechanism.
+When a gate needs operator-owned credentials or a real-device/manual observation, build and verify
+everything reproducible first, leave exact instructions/evidence placeholders, and continue any
+independent work rather than fabricating a result.
+
+**How to apply:** finish G3, then proceed directly through G4–G10 against the frozen TDD plus errata
+and the gate-specific plans/reviews. Safe branch pushes are authorized as part of this autonomous
+continuation; production activation and irreversible/external-account actions remain separately
+controlled.
+
 ## 2026-09-14 — G3 checkpoint 6 CLOSED: GPT-PM round 2 closes all five MAJORs; final round 3 APPROVE (0/0/0), no round 4
 
 **Final round 3:** `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR, `final:true`, correlated
