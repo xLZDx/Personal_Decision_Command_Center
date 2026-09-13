@@ -2,7 +2,7 @@
 // Web Platform APIs ambient under both Node (tests) and the Cloudflare Workers runtime
 // (production) -- no import needed either way, same convention as packages/domain/src/auth/hmac.ts
 // and packages/domain/src/gmail/crypto.ts.
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, D1PreparedStatement, D1Result } from '@cloudflare/workers-types';
 
 import { encryptRefreshToken, decryptRefreshToken } from './crypto.js';
 import type { RefreshTokenAad } from './crypto.js';
@@ -184,16 +184,19 @@ export async function connectGmailAccount(
   const lockToken = generateRandomToken();
   const eligibleAfter = new Date(Date.parse(opts.now) - REVOKE_PROPAGATION_BUFFER_MS).toISOString();
 
-  const acquired = await db
-    .prepare(
-      `UPDATE gmail_oauth_lifecycle
-       SET lock_token = ?, lock_kind = 'CONNECT', lock_acquired_at = ?, source_account_id = ?
-       WHERE source = 'gmail'
-         AND lock_token IS NULL
-         AND (revoke_settled_at IS NULL OR revoke_settled_at <= ?)`,
-    )
-    .bind(lockToken, opts.now, opts.sourceAccountId, eligibleAfter)
-    .run();
+  const acquired = await runAcquisitionWrite(
+    db,
+    db
+      .prepare(
+        `UPDATE gmail_oauth_lifecycle
+         SET lock_token = ?, lock_kind = 'CONNECT', lock_acquired_at = ?, source_account_id = ?
+         WHERE source = 'gmail'
+           AND lock_token IS NULL
+           AND (revoke_settled_at IS NULL OR revoke_settled_at <= ?)`,
+      )
+      .bind(lockToken, opts.now, opts.sourceAccountId, eligibleAfter),
+    lockToken,
+  );
 
   if (acquired.meta.changes === 0) return { outcome: 'DISCONNECT_IN_PROGRESS' };
 
@@ -282,6 +285,42 @@ export async function connectGmailAccount(
   }
 }
 
+/**
+ * Shared by both `connectGmailAccount`'s and `disconnectGmailAccount`'s own lock-ACQUISITION writes
+ * (round-11 fix, GPT-PM round-10 full-sweep MAJOR A): a `.run()` that THROWS (a transient D1 write
+ * error -- Cloudflare's own documentation says writes, unlike reads, are not automatically retried)
+ * leaves the caller unable to tell whether the write actually landed at D1 before failing locally.
+ * This call always happens BEFORE either function's own try/catch (no Google call has started yet
+ * either way), so it is always safe to find out and release if so: re-read the singleton and check
+ * whether `lockToken` (this call's own freshly-generated, never-reused value) actually became the
+ * current holder. If it did, release it immediately (harmless -- nothing at Google has been touched
+ * yet). If it did not (the write genuinely failed, or the re-read itself fails), there is nothing
+ * more this can safely determine. Either way, rethrows the ORIGINAL error, never the re-read's own
+ * error, so the caller always sees the real failure that happened rather than a masking one.
+ */
+async function runAcquisitionWrite(
+  db: D1Database,
+  statement: D1PreparedStatement,
+  lockToken: string,
+): Promise<D1Result> {
+  try {
+    return await statement.run();
+  } catch (error) {
+    try {
+      const current = await db
+        .prepare(`SELECT lock_token FROM gmail_oauth_lifecycle WHERE source = 'gmail'`)
+        .first<{ lock_token: string | null }>();
+      if (current?.lock_token === lockToken) {
+        await releaseLifecycleLock(db, lockToken);
+      }
+    } catch {
+      // The re-read (or the release itself) failed too -- nothing more can safely be determined
+      // here. Fall through to rethrowing the ORIGINAL error below regardless.
+    }
+    throw error;
+  }
+}
+
 /** Shared by both `connectGmailAccount` and `disconnectGmailAccount`'s own failure paths: releases
  *  the `gmail_oauth_lifecycle` lock fenced on the exact token the caller acquired, so a retry that
  *  has already re-acquired a NEW lock can never be clobbered by this running late. Never touches
@@ -343,9 +382,14 @@ export type DisconnectGmailAccountResult =
  * have reached Google before failing locally (e.g. a connection reset after the server already
  * processed it), so whether that call's real effect at Google actually happened is UNKNOWN, not
  * merely "failed and safe to retry." The `gmail_oauth_lifecycle` lock is deliberately left held
- * when this is thrown (never released), and `recovery_state` is set to `'EXTERNAL_OUTCOME_UNKNOWN'`
- * (round-10 fix, see `listWedgedGmailDisconnectLocks`'s own doc comment for why) so neither a
- * reconnect nor a fresh disconnect attempt can proceed while that ambiguity is unresolved.
+ * when this is thrown (never released), and `recovery_state` is set to a PHASE-SPECIFIC marker --
+ * `'STOP_WATCH_OUTCOME_UNKNOWN'` or `'REVOKE_OUTCOME_UNKNOWN'` depending on which call was ambiguous
+ * (round-10 fix for the mechanism, round-11 fix for the phase-specificity -- see
+ * `listWedgedGmailDisconnectLocks`'s own doc comment for why a single generic value was unsafe) --
+ * so neither a reconnect nor a fresh disconnect attempt can proceed while that ambiguity is
+ * unresolved. If persisting that marker itself fails, `DisconnectRecoveryMarkerWriteFailedError` is
+ * thrown INSTEAD of this error (see its own doc comment) -- a caller catching only this type will
+ * never see that distinct failure mode conflated with an ordinary ambiguity.
  *
  * **Recovering from this requires an operator/admin action that independently confirms the
  * account's actual state with Google, THEN calls `reconcileWedgedGmailDisconnectLock` (below) --
@@ -375,6 +419,53 @@ export class DisconnectAmbiguousExternalCallError extends Error {
       { cause },
     );
     this.name = 'DisconnectAmbiguousExternalCallError';
+  }
+}
+
+/**
+ * Thrown by `disconnectGmailAccount` when an external Google call failed ambiguously (same as
+ * `DisconnectAmbiguousExternalCallError`) AND the follow-up write that records `recovery_state` --
+ * the marker `listWedgedGmailDisconnectLocks` depends on to ever find this account again -- itself
+ * failed (round-11 fix, GPT-PM round-10 full-sweep MAJOR A). The `gmail_oauth_lifecycle` lock is
+ * still held (correct: the original ambiguity is unresolved), but it is now UNDISCOVERABLE through
+ * the normal "safe" reconciliation listing, since that listing filters on `recovery_state` and this
+ * value was never persisted. This is deliberately a DIFFERENT error type from
+ * `DisconnectAmbiguousExternalCallError`, not a variant of it: a caller catching only the latter
+ * would otherwise treat this case as an ordinary (if serious) ambiguity, when it actually requires a
+ * separate, more direct force-recovery procedure that locates the lock by `lockToken` (exposed on
+ * this error) rather than by querying `recovery_state`.
+ *
+ * Carries both the original external-call error (`originalExternalError`) and the marker write's own
+ * failure (as this error's `cause`), so neither is lost: recovering this account requires knowing
+ * BOTH what was ambiguous at Google (`phase`) and that the local bookkeeping about it is itself
+ * broken.
+ */
+export class DisconnectRecoveryMarkerWriteFailedError extends Error {
+  readonly sourceAccountId: string;
+  readonly lockToken: string;
+  readonly phase: 'stop-ambiguous' | 'revoke-ambiguous';
+  readonly originalExternalError: unknown;
+
+  constructor(
+    sourceAccountId: string,
+    lockToken: string,
+    phase: 'stop-ambiguous' | 'revoke-ambiguous',
+    originalExternalError: unknown,
+    markerWriteError: unknown,
+  ) {
+    super(
+      `disconnectGmailAccount: an external Google call failed ambiguously (phase=${phase}) for ` +
+        `source_account_id=${sourceAccountId}, AND persisting the recovery_state marker for it ` +
+        `also failed. The gmail_oauth_lifecycle lock (lock_token=${lockToken}) is held but ` +
+        'UNDISCOVERABLE via listWedgedGmailDisconnectLocks. This requires a separate operator ' +
+        'force-recovery procedure that locates the lock by lock_token directly.',
+      { cause: markerWriteError },
+    );
+    this.name = 'DisconnectRecoveryMarkerWriteFailedError';
+    this.sourceAccountId = sourceAccountId;
+    this.lockToken = lockToken;
+    this.phase = phase;
+    this.originalExternalError = originalExternalError;
   }
 }
 
@@ -478,19 +569,41 @@ export interface DisconnectGmailAccountOptions {
  *    `revokeToken()` actually resolved** -- see `DisconnectGmailAccountOptions.clock`'s own doc
  *    comment for the failure scenario and fix.
  *
+ * **Round 11 (GPT-PM's round-10 full-sweep review) found and fixed three further defects,
+ * concentrated in the recovery state machine and its own D1 failure boundaries:**
+ *
+ * 1. **Neither this function's own lock-acquisition write nor `connectGmailAccount`'s had any
+ *    failure-recovery path** -- a thrown (not merely zero-rows) acquisition `.run()` left the caller
+ *    unable to tell whether the write landed before failing. Fixed via the shared
+ *    `runAcquisitionWrite` helper (see its own doc comment): re-reads the singleton on a thrown
+ *    write and releases if this call's own `lockToken` actually became the holder.
+ * 2. **The ambiguous-catch branch's OWN `recovery_state`-marker write could itself fail**, which --
+ *    unhandled -- would propagate as an uncaught exception replacing (not extending)
+ *    `DisconnectAmbiguousExternalCallError`, while the lock stayed held but permanently
+ *    undiscoverable via `listWedgedGmailDisconnectLocks`. Fixed: that write is now its own
+ *    try/catch; a failure throws the distinct `DisconnectRecoveryMarkerWriteFailedError` instead
+ *    (see its own doc comment) so the original ambiguity is never silently lost.
+ * 3. **`recovery_state` conflated `stopWatch` and `revokeToken` ambiguity into one generic value**,
+ *    even though they have materially different persistent effects at Google -- see migration
+ *    0004's own header comment and `ReconcileWedgedGmailDisconnectLockOptions.outcome`'s own doc
+ *    comment for the fix (phase-specific `STOP_WATCH_OUTCOME_UNKNOWN` / `REVOKE_OUTCOME_UNKNOWN`
+ *    values, and phase-specific reconciliation).
+ *
  * **The lock and phase tracking, current design.** `externalPhase` tracks which Google-facing call
  * is in flight, set BEFORE that call so a rejection can be classified correctly:
  * - **`'not-started'`** (the initial value): nothing at Google has been touched yet (this covers
  *   the credential `SELECT` and any local setup before `stopWatch`) -- a failure here is provably
  *   local, safe to release the lock immediately, `revoke_settled_at` untouched.
  * - **`'stop-ambiguous'`** (set immediately before `stopWatch`): a rejection here is ambiguous, not
- *   provably local -- throws `DisconnectAmbiguousExternalCallError`, lock held, `recovery_state`
- *   set.
+ *   provably local -- throws `DisconnectAmbiguousExternalCallError` (or
+ *   `DisconnectRecoveryMarkerWriteFailedError` if the marker write itself fails), lock held,
+ *   `recovery_state` set to `'STOP_WATCH_OUTCOME_UNKNOWN'`.
  * - **`'stop-settled'`** (set once `stopWatch` resolves): a LATER failure here (decrypt, or
  *   `revokeToken` never even starting) never touched Google's revoke endpoint -- safe to release
  *   the lock immediately, `revoke_settled_at` untouched.
  * - **`'revoke-ambiguous'`** (set immediately before `revokeToken`): a rejection here throws
- *   `DisconnectAmbiguousExternalCallError`, lock held, `recovery_state` set.
+ *   `DisconnectAmbiguousExternalCallError` (or `DisconnectRecoveryMarkerWriteFailedError` on marker
+ *   failure), lock held, `recovery_state` set to `'REVOKE_OUTCOME_UNKNOWN'`.
  * - **`'revoke-settled'`** (set once `revokeToken` resolves, using the freshly-sampled `settledAt`
  *   from `opts.clock()`): a LATER failure here (only the local `db.batch()`) means Google's revoke
  *   genuinely succeeded -- safe to release the lock, AND `revoke_settled_at` is recorded as
@@ -525,15 +638,18 @@ export async function disconnectGmailAccount(
     Date.parse(opts.now) - CONNECT_LOCK_STALE_MS,
   ).toISOString();
 
-  const acquired = await db
-    .prepare(
-      `UPDATE gmail_oauth_lifecycle
-       SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?, source_account_id = ?
-       WHERE source = 'gmail'
-         AND (lock_token IS NULL OR (lock_kind = 'CONNECT' AND lock_acquired_at <= ?))`,
-    )
-    .bind(lockToken, opts.now, opts.sourceAccountId, staleConnectLockBefore)
-    .run();
+  const acquired = await runAcquisitionWrite(
+    db,
+    db
+      .prepare(
+        `UPDATE gmail_oauth_lifecycle
+         SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?, source_account_id = ?
+         WHERE source = 'gmail'
+           AND (lock_token IS NULL OR (lock_kind = 'CONNECT' AND lock_acquired_at <= ?))`,
+      )
+      .bind(lockToken, opts.now, opts.sourceAccountId, staleConnectLockBefore),
+    lockToken,
+  );
 
   if (acquired.meta.changes === 0) return { outcome: 'DISCONNECT_IN_PROGRESS' };
 
@@ -630,14 +746,39 @@ export async function disconnectGmailAccount(
       // The in-flight external call itself rejected -- whether Google actually processed it before
       // failing locally is UNKNOWN, so the lock is deliberately left in place (NOT released), and
       // recovery_state is set so listWedgedGmailDisconnectLocks can find this account -- see
-      // DisconnectAmbiguousExternalCallError's own doc comment.
-      await db
-        .prepare(
-          `UPDATE gmail_oauth_lifecycle SET recovery_state = 'EXTERNAL_OUTCOME_UNKNOWN'
-           WHERE source = 'gmail' AND lock_token = ?`,
-        )
-        .bind(lockToken)
-        .run();
+      // DisconnectAmbiguousExternalCallError's own doc comment. The value is PHASE-SPECIFIC (round-11
+      // fix, GPT-PM round-10 full-sweep MAJOR B) -- stopWatch and revokeToken are materially
+      // different Google calls with different persistent effects, so reconciliation needs to know
+      // which one was ambiguous, not merely that SOMETHING was.
+      const recoveryState: 'STOP_WATCH_OUTCOME_UNKNOWN' | 'REVOKE_OUTCOME_UNKNOWN' =
+        externalPhase === 'stop-ambiguous'
+          ? 'STOP_WATCH_OUTCOME_UNKNOWN'
+          : 'REVOKE_OUTCOME_UNKNOWN';
+      try {
+        await db
+          .prepare(
+            `UPDATE gmail_oauth_lifecycle SET recovery_state = ?
+             WHERE source = 'gmail' AND lock_token = ?`,
+          )
+          .bind(recoveryState, lockToken)
+          .run();
+      } catch (markerError) {
+        // The marker write ITSELF failed (round-11 fix, GPT-PM round-10 full-sweep MAJOR A): the
+        // lock stays held (correct -- the original ambiguity is unresolved), but recovery_state was
+        // never persisted, so listWedgedGmailDisconnectLocks (which filters on recovery_state) can
+        // never find this account -- the whole project-wide singleton would otherwise be wedged with
+        // no discoverable candidate to reconcile. Never let this failure masquerade as, or silently
+        // replace, the original ambiguity -- surface a DISTINCT, fail-closed error carrying enough
+        // to locate the lock directly (by lockToken, not via the now-unreliable listing) for a
+        // separate operator force-recovery procedure.
+        throw new DisconnectRecoveryMarkerWriteFailedError(
+          opts.sourceAccountId,
+          lockToken,
+          externalPhase,
+          error,
+          markerError,
+        );
+      }
       throw new DisconnectAmbiguousExternalCallError(error);
     }
 
@@ -665,46 +806,69 @@ export async function disconnectGmailAccount(
   }
 }
 
+/** The two phase-specific ambiguous-outcome markers `disconnectGmailAccount` can write to
+ *  `recovery_state` (round-11 fix, GPT-PM round-10 full-sweep MAJOR B) -- see migration 0004's own
+ *  header comment for why a single generic value was unsafe. */
+export type GmailDisconnectOutcomeUnknownPhase =
+  'STOP_WATCH_OUTCOME_UNKNOWN' | 'REVOKE_OUTCOME_UNKNOWN';
+
 export interface WedgedGmailDisconnectLock {
   sourceAccountId: string;
   lockToken: string;
   lockAcquiredAt: string;
+  /** WHICH Google call was ambiguous -- required to pick the correct `outcome` branch when calling
+   *  `reconcileWedgedGmailDisconnectLock` below (round-11 fix, GPT-PM round-10 full-sweep MAJOR B).
+   *  See `GmailDisconnectOutcomeUnknownPhase`'s own doc comment. */
+  outcomeUnknown: GmailDisconnectOutcomeUnknownPhase;
 }
 
 /**
  * Read path for the reconciliation primitives named in `DisconnectAmbiguousExternalCallError`'s own
  * doc comment. Lists the account currently holding an AMBIGUOUS, genuinely-wedged DISCONNECT-kind
  * lock (at most one, since `gmail_oauth_lifecycle` is a project-wide singleton) -- filtered on
- * `recovery_state = 'EXTERNAL_OUTCOME_UNKNOWN'`, not merely `lock_kind = 'DISCONNECT'` (round-10
- * fix, GPT-PM full-sweep MAJOR): `lock_kind = 'DISCONNECT'` alone cannot distinguish a genuinely
- * stuck account from a disconnect that is simply, legitimately still executing (still inside
- * `stopWatch`/`revokeToken`, not yet caught any error) -- exposing an in-flight disconnect through
- * this "safe" recovery path would let an operator clear the exclusion protecting a still-live
- * Google call, exactly the invariant this whole mechanism exists to enforce.
+ * `recovery_state` being one of the two phase-specific ambiguous-outcome markers, not merely
+ * `lock_kind = 'DISCONNECT'` (round-10 fix, GPT-PM full-sweep MAJOR): `lock_kind = 'DISCONNECT'`
+ * alone cannot distinguish a genuinely stuck account from a disconnect that is simply, legitimately
+ * still executing (still inside `stopWatch`/`revokeToken`, not yet caught any error) -- exposing an
+ * in-flight disconnect through this "safe" recovery path would let an operator clear the exclusion
+ * protecting a still-live Google call, exactly the invariant this whole mechanism exists to enforce.
  *
  * **A lock left behind by a genuine process crash (which never reached its own `catch` block, so
  * never wrote `recovery_state`) deliberately does NOT appear here.** That case needs a separate,
  * more heavyweight operator force-recovery procedure requiring independent evidence the old
  * invocation is actually dead (e.g. confirming via Cloudflare's own execution logs that the prior
  * invocation terminated) -- out of this checkpoint's scope, same deferral already applied to the
- * real `fetch`-backed `GoogleOAuthClient` implementation and key-ring resolution, §2.1. Returns the
- * `lockToken` needed by `reconcileWedgedGmailDisconnectLock` below directly (an earlier revision of
- * this function omitted it, making the exported reconciliation API impossible to use without a raw
- * SQL query first -- GPT-PM full-sweep MAJOR, caught via this function's own now-obsolete test).
+ * real `fetch`-backed `GoogleOAuthClient` implementation and key-ring resolution, §2.1. Also
+ * deliberately excluded: a lock whose `recovery_state` marker write itself failed (see
+ * `DisconnectRecoveryMarkerWriteFailedError`'s own doc comment) -- that lock is held but was never
+ * marked, so it is equally invisible here and needs the same heavier force-recovery procedure,
+ * located by the `lockToken` that error carries rather than by this listing.
+ *
+ * Returns the `lockToken` needed by `reconcileWedgedGmailDisconnectLock` below directly (an earlier
+ * revision of this function omitted it, making the exported reconciliation API impossible to use
+ * without a raw SQL query first -- GPT-PM full-sweep MAJOR, caught via this function's own
+ * now-obsolete test).
  */
 export async function listWedgedGmailDisconnectLocks(
   db: D1Database,
 ): Promise<WedgedGmailDisconnectLock[]> {
   const rows = await db
     .prepare(
-      `SELECT source_account_id, lock_token, lock_acquired_at FROM gmail_oauth_lifecycle
-       WHERE source = 'gmail' AND recovery_state = 'EXTERNAL_OUTCOME_UNKNOWN'`,
+      `SELECT source_account_id, lock_token, lock_acquired_at, recovery_state
+       FROM gmail_oauth_lifecycle
+       WHERE source = 'gmail' AND recovery_state IN ('STOP_WATCH_OUTCOME_UNKNOWN', 'REVOKE_OUTCOME_UNKNOWN')`,
     )
-    .all<{ source_account_id: string; lock_token: string; lock_acquired_at: string }>();
+    .all<{
+      source_account_id: string;
+      lock_token: string;
+      lock_acquired_at: string;
+      recovery_state: GmailDisconnectOutcomeUnknownPhase;
+    }>();
   return rows.results.map((row) => ({
     sourceAccountId: row.source_account_id,
     lockToken: row.lock_token,
     lockAcquiredAt: row.lock_acquired_at,
+    outcomeUnknown: row.recovery_state,
   }));
 }
 
@@ -723,42 +887,125 @@ export interface ReconcileWedgedGmailDisconnectLockOptions {
    * The confirmed outcome of independently checking this account's actual state with Google --
    * MUST be determined by the caller outside this module (this module's `GoogleOAuthClient` has no
    * reconciliation/observability primitive, see `REVOKE_PROPAGATION_BUFFER_MS`'s own doc comment).
-   * `'REVOKE_CONFIRMED'` records `revoke_settled_at = now`, so `connectGmailAccount`'s propagation
-   * buffer still applies from the confirmation time -- this is the case an unsafe "just clear the
-   * lock" procedure would silently skip. `'REVOKE_NOT_APPLICABLE'` is for the case where Google
-   * confirms the revoke never actually reached it (e.g. the ambiguous failure was genuinely
-   * pre-Google) -- the lock is cleared without touching `revoke_settled_at`, since nothing happened
-   * at Google to buffer against (any PRIOR `revoke_settled_at` value, from an earlier unrelated
-   * revoke, is left untouched either way).
+   * A DISCRIMINATED UNION keyed on `phase` (round-11 fix, GPT-PM round-10 full-sweep MAJOR B): the
+   * caller must supply the SAME phase as the corresponding `listWedgedGmailDisconnectLocks` row's
+   * `outcomeUnknown` -- a mismatch is fenced out in SQL (the `WHERE recovery_state = ...` clause
+   * below) and reported as `'STALE_LOCK'`, the same as a wrong `lockToken` would be, rather than
+   * silently reconciling the wrong kind of ambiguity.
+   *
+   * - **`phase: 'STOP_WATCH_OUTCOME_UNKNOWN'`**: `stopWatch()` itself was the ambiguous call.
+   *   Neither `revokeToken()` nor the local `gmail_connections`/`oauth_flows` cleanup was ever
+   *   reached this attempt, so EITHER confirmed sub-outcome (`'STOP_CONFIRMED'`: Google confirms the
+   *   watch WAS stopped; `'STOP_NOT_APPLICABLE'`: Google confirms it was NOT) only needs to release
+   *   the lock -- local state is untouched either way, and a caller should simply retry
+   *   `disconnectGmailAccount` fresh afterward (its own `stopWatch` call is expected to be
+   *   idempotent, per that function's own doc comment, so re-attempting a confirmed-stopped watch is
+   *   safe). `revoke_settled_at` is never touched here: `revokeToken()` was never invoked this
+   *   attempt, so there is nothing to buffer against.
+   * - **`phase: 'REVOKE_OUTCOME_UNKNOWN'`**: `revokeToken()` itself was the ambiguous call.
+   *   `'REVOKE_NOT_APPLICABLE'` (Google confirms the revoke never reached it) behaves like the STOP
+   *   case above -- release the lock only, local state untouched, safe to retry fresh.
+   *   `'REVOKE_CONFIRMED'` is the case an unsafe "just clear the lock" procedure would get wrong
+   *   (round-10 fix) AND leave incomplete (round-11 fix, GPT-PM round-10 full-sweep MAJOR C): the
+   *   credential is now genuinely dead at Google, but this attempt's own local cleanup (the
+   *   connection delete, the `oauth_flows` clear) never ran. This function therefore FINALIZES that
+   *   local cleanup atomically as part of reconciliation -- see `reconcileWedgedGmailDisconnectLock`'s
+   *   own doc comment -- rather than merely releasing the lock and leaving a "one more call required"
+   *   obligation for the caller to remember.
    */
-  googleConfirmedOutcome: 'REVOKE_CONFIRMED' | 'REVOKE_NOT_APPLICABLE';
+  outcome:
+    | { phase: 'STOP_WATCH_OUTCOME_UNKNOWN'; confirmed: 'STOP_CONFIRMED' | 'STOP_NOT_APPLICABLE' }
+    | { phase: 'REVOKE_OUTCOME_UNKNOWN'; confirmed: 'REVOKE_CONFIRMED' | 'REVOKE_NOT_APPLICABLE' };
 }
 
-export type ReconcileWedgedGmailDisconnectLockResult = 'RECONCILED' | 'STALE_LOCK';
+export type ReconcileWedgedGmailDisconnectLockResult =
+  'RECONCILED' | 'RECONCILED_DISCONNECT_FINALIZED' | 'STALE_LOCK';
 
 /**
  * Write path for reconciling a wedged `DisconnectAmbiguousExternalCallError` lock -- see that
- * error's own doc comment for why this exists instead of a hand-written `UPDATE`. Fenced on both
- * `sourceAccountId` and the exact `lockToken` supplied, so this is a safe no-op (zero rows changed,
- * reported as `'STALE_LOCK'` rather than silently swallowed -- round-10 fix, GPT-PM full-sweep
- * MAJOR: an earlier revision returned `void` unconditionally, so a stale token was indistinguishable
- * from a real reconciliation, and a caller following only this function's own contract could report
- * "reconciliation complete" while the account remained permanently locked) if the lock was already
- * resolved some other way between listing and calling this.
+ * error's own doc comment for why this exists instead of a hand-written `UPDATE`. Fenced on
+ * `sourceAccountId`, the exact `lockToken` supplied, AND the exact `outcome.phase` supplied matching
+ * the row's current `recovery_state` -- a safe no-op (zero rows changed, reported as `'STALE_LOCK'`
+ * rather than silently swallowed -- round-10 fix, GPT-PM full-sweep MAJOR) if the lock was already
+ * resolved some other way, or the caller supplied the wrong phase, between listing and calling this.
+ *
+ * **`REVOKE_CONFIRMED` atomically finalizes the local disconnect** (round-11 fix, GPT-PM round-10
+ * full-sweep MAJOR C): a confirmed revoke means the credential is genuinely dead at Google, so this
+ * runs the SAME three-statements-together local cleanup a normal successful `disconnectGmailAccount`
+ * call defines (fenced `gmail_connections` delete, `oauth_flows` clear, lifecycle release with
+ * `revoke_settled_at` recorded) in one `db.batch()`, rather than leaving that cleanup as a dangling
+ * obligation for the caller to remember (a real gap in the round-10 design: its own test had to call
+ * `disconnectGmailAccount()` a SECOND time after reconciling, just to finish what reconciliation
+ * itself claimed was already done). The connection delete and `oauth_flows` clear are each fenced on
+ * an `EXISTS` check against the CURRENT lock row (the same "fence a write on continued ownership
+ * across this call's own scope" pattern `connectGmailAccount`'s credential write already uses) --
+ * evaluated, within the same batch/transaction, BEFORE the lock-release statement that follows them
+ * clears that row, so a stale/mismatched `lockToken` or `phase` makes all three statements no-ops
+ * together, not just the last one. The distinct `'RECONCILED_DISCONNECT_FINALIZED'` result (instead
+ * of plain `'RECONCILED'`) makes it visible to the caller that the FULL disconnect -- not just the
+ * lock -- was completed by this call.
+ *
+ * Every other outcome (`STOP_CONFIRMED`, `STOP_NOT_APPLICABLE`, `REVOKE_NOT_APPLICABLE`) only ever
+ * releases the lock -- see `ReconcileWedgedGmailDisconnectLockOptions.outcome`'s own doc comment for
+ * why local state needs no finalization in those cases.
  */
 export async function reconcileWedgedGmailDisconnectLock(
   db: D1Database,
   opts: ReconcileWedgedGmailDisconnectLockOptions,
 ): Promise<ReconcileWedgedGmailDisconnectLockResult> {
-  const revokeSettledAt = opts.googleConfirmedOutcome === 'REVOKE_CONFIRMED' ? opts.now : null;
+  if (
+    opts.outcome.phase === 'REVOKE_OUTCOME_UNKNOWN' &&
+    opts.outcome.confirmed === 'REVOKE_CONFIRMED'
+  ) {
+    const results = await db.batch([
+      db
+        .prepare(
+          `DELETE FROM gmail_connections
+           WHERE source_account_id = ?
+             AND EXISTS (
+               SELECT 1 FROM gmail_oauth_lifecycle
+               WHERE source = 'gmail' AND source_account_id = ? AND lock_token = ?
+                 AND recovery_state = 'REVOKE_OUTCOME_UNKNOWN'
+             )`,
+        )
+        .bind(opts.sourceAccountId, opts.sourceAccountId, opts.lockToken),
+      db
+        .prepare(
+          `DELETE FROM oauth_flows
+           WHERE EXISTS (
+             SELECT 1 FROM gmail_oauth_lifecycle
+             WHERE source = 'gmail' AND source_account_id = ? AND lock_token = ?
+               AND recovery_state = 'REVOKE_OUTCOME_UNKNOWN'
+           )`,
+        )
+        .bind(opts.sourceAccountId, opts.lockToken),
+      db
+        .prepare(
+          `UPDATE gmail_oauth_lifecycle
+           SET lock_token = NULL, lock_kind = NULL, lock_acquired_at = NULL, source_account_id = NULL,
+               recovery_state = NULL, revoke_settled_at = ?
+           WHERE source = 'gmail' AND source_account_id = ? AND lock_token = ?
+             AND recovery_state = 'REVOKE_OUTCOME_UNKNOWN'`,
+        )
+        .bind(opts.now, opts.sourceAccountId, opts.lockToken),
+    ]);
+    const lockRelease = results[2];
+    if (lockRelease === undefined || lockRelease.meta.changes === 0) return 'STALE_LOCK';
+    return 'RECONCILED_DISCONNECT_FINALIZED';
+  }
+
+  // Every other outcome (STOP_CONFIRMED, STOP_NOT_APPLICABLE, REVOKE_NOT_APPLICABLE) only releases
+  // the lock -- local state (gmail_connections/oauth_flows) is untouched in every one of these cases
+  // (see this options type's own doc comment for why), and revoke_settled_at is never set since
+  // revokeToken() was never confirmed to have reached Google.
   const result = await db
     .prepare(
       `UPDATE gmail_oauth_lifecycle
        SET lock_token = NULL, lock_kind = NULL, lock_acquired_at = NULL, source_account_id = NULL,
-           recovery_state = NULL, revoke_settled_at = COALESCE(?, revoke_settled_at)
-       WHERE source = 'gmail' AND source_account_id = ? AND lock_token = ?`,
+           recovery_state = NULL
+       WHERE source = 'gmail' AND source_account_id = ? AND lock_token = ? AND recovery_state = ?`,
     )
-    .bind(revokeSettledAt, opts.sourceAccountId, opts.lockToken)
+    .bind(opts.sourceAccountId, opts.lockToken, opts.outcome.phase)
     .run();
   return result.meta.changes === 0 ? 'STALE_LOCK' : 'RECONCILED';
 }

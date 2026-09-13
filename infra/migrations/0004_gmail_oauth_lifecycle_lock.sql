@@ -51,17 +51,27 @@
 -- referencing column is NULL, so this adds real integrity -- "if held, must reference a real
 -- account" -- without requiring a value when free).
 --
--- `recovery_state` is new this round (GPT-PM round-9 MAJOR): `listWedgedGmailDisconnectLocks`
+-- `recovery_state` is new since round 10 (GPT-PM round-9 MAJOR): `listWedgedGmailDisconnectLocks`
 -- previously inferred "wedged" purely from `lock_kind = 'DISCONNECT'`, which cannot distinguish a
 -- genuinely stuck account (an ambiguous stopWatch/revokeToken failure) from a disconnect that is
--- simply, legitimately still executing. `recovery_state = 'EXTERNAL_OUTCOME_UNKNOWN'` is written
--- ONLY in disconnectGmailAccount's ambiguous-failure catch branch (see oauth.ts), so the safe
--- reconciliation listing can filter on it instead of guessing from `lock_kind` alone. A lock left
--- behind by a genuine process crash (which never reached its own catch block, so never wrote this
--- state) deliberately does NOT appear in that listing -- GPT-PM's own explicit guidance: that case
--- needs a separate, more heavyweight operator force-recovery procedure requiring independent
--- evidence the old invocation is actually dead, out of this checkpoint's scope, same deferral
--- already applied to the real fetch-backed GoogleOAuthClient and key-ring resolution (SS2.1).
+-- simply, legitimately still executing. `recovery_state` is written ONLY in disconnectGmailAccount's
+-- ambiguous-failure catch branches (see oauth.ts), so the safe reconciliation listing can filter on
+-- it instead of guessing from `lock_kind` alone. A lock left behind by a genuine process crash
+-- (which never reached its own catch block, so never wrote this state) deliberately does NOT appear
+-- in that listing -- GPT-PM's own explicit guidance: that case needs a separate, more heavyweight
+-- operator force-recovery procedure requiring independent evidence the old invocation is actually
+-- dead, out of this checkpoint's scope, same deferral already applied to the real fetch-backed
+-- GoogleOAuthClient and key-ring resolution (SS2.1).
+--
+-- Round 11 (GPT-PM's round-10 full-sweep review, MAJOR B) split the single `EXTERNAL_OUTCOME_UNKNOWN`
+-- value into two phase-specific ones: `stopWatch` and `revokeToken` are materially different Google
+-- calls with different persistent effects (a stop that reached Google stops mailbox push updates,
+-- independent of whether any token was ever revoked), so a reconciliation that does not know WHICH
+-- call was ambiguous cannot safely resolve it -- clearing the lock on a stop-ambiguous case as if it
+-- were a revoke-ambiguous one could report success while push ingestion is silently stopped with no
+-- signal anything needs restoring. `STOP_WATCH_OUTCOME_UNKNOWN` is set immediately before `stopWatch`
+-- fails ambiguously; `REVOKE_OUTCOME_UNKNOWN` before `revokeToken` does. See
+-- `ReconcileWedgedGmailDisconnectLockOptions` in oauth.ts for how each is reconciled differently.
 CREATE TABLE gmail_oauth_lifecycle (
   source TEXT PRIMARY KEY CHECK (source = 'gmail'),
   source_account_id TEXT,
@@ -69,7 +79,7 @@ CREATE TABLE gmail_oauth_lifecycle (
   lock_kind TEXT CHECK (lock_kind IN ('CONNECT', 'DISCONNECT')),
   lock_acquired_at TEXT,
   revoke_settled_at TEXT,
-  recovery_state TEXT CHECK (recovery_state IN ('EXTERNAL_OUTCOME_UNKNOWN')),
+  recovery_state TEXT CHECK (recovery_state IN ('STOP_WATCH_OUTCOME_UNKNOWN', 'REVOKE_OUTCOME_UNKNOWN')),
   CHECK ((lock_token IS NULL) = (lock_kind IS NULL)),
   CHECK ((lock_token IS NULL) = (lock_acquired_at IS NULL)),
   -- recovery_state only means something while a lock is actually held -- a released lock (or one

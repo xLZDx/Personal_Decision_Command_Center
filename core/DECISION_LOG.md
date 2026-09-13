@@ -3,6 +3,132 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 4 round 11: GPT-PM's round-10 full-sweep review found 3 further MAJOR,
+
+all concentrated in the recovery state machine and its own D1 failure boundaries -- lifecycle-control
+writes themselves gained fault-injected fault-recovery, `recovery_state` split into phase-specific
+`STOP_WATCH_OUTCOME_UNKNOWN`/`REVOKE_OUTCOME_UNKNOWN`, and `REVOKE_CONFIRMED` reconciliation now
+atomically finalizes the local disconnect instead of leaving it as a dangling caller obligation
+
+**Sent round 10 (commit `17bdb28`, diffed against `b779f0c`) to GPT-PM via `review.js --base
+b779f0c --round 10`, with an explicit full-sweep scope note** (`--scope-note-file`, per operator
+standing instruction and CLAUDE.md §17). **Result: `VERDICT: MAJOR`, 0 BLOCKER / 3 MAJOR / 0
+MINOR.** GPT-PM opened by confirming the round-9 remediation held: "The five round-9 findings are
+substantially fixed: the singleton closes the cross-account lock-granularity race; clock() is
+sampled after revokeToken() resolves; listing now supplies lockToken and reconciliation reports
+stale CAS; active disconnects no longer appear in the safe recovery listing; and the credential
+SELECT is now inside the local-failure release path." It also explicitly confirmed no new defects
+in "the stale-CONNECT takeover itself, the singleton cross-account fencing, migration 0005's
+now-correct defense-in-depth role, or the never-delete invariant." Every finding was independently
+re-verified against the actual current source (CLAUDE.md §3/§7/§23 -- read the exact lines each
+finding targets before designing a fix) before acting on it; all 3 confirmed real:
+
+1. **Neither `connectGmailAccount`'s nor `disconnectGmailAccount`'s lock-ACQUISITION write had any
+   failure-recovery path.** Both call a bare `UPDATE ... .run()` before entering their protected
+   external-call logic, with no handling for the write itself THROWING (not merely reporting zero
+   rows changed) -- Cloudflare's own documentation says D1 writes, unlike reads, are not
+   automatically retried, so a transient write error leaves the caller unable to tell whether the
+   write actually landed before failing locally. GPT-PM's more severe concrete scenario:
+   `disconnectGmailAccount`'s ambiguous-catch branch performs a SECOND write (`SET recovery_state =
+   ...`) before throwing `DisconnectAmbiguousExternalCallError` -- if THAT write itself fails, the
+   lock correctly stays held (the original ambiguity is unresolved), but `recovery_state` was never
+   persisted, so `listWedgedGmailDisconnectLocks` (which filters on it) can never find the account --
+   "every account is now blocked by the singleton and the advertised safe recovery API has no
+   candidate to reconcile." **Required change: make lifecycle-control writes themselves recoverable
+   -- re-read the singleton on a thrown acquisition write and release if this call's own token
+   actually became the holder (no Google call started yet, always safe); on a marker-write failure,
+   never lose the original ambiguity semantics -- return a dedicated fail-closed error carrying the
+   account/phase for a separate force-recovery path. Add fault-injection tests for both.**
+2. **`recovery_state` conflated `stopWatch` and `revokeToken` ambiguity into one generic value**,
+   even though Google's own documentation describes `users.stop` as having a real, distinct,
+   persistent effect (stopping mailbox push updates) separate from token revocation. Failure
+   scenario: `stopWatch()` reaches Google and succeeds, but the response is lost locally; the code
+   persists the same generic marker `revokeToken()` ambiguity would; since `revokeToken()` was never
+   invoked, an operator can truthfully reconcile with "revoke not applicable," clearing the lock and
+   reporting success while `gmail_connections` still exists AND Gmail push may already be silently
+   stopped, with no signal to any future Worker that watch restoration is needed. **Required change:
+   persist the ambiguous operation phase-specifically (`STOP_WATCH_OUTCOME_UNKNOWN` vs
+   `REVOKE_OUTCOME_UNKNOWN`), expose it from the listing, and make reconciliation phase-specific --
+   the then-current two-value `googleConfirmedOutcome` enum was insufficient.**
+3. **`reconcileWedgedGmailDisconnectLock` with `REVOKE_CONFIRMED` returned `'RECONCILED'` after
+   clearing ONLY the lifecycle lock row -- it never performed the local cleanup (fenced
+   `gmail_connections` delete, `oauth_flows` clear) a normal successful disconnect defines as
+   three-statements-together.** GPT-PM pointed to this project's OWN round-9/10 test as direct proof:
+   after getting `RECONCILED`, the test had to call `disconnectGmailAccount()` a SECOND time to
+   actually finish cleanup -- "a reasonable future Worker/UI reports recovery complete" while the now
+   provably-dead credential is still live in `gmail_connections`. **Required change: either
+   atomically finalize the local disconnect as part of reconciliation, or return a result that makes
+   the remaining obligation impossible to overlook -- plain `RECONCILED` is "too strong for the state
+   actually produced."**
+
+**GPT-PM also answered the two explicit policy questions from the round-10 scope note:** the fixed
+`REVOKE_PROPAGATION_BUFFER_MS` buffer is acceptable as an explicit product-risk decision, "provided
+the governing guarantee is now understood as preventing overlap with a still-in-flight revoke call,
+not as a mathematical guarantee that all post-200 Google propagation has ended" -- Google's own docs
+still say propagation can take additional time, so the buffer remains mitigation, not proof. The
+crash-abandoned-DISCONNECT-lock force-recovery procedure may stay deferred for MVP1/single-account
+("I would not gate this checkpoint merely because that separate operator procedure is not yet
+implemented"), becoming a REQUIRED capability once multi-account operation begins; the singleton's
+lack of fairness/queueing is a ROADMAP concern, not a current MAJOR.
+
+**Remediation, one batch (per §17's "fix the whole reported package, then verify"):**
+
+1. **`runAcquisitionWrite` helper** (`packages/domain/src/gmail/oauth.ts`), shared by both
+   functions' lock-acquisition writes: wraps the `UPDATE ... .run()` in try/catch; on a thrown error,
+   re-reads the singleton's current `lock_token` and, if it matches this call's own freshly-generated
+   token, releases it immediately (always safe -- this runs before either function's own try/catch,
+   so no Google call has started either way). Always rethrows the ORIGINAL error, never the re-read's
+   own, so the caller sees the real failure.
+2. **`DisconnectRecoveryMarkerWriteFailedError`** (new exported error class): the `recovery_state`
+   marker write inside `disconnectGmailAccount`'s ambiguous-catch branch is now its own try/catch; a
+   failure throws this DISTINCT error type (never `DisconnectAmbiguousExternalCallError` masquerading
+   as itself) carrying `sourceAccountId`, `lockToken`, `phase`, `originalExternalError`, and the
+   marker write's own failure as `cause` -- so a caller catching only the ordinary ambiguous-error
+   type cannot mistake this for a normal, discoverable-via-listing wedge.
+3. **`recovery_state` split into `STOP_WATCH_OUTCOME_UNKNOWN` | `REVOKE_OUTCOME_UNKNOWN`** (migration
+   `0004`'s CHECK constraint updated in place, not a new migration -- still only locally committed,
+   never pushed): written phase-specifically depending on whether `stopWatch` or `revokeToken` was
+   the ambiguous call. `WedgedGmailDisconnectLock` gained an `outcomeUnknown` field exposing which.
+   `ReconcileWedgedGmailDisconnectLockOptions.outcome` became a discriminated union keyed on `phase`,
+   fenced in SQL against the row's actual `recovery_state` -- a caller supplying the WRONG phase for
+   the actual wedge is refused as `'STALE_LOCK'`, not silently reconciled as the wrong kind of
+   ambiguity.
+4. **`REVOKE_CONFIRMED` reconciliation now atomically finalizes the local disconnect**: one
+   `db.batch()` performs the fenced `gmail_connections` delete, the `oauth_flows` clear, and the
+   lifecycle release with `revoke_settled_at` recorded -- the connection delete and flow clear are
+   each fenced on an `EXISTS` check against the current lock row (same "fence a write on continued
+   ownership" pattern `connectGmailAccount`'s credential write already uses), evaluated before the
+   lock-release statement clears that row, so a stale/mismatched token or phase makes all three
+   no-ops together. Returns the distinct `'RECONCILED_DISCONNECT_FINALIZED'` result instead of plain
+   `'RECONCILED'`, making the completed finalization visible to the caller. Every other outcome
+   (`STOP_CONFIRMED`, `STOP_NOT_APPLICABLE`, `REVOKE_NOT_APPLICABLE`) only releases the lock, since
+   local state is untouched in those cases (documented in the options type's own doc comment).
+
+**Verification:** 45 tests in `oauth.test.ts` (169 across the whole `packages/domain` suite), all
+passing -- 5 new this round: 2 acquisition-write fault-injection tests (connect and disconnect, each
+proving the write "actually landed then threw" scenario is detected and released), 1
+recovery_state-marker-write fault-injection test (proving `DisconnectRecoveryMarkerWriteFailedError`
+is thrown with the lock correctly invisible to `listWedgedGmailDisconnectLocks` yet still genuinely
+held), 1 phase-specific reconciliation test (stopWatch ambiguity -> `STOP_WATCH_OUTCOME_UNKNOWN`,
+wrong-phase reconcile attempt refused as `STALE_LOCK`, correct-phase reconcile releases without
+touching the connection row), 1 `REVOKE_NOT_APPLICABLE` test (proving it does NOT take the
+`REVOKE_CONFIRMED` atomic-finalize path). The pre-existing reconciliation-primitives test was
+rewritten to assert `'RECONCILED_DISCONNECT_FINALIZED'` and that the connection row is ALREADY gone
+after one reconcile call, no second `disconnectGmailAccount()` call required. `npx tsc --noEmit`
+(whole workspace) and `npx eslint` on touched files both clean; `npx prettier --write` applied.
+**Mutation-tested all 4 new guards** (temporarily reverted, confirmed the corresponding new test
+fails, restored): (1) disabling `runAcquisitionWrite`'s release-if-owned check -- both acquisition
+fault-injection tests failed (retry returned `DISCONNECT_IN_PROGRESS` instead of
+`CONNECTED`/`NOT_CONNECTED`); (2) forcing `recoveryState` to always be `STOP_WATCH_OUTCOME_UNKNOWN`
+regardless of phase -- 2 tests failed on the wrong `outcomeUnknown` value; (3) removing the `EXISTS`
+fence from the atomic-finalize connection `DELETE` -- the STALE_LOCK test's connection-row-survives
+assertion failed (a bogus token would have deleted a live credential); (4) removing the try/catch
+around the marker write -- the fault-injection test failed (`instanceof
+DisconnectRecoveryMarkerWriteFailedError` false, raw error surfaced instead).
+
+**Committed as `<pending>`.** Sent to GPT-PM as round 11 (`review.js --base 17bdb28 --round 11`)
+with a fresh full-sweep scope note. Result pending.
+
 ## 2026-09-13 — G3 checkpoint 4 round 10: GPT-PM's round-9 full-sweep review found the round-9
 
 remediation's lock design was STILL wrong (5 MAJOR, none anticipated by internal review) --
