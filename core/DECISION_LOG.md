@@ -3,6 +3,71 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 4 round 7: two further MAJORs on the SAME invariant; operator
+instructed to stop iterating (**"заканчивай с этим"**) -- checkpoint 4 PAUSED OPEN, not closed
+
+**GPT-PM round 7: `VERDICT: MAJOR`, 0 BLOCKER / 2 MAJOR / 0 MINOR**, reviewing commit `736ecdf`
+(round 6's NULL-only reconnect guard). **Confirmed correct and closed**: "The round-6 change does
+correctly close the specific reconnect-via-expired-lease path... the new test proves merely forcing
+the stored expiry into the past no longer permits reconnect." Round 6's actual fix stands.
+
+**Two further MAJORs found, both the SAME underlying invariant (never reopen OAuth access while an
+older project-wide Google revoke might still be live) surfacing in two places round 6 did not
+touch:**
+
+1. **Disconnect-vs-disconnect takeover has the identical flaw round 6 just removed from
+   reconnect-vs-disconnect**: `DISCONNECT_LEASE_DURATION_MS`/`disconnect_lease_expires_at` still let
+   a SECOND `disconnectGmailAccount` call take over an "expired" lease from a first one that might
+   still be genuinely running (same reasoning as rounds 4-6, just one level removed). Additionally,
+   the final `DELETE` is fenced only on `(source_account_id, encrypted_refresh_token,
+   refresh_token_iv, kek_version)`, never on `disconnect_lease_token` -- so a second disconnect (B)
+   that has taken over can have its own `DELETE` executed by a LATE-finishing first attempt (A),
+   whose fence still matches the unchanged ciphertext tuple, deleting the row out from under B while
+   B's own revoke may still be in flight.
+2. **The `catch` block's immediate lease release on an ambiguous thrown error is real, not merely a
+   documented residual**: GPT-PM formally raised exactly the case round 6's own doc comment had
+   already flagged as an open, undecided item (a network reset after Google received the request) --
+   confirming it needs an actual fix, not just an honest footnote.
+
+**GPT-PM's required change is now stated at the level of a genuine architectural gap, not a tunable
+detail**: *"An ownership recovery mechanism must not permit deletion/reconnect until every earlier
+potentially-live revoke is known settled... For automatic takeover, you need an external-operation
+lifecycle/cancellation guarantee that makes the previous revoke definitively dead. Without that
+guarantee, fail closed into a durable recovery/uncertain state rather than automatically superseding
+an old disconnect."* This describes a genuinely different, larger primitive than a lease with any
+timing parameter can provide on its own: a durable, explicit "revocation outcome unknown" state that
+blocks BOTH reconnect and automatic takeover until resolved by something with real settlement
+authority (a `GoogleOAuthClient` with actual cancellation/idempotency-key semantics, or an operator/
+support-driven manual reconciliation) -- not a difference of degree from rounds 4-6's fixes, a
+difference of kind.
+
+**Operator instruction, verbatim, received while round 7 was already in flight**: *"заканчивай с
+этим"* -- stop iterating on this review loop. Per global CLAUDE.md §11 ("a new operator message
+supersedes the current plan... stop launching new work"), no round 8 was sent. This is an honest,
+deliberate STOP, not a disguised close: **checkpoint 4 remains OPEN with an unresolved `VERDICT:
+MAJOR`** (2 MAJOR from round 7, neither remediated). The seven-round arc (rounds 1-7) is a genuine
+record of narrowing in on a real, deep correctness property -- each round found an authentic defect
+verified against source, not a confabulation or a restatement of an already-fixed issue -- but it
+also concretely demonstrates §17's own cautionary pattern ("Gate A ran 22 rounds... each one
+surfacing a fresh race in machinery the previous fix had just added"): six consecutive designs
+(round 1's CAS fence, round 3's lease, round 4's timeout, round 5's heartbeat, round 6's NULL-only
+guard) each closed the SPECIFIC race just found while leaving an adjacent, structurally similar one
+open, because the underlying problem -- an uncancellable, unconfirmable external side effect with no
+idempotency-key/settlement contract -- cannot be fully closed by tightening a lease's rules alone.
+
+**State at the stopping point, for whoever picks this up next**: `packages/domain/src/gmail/oauth.ts`
+on `gate/g3-implementation` at commit `736ecdf` (round 6's fix) is COMMITTED and its own tests pass
+(404/404 repo-wide, typecheck/lint clean) -- it is a genuine, real improvement over round 5 and
+earlier, not reverted. It is NOT feature-complete against GPT-PM's round-7 findings. A future session
+resuming this checkpoint should read this entry plus round 7's full reply (`reviewRequestId
+ae3b22e7-d9e7-4cd4-ad03-d2548b27a26e`, `replyId bedba00a-127f-462a-a374-61d562a30d3a`) before writing
+any further code, and should treat GPT-PM's round-7 framing (a genuine cancellation/settlement
+contract is needed, not another lease-timing tweak) as the starting hypothesis rather than attempting
+an eighth incremental patch to the same lease-only design. The two remaining MAJORs, the residual
+already tracked in round 6's own doc comment, and the now-fenced disconnect-vs-disconnect gap are all
+in `packages/domain/src/gmail/oauth.ts`'s own doc comments on `disconnectGmailAccount`/
+`connectGmailAccount`, current as of `736ecdf`.
+
 ## 2026-09-13 — G3 implementation checkpoint 4: OAuth lifecycle (`packages/domain/src/gmail/oauth.ts`)
 
 **Decision.** Fourth implementation checkpoint of gate G3, on branch `gate/g3-implementation`: the
