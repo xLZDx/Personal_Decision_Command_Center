@@ -1,0 +1,281 @@
+<!doctype html>
+<title>G2 Audit Verification</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f6f4ee;
+    --surface: #ffffff;
+    --surface-2: #f0ede4;
+    --ink: #1d2430;
+    --ink-dim: #5b6472;
+    --ink-faint: #8a91a0;
+    --border: #e1dccd;
+    --accent: #2f6f68;
+    --accent-ink: #ffffff;
+    --accent-tint: #e3efec;
+    --amber: #9a6a12;
+    --amber-tint: #faf1de;
+    --red: #a5391f;
+    --red-tint: #fbeae5;
+    --green: #2c744a;
+    --green-tint: #e7f3ea;
+    --code-bg: #f1eee3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181e;
+      --surface: #1b212a;
+      --surface-2: #212833;
+      --ink: #e8e6de;
+      --ink-dim: #a7aebb;
+      --ink-faint: #757e8c;
+      --border: #2c333f;
+      --accent: #5fada4;
+      --accent-ink: #0d1512;
+      --accent-tint: #1c2b29;
+      --amber: #d9a03f;
+      --amber-tint: #2b2313;
+      --red: #e17858;
+      --red-tint: #2c1815;
+      --green: #6cbb8b;
+      --green-tint: #16261c;
+      --code-bg: #212833;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181e;
+    --surface: #1b212a;
+    --surface-2: #212833;
+    --ink: #e8e6de;
+    --ink-dim: #a7aebb;
+    --ink-faint: #757e8c;
+    --border: #2c333f;
+    --accent: #5fada4;
+    --accent-ink: #0d1512;
+    --accent-tint: #1c2b29;
+    --amber: #d9a03f;
+    --amber-tint: #2b2313;
+    --red: #e17858;
+    --red-tint: #2c1815;
+    --green: #6cbb8b;
+    --green-tint: #16261c;
+    --code-bg: #212833;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, sans-serif; line-height: 1.55; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 96px; }
+  header h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.01em; text-wrap: balance; margin: 0 0 6px; }
+  header .subtitle { color: var(--ink-dim); font-size: 1.05rem; margin: 0; }
+  code, .mono { font-family: 'IBM Plex Mono', monospace; font-size: 0.88em; }
+  .path { background: var(--code-bg); padding: 0.1em 0.4em; border-radius: 4px; }
+
+  section { margin-top: 44px; }
+  h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px; text-wrap: balance; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 24px 0 10px; }
+  p { margin: 0 0 12px; max-width: 70ch; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; letter-spacing: 0.02em; text-transform: uppercase; }
+  .pill.confirmed { background: var(--green-tint); color: var(--green); }
+  .pill.reframed { background: var(--amber-tint); color: var(--amber); }
+  .pill.new { background: var(--red-tint); color: var(--red); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; }
+  .card + .card { margin-top: 14px; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .summary-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .summary-tile .num { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .summary-tile .label { color: var(--ink-dim); font-size: 0.85rem; margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--ink-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .table-scroll table { border: none; }
+  .table-scroll .card { border: none; border-radius: 0; }
+  tr:last-child td { border-bottom: none; }
+
+  ul.tight { margin: 0 0 12px; padding-left: 20px; }
+  ul.tight li { margin-bottom: 6px; }
+
+  .finding { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; margin: 14px 0; }
+  .finding.blocker-note { border-left-color: var(--red); }
+  .finding.reframe-note { border-left-color: var(--amber); }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--ink-faint); font-size: 0.85rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>G2 Audit Verification</h1>
+    <p class="subtitle">Personal Decision OS &mdash; independent re-verification of the external audit's findings (BLOCK / NEEDS REVISION) against primary sources</p>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; main @ 534b1d2</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+<section>
+  <h2>Summary</h2>
+  <div class="summary-grid">
+    <div class="summary-tile"><div class="num">4 / 4</div><div class="label">BLOCKERs confirmed as fact</div></div>
+    <div class="summary-tile"><div class="num">1</div><div class="label">BLOCKER reframed (a decision, not a failure)</div></div>
+    <div class="summary-tile"><div class="num">6</div><div class="label">MAJORs confirmed by direct code/schema reading</div></div>
+    <div class="summary-tile"><div class="num">3</div><div class="label">new defects absent from the already-sent G2 proposal</div></div>
+  </div>
+  <p>Every finding was checked against a primary source: file:line, <code>git</code>/<code>gh api</code>/<code>npm audit</code> output &mdash; never an agent's paraphrase. Classified FACT/INFERENCE/DECISION per house rule. No files were modified during this verification pass (the working tree carried only CRLF noise from <code class="path">core.autocrlf=true</code> &mdash; zero real diff bytes, which is itself one of the already-known MAJOR findings below).</p>
+</section>
+
+<section>
+  <h2>BLOCKER &mdash; all four confirmed</h2>
+
+  <div class="finding blocker-note">
+    <strong>1. Governance checks are not required in the live ruleset.</strong> <span class="pill confirmed">FACT</span><br>
+    Verified via <code>gh api repos/xLZDx/Personal_Decision_Command_Center/rulesets/22899342</code>: a <code>pull_request</code> rule with <code>required_approving_review_count: 0</code>, <code>require_code_owner_review: false</code>, and no <code>required_status_checks</code> rule at all. <code>gh pr view 20</code> confirmed PR #20 merged 2026&#8209;09&#8209;12 with <code>governance: FAILURE</code> (<code>verify: SUCCESS</code>).
+  </div>
+  <div class="finding reframe-note">
+    <strong>Important reframing.</strong> This is not an accidental governance failure or a silent bypass. <a class="path" href="core/DECISION_LOG.md">core/DECISION_LOG.md:139&ndash;145</a> records an explicit operator decision from 2026&#8209;09&#8209;12: required checks were deliberately removed so functional work would not be blocked by G1 process polish; PR #19 merged on that basis with no GPT&#8209;PM APPROVE. The real defect lies elsewhere: <a class="path" href="core/PLAN_MASTER_GATES.md">core/PLAN_MASTER_GATES.md:11&ndash;12</a> and <a class="path" href="core/RISK_REGISTER.md">core/RISK_REGISTER.md</a> were never updated to reflect that decision (G1 is still marked "NOT YET CLOSED", G2 "BLOCKED &mdash; needs G1 closure first," even though G2 code (PR #20) has already merged). The audit's recommendation ("restore checks or write an ADR") is broadly right, but the correct fix is to sync the docs with the decision already made, not to reverse it.
+  </div>
+
+  <div class="finding blocker-note">
+    <strong>2. Provenance fail-open in <code class="path">packages/provenance/src/dag.ts:55&ndash;73</code>.</strong> <span class="pill confirmed">FACT</span><br>
+    <code>isAiSafe()</code> only checks <code>node.ai_policy === 'DENY'</code>, never <code>=== 'ALLOW'</code> &mdash; at the TypeScript type level there is no third value, but the executable check is not bound to the <code>zod</code> schema (<code class="path">packages/contracts/src/provenance.ts</code>): any object built without going through <code>AiPolicySchema.parse()</code>, carrying an arbitrary <code>ai_policy</code> (including <code>undefined</code>), passes as safe as long as it has no ancestors. <code class="path">provenance.ts:9</code>'s own comment says as much: "a type that carries an ai_policy field does not by itself stop anyone from serializing it" &mdash; the actual enforcement point (<code>dag.ts</code>) is exactly where the audit found the gap. An ALLOW node with empty <code>provenance: []</code> is indeed accepted as a valid root purely by comment-level convention, with no type-level or runtime distinction between "a genuine source leaf" and "an accidentally empty array."
+  </div>
+
+  <div class="finding blocker-note">
+    <strong>3. D1 schema permits Telegram + ALLOW.</strong> <span class="pill confirmed">FACT</span><br>
+    In <a class="path" href="infra/migrations/0001_ingest_outbox.sql">infra/migrations/0001_ingest_outbox.sql:57&ndash;63</a>, <code>source_policies</code> has independent CHECKs on <code>source IN ('telegram','gmail')</code> and <code>ai_policy IN ('ALLOW','DENY')</code>, but no composite constraint forbidding the pair <code>telegram + ALLOW</code>. In <code>ingest_events</code> (:79&ndash;91) the <code>source</code> column, the FK to <code>source_accounts</code>, and the FK to <code>source_policies</code> are three independent columns with no consistency check between them. Confirmed structurally by direct schema reading (no composite FK/CHECK exists); the audit's empirical SQLite probe was not re-run, but that was unnecessary &mdash; the gap is visible in the DDL itself.
+  </div>
+
+  <div class="finding blocker-note">
+    <strong>4. Reconciler/outbox: incoherent state-machine query.</strong> <span class="pill confirmed">FACT &mdash; already known to the project</span><br>
+    Not a new finding: the project itself found and documented the same defect the same day, independently of the external audit &mdash; see <a class="path" href="core/DECISION_LOG.md">core/DECISION_LOG.md:8&ndash;31</a> and <a class="path" href="governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md">governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md:9&ndash;34</a> (4 agents, all independently converging). Read directly: <a class="path" href="docs/architecture/TDD.md">docs/architecture/TDD.md:840&ndash;846</a> writes the query over <code>ingest_events.state</code>, while <code>next_attempt_at</code>/<code>attempt_count</code> live only on <code>processing_outbox</code> (<a class="path" href="infra/migrations/0001_ingest_outbox.sql">:129&ndash;138</a>), and the only index (<code>idx_processing_outbox_reconciler</code>, :142) is built on an incompatible state domain. Also independently confirmed: the attempt-cap-invisibility bug &mdash; <code>attempt_count &lt; MAX_PROCESSING_ATTEMPTS</code> as a WHERE filter excludes an event exactly at its attempt cap from ever transitioning to DLQ (<a class="path" href="docs/architecture/TDD.md">TDD.md:845</a>, <a class="path" href="core/adr/ADR-006-durable-ingest-outbox.md">ADR-006:43</a>). Nothing implemented &mdash; awaiting a GPT&#8209;PM ruling.
+  </div>
+</section>
+
+<section>
+  <h2>MAJOR &mdash; confirmed by direct inspection</h2>
+  <div class="table-scroll">
+  <div class="card">
+  <table>
+    <thead><tr><th>Audit claim</th><th>Verification</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td><code class="path">idempotencyKey()</code> ignores version &mdash; sequential <code>MESSAGE_UPDATED</code> events can be treated as duplicates</td><td>Read <a class="path" href="packages/contracts/src/event.ts">packages/contracts/src/event.ts:105&ndash;111</a>: the key is a function of only <code>source_account_id</code>, <code>source_event_id</code>, <code>event_type</code></td><td><span class="pill confirmed">FACT</span> &mdash; two distinct edits of the same provider message produce an identical key and collide on the <code>UNIQUE</code> index</td></tr>
+      <tr><td><code>routing_hints</code> has no <code>.max()</code> bound</td><td>Read <a class="path" href="packages/contracts/src/event.ts">event.ts:57</a>: <code>routing_hints: z.array(ProvenanceValueSchema)</code>, no <code>.max()</code></td><td><span class="pill confirmed">FACT</span> &mdash; also matches the project's own independent finding (<a class="path" href="governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md">G2 proposal §5</a>)</td></tr>
+      <tr><td><code>npm audit</code>: 6 advisories &mdash; 2 critical, 1 high, 3 moderate</td><td>Re-ran <code>npm audit --json</code></td><td><span class="pill confirmed">FACT</span> &mdash; count matched exactly: 2/1/3/6</td></tr>
+      <tr><td>Prettier fails on 8 files due to <code>core.autocrlf=true</code> with <code>endOfLine: lf</code></td><td><code>git status</code> at the start of this session showed 13 files "modified" with zero substantive diff (CRLF only)</td><td><span class="pill confirmed">FACT</span> &mdash; observed live, not only claimed by the audit</td></tr>
+      <tr><td>TDD requires a generic <code>ProvenanceValue&lt;T&gt;</code>, contract is string-only</td><td>Read <a class="path" href="packages/contracts/src/provenance.ts">provenance.ts:46&ndash;55</a>: <code>value: z.string()</code>, no generic parameter</td><td><span class="pill confirmed">FACT</span></td></tr>
+      <tr><td>DAG traversal is recursive, no memoization/depth limit</td><td>Read <a class="path" href="packages/provenance/src/dag.ts">dag.ts:55&ndash;73</a>: plain recursion over <code>node.provenance</code>, no cross-call visited-node cache, no node-count limit</td><td><span class="pill confirmed">FACT by code</span> &mdash; the claimed millisecond figures on a wide graph were not independently re-measured</td></tr>
+    </tbody>
+  </table>
+  </div>
+  </div>
+  <p style="margin-top:14px">Not re-checked this round (time budget, not doubt): secret-scan history/entropy, the UX spec, the 160/160 test and 47/47 mutation counts &mdash; those figures are carried over from the audit's own report without an independent re-run.</p>
+</section>
+
+<section>
+  <h2>New findings &mdash; absent from the already-sent G2 proposal</h2>
+  <p>Three of the confirmed items above do not appear in <a class="path" href="governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md">governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md</a>, which was already staged to send to GPT&#8209;PM. Since they belong to the same layer (G2 pipeline) and the same GPT&#8209;PM round, they were appended to that document as a new §7 before sending, so the decision is made on the complete picture (§17 &mdash; one sweep, not one finding at a time):</p>
+  <ul class="tight">
+    <li><strong>Provenance fail-open</strong> (<code class="path">dag.ts</code>) &mdash; see BLOCKER 2 above;</li>
+    <li><strong>D1 telegram+ALLOW / unlinked FKs</strong> (<code class="path">0001_ingest_outbox.sql</code>) &mdash; see BLOCKER 3 above;</li>
+    <li><strong>idempotencyKey MESSAGE_UPDATED collision</strong> &mdash; see the MAJOR table above.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Status and next step</h2>
+  <p><code>pm_bridge_mode_status</code>: daemon is live (pid 27196, port 8765), queue empty, idle &mdash; safe to send. The G2 proposal was extended with §7 covering the three new findings and is being sent to GPT&#8209;PM (<code>project: "personal-decision-os"</code>) together with this report &mdash; this is exactly the step the previous session was blocked on by daemon/routing staleness.</p>
+  <p><code>git push origin main</code> is still blocked by branch protection (needs a PR &rarr; needs a new branch &rarr; needs the §14 double approval, or a GPT&#8209;PM <code>VERDICT: APPROVE</code> under §14/§20). This session's commits stay local on <code>main</code> pending that separate decision.</p>
+</section>
+
+  <footer>Personal Decision OS &mdash; written under PM Bridge orchestrator mode (ON): the session continues past this handover instead of stopping.</footer>
+</div>
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->

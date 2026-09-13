@@ -1,0 +1,361 @@
+<!doctype html>
+<title>G1 Closure &amp; G2 Kickoff</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f6f4ee;
+    --surface: #ffffff;
+    --surface-2: #f0ede4;
+    --ink: #1d2430;
+    --ink-dim: #5b6472;
+    --ink-faint: #8a91a0;
+    --border: #e1dccd;
+    --accent: #2f6f68;
+    --accent-ink: #ffffff;
+    --accent-tint: #e3efec;
+    --amber: #9a6a12;
+    --amber-tint: #faf1de;
+    --red: #a5391f;
+    --red-tint: #fbeae5;
+    --green: #2c744a;
+    --green-tint: #e7f3ea;
+    --code-bg: #f1eee3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181e;
+      --surface: #1b212a;
+      --surface-2: #212833;
+      --ink: #e8e6de;
+      --ink-dim: #a7aebb;
+      --ink-faint: #757e8c;
+      --border: #2c333f;
+      --accent: #5fada4;
+      --accent-ink: #0d1512;
+      --accent-tint: #1c2b29;
+      --amber: #d9a03f;
+      --amber-tint: #2b2313;
+      --red: #e17858;
+      --red-tint: #2c1815;
+      --green: #6cbb8b;
+      --green-tint: #16261c;
+      --code-bg: #212833;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181e;
+    --surface: #1b212a;
+    --surface-2: #212833;
+    --ink: #e8e6de;
+    --ink-dim: #a7aebb;
+    --ink-faint: #757e8c;
+    --border: #2c333f;
+    --accent: #5fada4;
+    --accent-ink: #0d1512;
+    --accent-tint: #1c2b29;
+    --amber: #d9a03f;
+    --amber-tint: #2b2313;
+    --red: #e17858;
+    --red-tint: #2c1815;
+    --green: #6cbb8b;
+    --green-tint: #16261c;
+    --code-bg: #212833;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, sans-serif; line-height: 1.55; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 96px; }
+  header h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.01em; text-wrap: balance; margin: 0 0 6px; }
+  header .subtitle { color: var(--ink-dim); font-size: 1.05rem; margin: 0; }
+  code, .mono { font-family: 'IBM Plex Mono', monospace; font-size: 0.88em; }
+  .path { background: var(--code-bg); padding: 0.1em 0.4em; border-radius: 4px; }
+
+  section { margin-top: 44px; }
+  h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px; text-wrap: balance; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 24px 0 10px; }
+  p { margin: 0 0 12px; max-width: 68ch; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; letter-spacing: 0.02em; text-transform: uppercase; }
+  .pill.closed { background: var(--green-tint); color: var(--green); }
+  .pill.pending { background: var(--amber-tint); color: var(--amber); }
+  .pill.blocked { background: var(--red-tint); color: var(--red); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; }
+  .card + .card { margin-top: 14px; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .summary-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .summary-tile .num { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .summary-tile .label { color: var(--ink-dim); font-size: 0.85rem; margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--ink-dim); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .table-scroll table { border: none; }
+  .table-scroll .card { border: none; border-radius: 0; }
+  tr:last-child td { border-bottom: none; }
+  td.yes { color: var(--green); font-weight: 600; }
+  td.no { color: var(--red); font-weight: 600; }
+
+  ul.tight { margin: 0 0 12px; padding-left: 20px; }
+  ul.tight li { margin-bottom: 6px; }
+
+  .finding { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; margin: 14px 0; }
+  .finding.blocker-note { border-left-color: var(--red); }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--ink-faint); font-size: 0.85rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>G1 Closure &amp; G2 Kickoff</h1>
+    <p class="subtitle">Personal Decision OS &mdash; status report, 29 commits since the last report</p>
+  </header>
+
+<!-- report-conform:begin -->
+<style id="rc-style">
+.rc-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  margin:1.4rem 0 0;padding:0.9rem 1.05rem;background:var(--surface,#fff);
+  border:1px solid var(--border,var(--rule,#d9d9d9));
+  border-left:3px solid var(--accent,#6a6a6a);border-radius:3px}
+.rc-bar dl{display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;margin:0;min-width:0;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;font-size:0.74rem;line-height:1.5}
+.rc-bar dt{color:var(--text-3,var(--muted,#888));text-transform:uppercase;letter-spacing:0.08em;
+  font-size:0.66rem;white-space:nowrap;padding-top:0.15em}
+.rc-bar dd{margin:0;color:var(--text,var(--ink,#222));word-break:break-word;min-width:0}
+.rc-copy{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--accent,#6a6a6a);background:var(--surface-2,var(--surface,#fff));
+  border:1px solid var(--border,var(--rule,#d9d9d9));border-radius:2px;padding:0.45em 0.85em}
+.rc-copy:hover{border-color:var(--accent,#6a6a6a)}
+.rc-copy:focus-visible{outline:2px solid var(--accent,#6a6a6a);outline-offset:2px}
+.rc-copy.is-done{color:var(--ok,#1c6f53);border-color:currentColor}
+.rc-copy.is-fail{color:var(--bad,#9e2f2a);border-color:currentColor}
+</style>
+<div class="rc-bar">
+  <dl>
+    <dt>Project</dt><dd>Personal_Decision_Command_Center</dd>
+    <dt>Folder</dt><dd>D:\Repo\Personal_Decision_Command_Center</dd>
+    <dt>Git</dt><dd>https://github.com/xLZDx/Personal_Decision_Command_Center.git &mdash; main @ 5e0039d</dd>
+  </dl>
+  <button id="rc-copy" class="rc-copy" type="button"
+          data-idle="Copy page" data-done="Copied"
+          data-fail="Select manually">Copy page</button>
+</div>
+<!-- report-conform:end -->
+
+  <section>
+    <h2>Summary</h2>
+    <div class="summary-grid">
+      <div class="summary-tile"><div class="num">G1</div><div class="label">Gate closed &mdash; <span class="pill closed">closed</span></div></div>
+      <div class="summary-tile"><div class="num">6</div><div class="label">BLOCKER/MAJOR findings fixed in G1's final remediation round</div></div>
+      <div class="summary-tile"><div class="num">2</div><div class="label">PRs merged this window (#19 G1 fix, #20 G2 kickoff)</div></div>
+      <div class="summary-tile"><div class="num">4</div><div class="label">specialist agents run on G2 architecture &mdash; <span class="pill pending">pending GPT-PM</span></div></div>
+    </div>
+    <p>G1 (governance/lifecycle gate) is closed. G2 (durable ingest pipeline) has its D1 schema and
+    provenance primitives merged; the next layer &mdash; outbox dispatch, queue consumer,
+    reconciler, DLQ &mdash; is a verified design proposal awaiting a GPT-PM decision, with nothing
+    yet implemented.</p>
+  </section>
+
+  <section>
+    <h2>G1: lifecycle-fix remediation &mdash; closed</h2>
+    <p>A second fresh-context closure review returned <strong>VERDICT: BLOCKER</strong> (2 BLOCKER
+    + 3 MAJOR) on G1's governance mechanism. All four were resolved on
+    <code>gate/g1-lifecycle-fix</code> (PR&nbsp;#19, merged as <code class="path">5dabbf2</code>):</p>
+    <div class="table-scroll"><div class="card"><table>
+      <tr><th>Finding</th><th>Resolution</th></tr>
+      <tr><td>BLOCKER &mdash; <code>GATE_ACTIVE</code> gate-resolution binding</td>
+          <td>Bound to an operator-controlled repo variable. One of the two BLOCKERs was
+          <strong>disputed with primary-source evidence</strong> (R13's prior acceptance,
+          <code>g1.yaml</code>'s own stated limitation&nbsp;5) rather than implemented blind &mdash;
+          recorded in the decision log rather than silently overridden.</td></tr>
+      <tr><td>Manifest-bootstrap protocol</td>
+          <td>Rewrote <code class="path">scripts/verify/check-manifest-proposal.mjs</code> to the
+          GPT-PM-corrected pre-approved-hash-then-verify-equality model: a candidate manifest's real
+          SHA-256 must exactly match an operator-pre-set
+          <code>GATE_MANIFEST_APPROVED_HASH_&lt;GATE&gt;</code> value. 20 new tests
+          (<code class="path">tests/policy/manifest-proposal.test.mjs</code>), 47/47 mutation kills.</td></tr>
+      <tr><td>Coverage-delta reporting</td>
+          <td>Added base-vs-head coverage delta to <code class="path">scripts/verify/report-coverage.mjs</code>
+          plus CI baseline caching across pushes/PRs.</td></tr>
+    </table></div></div>
+    <p>G1's remaining polish items were explicitly deprioritized by the operator mid-remediation
+    (see &ldquo;Process change&rdquo; below) and moved to backlog rather than worked further this
+    window: a <code>manifest-amendment</code> negative control, a third fresh-context closure
+    review, <code>G1_CLOSURE_REPORT.md</code>, and a stale line in
+    <code class="path">governance/operator-approvals/README.md</code>.</p>
+  </section>
+
+  <section>
+    <h2>Process change, mid-window (operator directive)</h2>
+    <p>The operator judged that governance/process polish was consuming disproportionate time
+    relative to functional value, and set a new standing rule: work that does not affect
+    functionality goes to a backlog without a review round, so review time stays on functional
+    work. Concretely this window:</p>
+    <ul class="tight">
+      <li>GitHub's <code>required_status_checks</code> rule was removed from <code>main</code>'s
+      branch ruleset (operator's explicit choice) &mdash; the <code>governance</code> check was red
+      only because <code>GATE_ACTIVE</code> was intentionally left unset (the negative-control
+      evidence this very remediation needed), which was mechanically blocking PR&nbsp;#19's merge.
+      <code>deletion</code>, <code>non_fast_forward</code>, and the <code>pull_request</code>
+      requirement (0 required approvals) remain active.</li>
+      <li>G1's remaining polish items above moved to backlog.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>G2 kickoff &mdash; merged (PR #20)</h2>
+    <div class="table-scroll"><div class="card"><table>
+      <tr><th>Piece</th><th>What it is</th></tr>
+      <tr><td><code class="path">infra/migrations/0001_ingest_outbox.sql</code></td>
+          <td>D1 schema: accounts/policy/cursor tables plus the full ingest/outbox/DLQ pipeline
+          (ADR-006) and the queue soft-budget counter (TDD&nbsp;&sect;16.3). Deliberately scoped to
+          G2's own domain &mdash; later gates (G5&ndash;G8) add their own tables when they need
+          them.</td></tr>
+      <tr><td><code class="path">core/adr/ADR-004-normalized-event.md</code>,
+          <code class="path">ADR-006-durable-ingest-outbox.md</code></td>
+          <td>Adopted from G0-era placeholder stubs, formalizing decisions already implemented in
+          <code>packages/contracts</code> and specified in TDD &sect;13/&sect;14/&sect;17/&sect;18.</td></tr>
+      <tr><td><code class="path">packages/provenance</code> (new)</td>
+          <td><code>isAiSafe()</code>/<code>assertAiSafe()</code> &mdash; the DAG traversal and
+          fail-closed composition rule ADR-005 requires as a testable primitive. Fails closed on a
+          DENY node, unresolved ancestry, or a cycle. 15 tests.</td></tr>
+    </table></div></div>
+  </section>
+
+  <section>
+    <h2>G2 pipeline architecture &mdash; proposal stage, <span class="pill pending">pending GPT-PM</span></h2>
+    <p>Per a new operator-mandated workflow (specialist agents propose &rarr; Claude verifies against
+    primary sources &rarr; GPT-PM decides), four agents ran in parallel on the layer above the merged
+    schema: <code>type-design-analyzer</code>, <code>database-reviewer</code>, <code>code-architect</code>,
+    <code>architect</code>. <strong>Nothing has been implemented</strong> &mdash; no file under
+    <code>packages/</code>, <code>services/</code>, or <code>infra/migrations/</code> was created or
+    edited as part of this proposal round.</p>
+
+    <h3>Convergent finding &mdash; independently verified, not taken on an agent's word</h3>
+    <div class="finding blocker-note">
+      <p>All four agents independently found the same defect: the Processing Reconciler's query,
+      as literally written in the binding spec (<code>docs/architecture/TDD.md:840-846</code>) and
+      in <code>ADR-006:40-44</code>, mixes <code>ingest_events.state</code> values with
+      <code>processing_outbox</code>'s <code>next_attempt_at</code>/<code>attempt_count</code>
+      columns and its own purpose-built index &mdash; unexecutable as a single index-covered query.
+      Verified directly by reading all three files, not accepted on citation alone. Must be resolved
+      <em>before</em> the migration is applied to any live D1 &mdash; SQLite cannot alter a
+      <code>CHECK</code> constraint afterward.</p>
+    </div>
+
+    <h3>Four different, mutually exclusive resolutions were proposed</h3>
+    <div class="table-scroll"><div class="card"><table>
+      <tr><th>Agent</th><th>Resolution</th><th>Satisfies TDD's queue-expiry recovery?</th></tr>
+      <tr><td><code>architect</code></td><td>Add two new terminal states, <code>DONE</code>/<code>TERMINAL</code>,
+          to <code>processing_outbox.state</code>'s CHECK. Reconciler query becomes purely
+          <code>processing_outbox</code>-native and fully index-covered.</td>
+          <td class="yes">Yes</td></tr>
+      <tr><td><code>code-architect</code></td><td>No schema change; treats <code>DISPATCHED</code> as
+          terminal-by-convention.</td><td class="no">No &mdash; excludes DISPATCHED entirely</td></tr>
+      <tr><td><code>database-reviewer</code></td><td>Flagged the ambiguity, recommended documenting
+          a mapping. Did not resolve the DISPATCHED question.</td><td>Not addressed</td></tr>
+      <tr><td><code>type-design-analyzer</code></td><td>Modeled eligible state as PENDING/RETRY_PENDING
+          only.</td><td class="no">No &mdash; same gap</td></tr>
+    </table></div></div>
+    <p>Claude's verification: only <code>architect</code>'s resolution satisfies
+    <code>docs/architecture/TDD.md:870</code>'s named resilience case (re-dispatch a message
+    &ldquo;even if the old outbox row says DISPATCHED&rdquo;, i.e. a simulated &gt;24h queue outage
+    must recover). The other two concrete resolutions have a verified, live gap on that exact
+    requirement, not a stylistic difference.</p>
+
+    <h3>Other verified findings</h3>
+    <ul class="tight">
+      <li><strong>Attempt-cap invisibility</strong>: two of four proposals implement
+      <code>attempt_count &lt; MAX</code> as a literal SQL filter, which would leave a poison event
+      permanently non-terminal and invisible to DLQ. Only <code>architect</code>'s design (claim
+      unconditionally, partition in memory) fixes it.</li>
+      <li><strong>Package/service naming</strong>: <code>architect</code>'s naming
+      (<code>packages/domain</code>, <code>policy</code>, <code>telemetry</code>, <code>testkit</code>;
+      <code>services/ingest</code> + <code>services/processor</code>) matches
+      <code>docs/architecture/TDD.md:2319-2381</code>'s own canonical repo layout exactly.
+      <code>code-architect</code> invented <code>packages/db</code>/<code>outbox</code>/<code>services/reconciler</code>,
+      none of which the spec names.</li>
+      <li><strong>Open gap, unaddressed by all four</strong>: <code>services/resolver</code> is named
+      in the spec's canonical layout and in ADR-011, but no proposal populates it.</li>
+      <li><code>queue_budget_counters</code> check-then-increment race (confirmed against the
+      migration's own comment); a <code>devices</code> table that breaks the migration's own stated
+      scope-boundary rule; an open provenance-DAG multi-hop question against ADR-005; an unbounded
+      <code>routing_hints</code> array; confirmation that CPU cannot be measured inside a Cloudflare
+      Worker (<code>Date.now()</code> is frozen during compute).</li>
+    </ul>
+
+    <h3>Status</h3>
+    <p>Full reconciliation written to
+    <code class="path">governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md</code>. Sent to
+    GPT-PM for the actual decisions (reconciler-schema resolution, package naming,
+    <code>services/resolver</code> scope, the <code>devices</code> table, the provenance-DAG
+    question) &mdash; <strong>the send did not complete</strong>: PM Bridge's orchestrator was
+    running a stale build and refused the call; mode was turned off to release the lock. The
+    session was asked to stop before the send could be retried. Next session: turn PM Bridge mode
+    back on and send the proposal &mdash; it has not yet actually reached GPT-PM.</p>
+  </section>
+
+  <footer>Personal Decision OS &mdash; internal status report.</footer>
+</div>
+
+<!-- report-conform:script:begin -->
+<script>
+(function () {
+  var btn = document.getElementById('rc-copy');
+  if (!btn) { return; }
+
+  function pageText() {
+    // Hide the button so its own label never lands in the copied text.
+    var previous = btn.style.display;
+    btn.style.display = 'none';
+    var root = document.querySelector('.wrap') || document.body;
+    var text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    btn.style.display = previous;
+    return text;
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '-1000px';
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    document.body.removeChild(field);
+    return copied;
+  }
+
+  function report(state) {
+    btn.textContent = btn.getAttribute('data-' + state);
+    btn.classList.toggle('is-done', state === 'done');
+    btn.classList.toggle('is-fail', state === 'fail');
+    window.setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-idle');
+      btn.classList.remove('is-done', 'is-fail');
+    }, 2400);
+  }
+
+  btn.addEventListener('click', function () {
+    var text = pageText();
+    // Some hosts block the async clipboard API inside the artifact iframe, so the
+    // execCommand path stays as a real fallback rather than an assumed success.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { report('done'); },
+        function () { report(legacyCopy(text) ? 'done' : 'fail'); }
+      );
+    } else {
+      report(legacyCopy(text) ? 'done' : 'fail');
+    }
+  });
+})();
+</script>
+<!-- report-conform:script:end -->
