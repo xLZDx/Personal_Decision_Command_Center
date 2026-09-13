@@ -3,6 +3,78 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 CHECKPOINT 4 GATE CLOSED: round 13 (bounded verification, per the round-12 hard
+
+stop) returned `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR -- 13 total review rounds across
+this checkpoint's lifetime, the OAuth lifecycle module (`packages/domain/src/gmail/oauth.ts`) is
+DONE
+
+**Round 13 (commit `5c45ba8`, diffed against `79c6fb9`) was sent explicitly scoped to verification
+only** (per the round-12 entry's stated hard-stop plan and the operator's own reaction to the round
+count) -- GPT-PM confirmed it kept strictly to that scope: "the two Round-11 MAJORs, the one MINOR,
+and direct regressions from their remediation -- no fresh OAuth-mechanism sweep." All three findings
+confirmed CLOSED:
+
+- **Round-11 MAJOR #1 (double D1 failure in lifecycle-lock recovery writes)**: "The double-D1-failure
+  contract now does what the prior finding required... The stated terminal-boundary framing is
+  acceptable. My prior requirement was that a secondary recovery failure must not collapse back into
+  a generic, token-less exception; it needed a distinct, token-aware failure contract from which
+  force recovery can proceed. This now exists. Requiring the implementation to recursively protect
+  against an arbitrary third, fourth, etc. recovery failure would simply move the same boundary
+  outward indefinitely." This is the explicit external confirmation that classifying-and-surfacing a
+  double fault (rather than attempting to eliminate every further depth of fault) is the correct,
+  accepted resolution -- not a corner cut.
+- **Round-11 MAJOR #2 (STOP_CONFIRMED/REVOKE_NOT_APPLICABLE result symmetry)**: "STOP_CONFIRMED and
+  REVOKE_NOT_APPLICABLE now return RECONCILED_RETRY_DISCONNECT_REQUIRED; plain RECONCILED is reserved
+  for STOP_NOT_APPLICABLE, while REVOKE_CONFIRMED retains its existing atomic-finalization result."
+- **Round-11 MINOR (marker-write test fidelity)**: "The replacement fault-injection test genuinely
+  performs the underlying marker write, then throws to simulate response loss, and proves that the
+  resulting lock is discoverable with REVOKE_OUTCOME_UNKNOWN."
+- **No direct regression found**: "the new error class is exported through the package surface, and
+  the successful recovery paths continue to rethrow the original error rather than changing ordinary
+  behavior."
+
+One noted evidence limitation, not affecting the verdict: GPT-PM's connected GitHub endpoint could
+not resolve the short SHA `5c45ba8` at review time (this branch had not yet been pushed to the
+remote) -- "That does not change this scoped code verdict; the approval applies to the supplied
+79c6fb9..5c45ba8 diff," which was supplied and reviewed directly via `review.js`, not fetched from
+GitHub.
+
+**Process retrospective, recorded because the operator directly and correctly flagged it mid-gate.**
+This single checkpoint took 13 external GPT-PM review rounds plus multiple internal specialist
+rounds -- every individual finding across all 13 rounds was independently verified as genuine before
+being acted on (CLAUDE.md §3/§7/§23; none were confabulated or misapplied), but the ROUND COUNT
+itself is exactly the Gate A spiral pattern CLAUDE.md §17 was written to prevent. Root cause,
+understood only in hindsight: the mechanism underwent two full architectural redesigns mid-review
+(round 8/10, the lock: per-account -> project-wide singleton; round 9/11, the recovery state
+machine: single generic marker -> phase-specific with atomic finalization) -- each redesign created
+fresh surface for the NEXT full-sweep round to find something new in, rather than the review
+converging on a stable design. The operator's own standing instruction (CLAUDE.md §17, "always ask
+GPT-PM to check the whole gate/mechanism/integrations, not just the fixed findings") was followed
+correctly and is NOT being walked back here -- it is genuinely why rounds 9 and 10 caught real,
+severe defects internal review had missed. What broke down was the OTHER half of §17's own design:
+"one sweep, one remediation, one verification round; a third round only for a genuine regression
+introduced by THAT remediation" was not actually enforced once a redesign's own aftermath kept
+qualifying as "a full sweep of the changed mechanism" round after round. Round 12's fix was
+therefore explicitly bounded (no new fallible writes) and paired with a stated, non-negotiable hard
+stop -- one more verification-only round, close regardless of outcome -- rather than another
+open-ended full sweep, and round 13 confirms that bound actually worked: a narrowly-scoped request
+produced a clean APPROVE in one round. **Applies forward, all future checkpoints in this gate and
+beyond**: once a round's remediation requires a genuine architectural redesign (not just a bug fix),
+treat the NEXT round as reviewing that redesign specifically and hold firmly to the one-sweep/one-
+remediation/one-verification budget rather than letting "check the whole mechanism" quietly relicense
+another unbounded round.
+
+**Gate status.** `GATE: G3 checkpoint 4 (Gmail OAuth lifecycle) / STATUS: CLOSED / COMMIT: 5c45ba8
+/ PUSH: pending (this entry) / TESTS: 174/174 passing across packages/domain (50 in oauth.test.ts)
+/ GPT VERDICT: APPROVE (round 13, 0/0/0) / BLOCKERS: 0 / MAJORS: 0 / ACCEPTED RISKS: the
+double-D1-failure terminal boundary in LifecycleLockRecoveryFailedError (explicitly endorsed by
+GPT-PM, not a cut corner); the still-deferred crash-abandoned-lock force-recovery procedure
+(explicitly acceptable for MVP1/single-account per GPT-PM's round-10 ruling, becomes required before
+multi-account operation); the singleton's lack of fairness/queueing under contention (roadmap-level
+per GPT-PM's round-10 ruling, not a current defect) / ROADMAP CHANGES: none / NEXT GATE: G3
+checkpoint 5, cursor/history-list sync + normalization (proposal §2.2/§2.3).`
+
 ## 2026-09-13 — G3 checkpoint 4 round 12: operator flagged the round count as excessive (rounds 1-11);
 
 GPT-PM's round-11 review (2 MAJOR + 1 MINOR, both MAJOR found in machinery round 11's OWN
