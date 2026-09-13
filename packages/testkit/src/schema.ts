@@ -30,9 +30,10 @@ export function loadG2Schema(): string {
  * disconnect lock, checkpoint 4 round-3), 0004 (OAuth lifecycle lock, checkpoint 4 round-8), 0005
  * (unique Gmail email, checkpoint 4 round-9), 0006 (history-sync resumable checkpoint, checkpoint
  * 5 GPT-PM round-1), 0008 (history-sync checkpoint rebuild -- change-granularity budget + unified
- * MAIN/RECOVERY mode, checkpoint 5 GPT-PM round-2) and 0009 (gmail_api_budget_counters upper-bound
- * CHECK, checkpoint 6 internal review) so a G3 test gets every table G3's own tables reference via
- * FK (source_accounts, ingest_events) without re-declaring them.
+ * MAIN/RECOVERY mode, checkpoint 5 GPT-PM round-2), 0009 (gmail_api_budget_counters upper-bound
+ * CHECK, checkpoint 6 internal review) and 0010 (gmail_ai_neuron_budget raw-accounting rebuild +
+ * gmail_ai_neuron_reservations ledger, checkpoint 6 GPT-PM round-1) so a G3 test gets every table
+ * G3's own tables reference via FK (source_accounts, ingest_events) without re-declaring them.
  */
 export function loadG3Schema(): string {
   const path0002 = fileURLToPath(
@@ -62,10 +63,16 @@ export function loadG3Schema(): string {
       import.meta.url,
     ),
   );
+  const path0010 = fileURLToPath(
+    new URL(
+      '../../../infra/migrations/0010_gmail_ai_neuron_reservation_ledger.sql',
+      import.meta.url,
+    ),
+  );
   return (
     `${loadG2Schema()}\n${readFileSync(path0002, 'utf8')}\n${readFileSync(path0003, 'utf8')}\n` +
     `${readFileSync(path0004, 'utf8')}\n${readFileSync(path0005, 'utf8')}\n` +
     `${readFileSync(path0006, 'utf8')}\n${readFileSync(path0008, 'utf8')}\n` +
-    `${readFileSync(path0009, 'utf8')}`
+    `${readFileSync(path0009, 'utf8')}\n${readFileSync(path0010, 'utf8')}`
   );
 }

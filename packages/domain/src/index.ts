@@ -139,6 +139,7 @@ export type {
 } from './gmail/history-sync.js';
 
 export {
+  GMAIL_RATE_LIMIT_PER_MINUTE,
   GMAIL_RATE_WINDOW_CEILING,
   GMAIL_API_DAILY_CEILING,
   GMAIL_AI_NEURON_DAILY_CEILING,
@@ -156,4 +157,6 @@ export type {
   ReserveGmailAiNeuronsOptions,
   ReserveGmailAiNeuronsResult,
   ReconcileGmailAiNeuronsOptions,
+  ReconcileGmailAiNeuronsResult,
+  ReconcileGmailAiNeuronsOutcome,
 } from './gmail/quota.js';

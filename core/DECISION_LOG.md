@@ -3,6 +3,60 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 6, GPT-PM round 1: 5 MAJOR remediated as one coherent quota-ledger change; ready for bounded round 2 verification
+
+**GPT-PM round 1 verdict:** `VERDICT: MAJOR`, 0 BLOCKER / 5 MAJOR, correlated to commit
+`07c43c3` (`reviewInputHash 00bbe2dc96731423d23e09581f5f7626ca9ce9faf7ab390acd58a4bd0e5750ba`,
+`replyId 2ae4fe54-d7c8-4ea4-9cd8-8e4dada48f62`). Full receipt/reply:
+`D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\tasks\b2mcn5w1a.output`.
+GPT-PM explicitly scoped round 2 to these five findings and direct regressions only, and asked for
+findings 1+2 to be solved as one reservation-ledger/raw-accounting design.
+
+1. **MAJOR — Neuron reconciliation was not retry/idempotency-safe. Fixed.** Migration 0010 adds
+   `gmail_ai_neuron_reservations`, keyed by an opaque `reservation_id`. Reservation is now one
+   cap-gated INSERT; its triggers create/update the raw daily aggregate in that same SQLite
+   statement. Reconciliation is one `UPDATE ... WHERE reconciled = 0 RETURNING`; its trigger applies
+   `actual_neurons - estimated_neurons` in the same statement. A repeated or concurrent duplicate
+   affects zero rows, fires no trigger, and returns `ALREADY_RECONCILED`. Tests cover both negative
+   and positive deltas plus ten concurrent duplicate reconciliation attempts. This replaced an
+   intermediate two-statement draft before commit: there is no crash gap between aggregate and
+   reservation-ledger writes.
+2. **MAJOR — per-call clamp made the final raw total order-dependent. Fixed.** The aggregate is now
+   never clamped during reconciliation. Each reservation contributes either its pending estimate or
+   its final actual amount exactly once; plain addition is associative/commutative. The old upper
+   CHECK is removed by migration 0010 (lower bound retained). The reviewer's exact 9,900-vs-9,950
+   counterexample now produces 9,950 in both orders. A real underestimate may make the raw total
+   visibly exceed 10,000 after the call; further admission then fails closed.
+3. **MAJOR — millisecond `Date.now()` passed the claimed epoch-minute validation. Fixed.** Public
+   quota APIs no longer accept a caller-computed bucket. They accept an RFC 3339 instant with an
+   explicit offset; `reserveGmailRateWindow` derives the epoch minute internally. Runtime tests
+   reject the exact integer-millisecond bug class, date-only strings, malformed dates, impossible
+   calendar values, and offsets outside RFC 3339's range.
+4. **MAJOR — arbitrary caller-supplied daily string fragmented daily budgets. Fixed.** Both daily
+   reserve APIs derive the UTC `YYYY-MM-DD` partition internally from the supplied instant.
+   Reconciliation obtains the day and estimate only from its durable reservation row; neither can
+   be supplied inconsistently. A cross-offset regression proves `2026-09-14T01:30:00+03:00` and
+   `2026-09-13T22:31:00Z` consume the same UTC-day counter.
+5. **MAJOR — fixed minute buckets allowed a 12,000-unit boundary burst under a 6,000 rolling-minute
+   claim. Fixed conservatively.** The provider limit remains exported as
+   `GMAIL_RATE_LIMIT_PER_MINUTE = 6000`; the hard per-fixed-bucket admission ceiling is now half,
+   `GMAIL_RATE_WINDOW_CEILING = 3000`. Therefore any real trailing 60-second interval, spanning at
+   most two adjacent fixed buckets, can contain at most 3,000 + 3,000 = 6,000 admitted units. A
+   boundary test reserves at 59.999s and 60.001s and proves the bound. This intentionally sacrifices
+   unused throughput for a simple, provable personal-scale safety bound; round 2 is asked to judge
+   this conservative alternative because GPT-PM's round-1 wording listed sliding-window/provider-
+   evidence options but not this third solution.
+
+**Non-finding noted by GPT-PM:** Gmail also has a 1,200,000-unit/min project-wide ceiling. GPT-PM
+did not count it because checkpoint 6 is explicitly scoped to the proposal's three resources and
+the personal workload is far below it. It remains a later connector-integration consideration; it
+was not silently added to this primitive checkpoint.
+
+**Verification after remediation:** quota suite 43/43; full repository 503/503; `tsc --noEmit`,
+ESLint, touched-file Prettier, `git diff --check`, and secret scan clean. Migration 0010 executes as
+part of every `loadG3Schema()` quota test, so its tables, constraints, indexes, and triggers are
+exercised against the Node SQLite D1 adapter rather than syntax-checked only.
+
 ## 2026-09-13 — G3 checkpoint 6: quota limiter primitives (proposal §2.9) implemented, 4-specialist
 internal review completed and fully remediated in one batch, about to enter GPT-PM round 1 (3-round
 hard cap, told to GPT-PM up front per standing operator instruction)
