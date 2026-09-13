@@ -211,21 +211,47 @@ export type DisconnectGmailAccountResult =
   | { outcome: 'DISCONNECT_IN_PROGRESS' };
 
 /**
- * How long a disconnect holds exclusive rights to revoke/finalize this account's connection before
- * its lease is considered abandoned (e.g. the Worker process crashed mid-revoke, outright, not
- * merely a caught error -- a caught error releases the lease immediately via the function's own
- * `catch` block) and a LATER `disconnectGmailAccount` retry for the SAME account may take over and
- * redo the sequence. Bounded well above realistic Google API latency but short enough that a
- * genuinely abandoned lease does not lock out disconnect retries for long.
+ * Thrown by `disconnectGmailAccount` when `googleClient.revokeToken` itself rejects (GPT-PM round-7
+ * MAJOR). Distinct from an ordinary thrown error on purpose: the request may have reached Google
+ * before failing locally (e.g. a connection reset after the server already processed it), so
+ * whether the project-wide revocation actually happened is UNKNOWN, not merely "failed and safe to
+ * retry." The disconnect lease is deliberately left in place when this is thrown (never released --
+ * see the function's own doc comment) so neither a reconnect nor a fresh disconnect attempt can
+ * proceed while that ambiguity is unresolved. Recovering from this requires an explicit
+ * reconciliation step outside this domain module's current scope (e.g. an operator/admin action
+ * that independently confirms the token's actual state with Google before clearing the lease) --
+ * deferred here the same way the real `fetch`-backed `GoogleOAuthClient` implementation and
+ * key-ring resolution are deferred to the `services/gmail-connector` Worker, §2.1. A caller MUST
+ * treat this differently from an ordinary error: it is not "try again," it is "stop and escalate."
+ */
+export class DisconnectAmbiguousRevokeError extends Error {
+  constructor(cause: unknown) {
+    super(
+      'disconnectGmailAccount: revokeToken failed ambiguously -- Google may have already processed ' +
+        'the revocation before this error surfaced locally, so the disconnect lease was ' +
+        'intentionally left in place rather than released. This account needs explicit ' +
+        'reconciliation before any further connect or disconnect attempt can safely proceed.',
+      { cause },
+    );
+    this.name = 'DisconnectAmbiguousRevokeError';
+  }
+}
+
+/**
+ * How long a disconnect holds exclusive rights to revoke/finalize this account's connection.
  *
- * **Governs disconnect-vs-disconnect contention only** (GPT-PM round-6 MAJOR, see the full history
- * in `disconnectGmailAccount`'s own doc comment): this constant has NO bearing on when
- * `connectGmailAccount` may proceed -- that guard checks only whether a lease is present at all,
- * never how old it is. Two earlier designs (round 4's client-side timeout, round 5's renewal
- * heartbeat) tried to make THIS duration also govern reconnect eligibility and were both found
- * unsafe: no amount of elapsed client-side time can prove Google's revoke has actually stopped
- * running, so treating "the lease looks old" as permission for a DIFFERENT kind of operation
- * (reconnect) to proceed was the actual defect, not the specific duration chosen.
+ * **Diagnostic only, as of GPT-PM round-7 MAJOR -- does not gate anything.** Rounds up to 6 used
+ * this to let a LATER `disconnectGmailAccount` call automatically take over an "expired" lease from
+ * an earlier one; GPT-PM round 7 correctly rejected that too, for the SAME reason rounds 4-6
+ * rejected using elapsed time to authorize reconnect: two disconnect attempts could then both have
+ * a genuine `revokeToken` in flight at once, and whichever finishes first deletes the row and opens
+ * the door to reconnect while the OTHER's revoke might still be live -- no client-side timing signal
+ * can rule that out. Both `connectGmailAccount`'s and `disconnectGmailAccount`'s OWN guards now
+ * check only `disconnect_lease_token IS NULL`, never this duration. The column and this constant
+ * are still written (as `disconnect_lease_expires_at`) purely so a future observability/ops tool can
+ * query "which accounts have held a disconnect lease for longer than expected" and flag them for
+ * manual investigation -- see `DisconnectAmbiguousRevokeError`'s own doc comment for why automatic
+ * recovery is deliberately NOT provided by this module.
  */
 const DISCONNECT_LEASE_DURATION_MS = 60_000;
 
@@ -289,43 +315,74 @@ const DISCONNECT_LEASE_DURATION_MS = 60_000;
  * cancellation contract (`fetch`-backed cancellation is deferred to the `services/gmail-connector`
  * Worker, §2.1, same deferral as every other real-network concern in this domain module).
  *
- * **The actual fix: `disconnect_lease_expires_at` no longer governs whether RECONNECT may proceed
+ * **The round-6 fix: `disconnect_lease_expires_at` no longer governs whether RECONNECT may proceed
  * at all** -- `connectGmailAccount`'s guard checks only `IS NULL`, never the expiry, so no amount of
  * elapsed client-side time can ever authorize a reconnect while a disconnect's lease is present.
- * The lease is cleared only by an ACTUAL, DEFINITIVE settlement: this function's own success (the
- * fenced `DELETE` below, which by construction only runs after `revokeToken` has genuinely resolved)
- * or its own release-on-failure path (a genuine caught error from `stopWatch`/decrypt/`revokeToken`/
- * the batch -- see below). `disconnect_lease_expires_at` and `DISCONNECT_LEASE_DURATION_MS` still
- * exist, but now govern only DISCONNECT-vs-DISCONNECT contention (the acquisition `WHERE` clause
- * just below): if this function crashes mid-flight without ever reaching its own catch block (the
- * process dies outright, not merely a caught error), a LATER `disconnectGmailAccount` retry for the
- * SAME account may take over an expired lease and redo the whole sequence from a fresh read of the
- * row's CURRENT stored ciphertext -- safe because `stopWatch`/`revokeToken` are already documented
- * above as expected to be idempotent/no-ops when repeated, and because reconnect can never have
- * touched this row in the meantime (its own guard refuses unconditionally while any lease is
- * present). Recovering a genuinely abandoned disconnect is therefore always "retry
- * `disconnectGmailAccount` for that account," never "let `connectGmailAccount` proceed because
- * enough time passed" -- the former actually settles the external side effect; the latter only ever
- * guessed at whether it had.
+ * GPT-PM round 7 confirmed this specific fix closes the reconnect-vs-disconnect race correctly.
  *
- * **Explicit, accepted design boundary, stated rather than hidden**: if the injected
- * `GoogleOAuthClient`'s `revokeToken` never settles at all for a given attempt (neither resolves nor
- * rejects), that ONE call's own returned promise never settles either, and its lease stays held
- * until a later retry's own acquisition supersedes it (once `DISCONNECT_LEASE_DURATION_MS` has
- * passed). This is intentional: bounding how long a single disconnect REQUEST may take is the
- * calling Worker's platform-level concern (its own request timeout, plus retrying this already-safe,
- * already-idempotent primitive), not something this domain primitive should achieve by unsafely
- * giving up its exclusivity before the real operation has genuinely concluded.
+ * **The round-7 fix: the SAME reasoning now also applies to DISCONNECT-vs-DISCONNECT, and to the
+ * `catch` block's own release** (GPT-PM round-7 MAJOR, 2 findings on this checkpoint). Round 6 left
+ * two places where elapsed time (or an unverified thrown error) still stood in for actual proof of
+ * settlement -- both closed here, not patched one at a time:
+ *
+ * 1. **No automatic disconnect-vs-disconnect takeover.** Rounds 1-6 let a SECOND
+ *    `disconnectGmailAccount` call take over an "expired" lease from a first one and redo the
+ *    revoke -- GPT-PM round 7 showed this reopens the exact same race one level down: if the first
+ *    attempt (A) is still genuinely inside `revokeToken` when a second attempt (B) takes over, EITHER
+ *    B finishes first (deletes the row, opens the door to reconnect, and A's still-running revoke
+ *    can later invalidate whatever the reconnect just issued) OR A finishes late (its own DELETE,
+ *    fenced only on the ciphertext tuple, still matches and deletes the row out from under B, again
+ *    opening the door while B's revoke may still be live). No client-side elapsed-time signal can
+ *    rule either sequence out, for the identical reason rounds 4-6 already established. Fixed by
+ *    changing the acquisition guard from `(disconnect_lease_token IS NULL OR
+ *    disconnect_lease_expires_at <= ?)` to `disconnect_lease_token IS NULL` alone -- a second
+ *    disconnect attempt while ANY lease is held, however old, is refused (`DISCONNECT_IN_PROGRESS`),
+ *    exactly like `connectGmailAccount`'s own guard. `DISCONNECT_LEASE_DURATION_MS` is now purely
+ *    diagnostic (see its own doc comment) -- it authorizes nothing.
+ * 2. **The final `DELETE` is now ALSO fenced on `disconnect_lease_token = ?`** (the exact token
+ *    THIS call acquired), in addition to the round-1 ciphertext-tuple fence -- GPT-PM's explicit,
+ *    named required change. With (1) above in place this is structurally redundant (no second
+ *    disconnect can ever hold a different token on this row while the first is still live), but
+ *    costs nothing and is kept as the SAME "defense in depth even when believed unreachable"
+ *    discipline already applied to `SUPERSEDED_BY_RECONNECT` itself below.
+ * 3. **A genuinely abandoned lease (the holding process crashed outright, never reaching its own
+ *    `catch`) is now a DELIBERATE dead end for this module's own public API, not an automatic
+ *    recovery path.** GPT-PM round 7, verbatim: *"Without that guarantee \[of a real external-
+ *    operation cancellation/settlement contract\], fail closed into a durable recovery/uncertain
+ *    state rather than automatically superseding an old disconnect."* Recovering such an account
+ *    needs an explicit, out-of-scope reconciliation step (an operator/admin action that
+ *    independently confirms the token's true state with Google) -- this checkpoint does not build
+ *    that tool, the same way it does not build the real `fetch`-backed `GoogleOAuthClient` or
+ *    key-ring resolution. `DISCONNECT_LEASE_DURATION_MS`'s stored value exists so a future ops/
+ *    observability tool can find and flag these accounts, nothing more.
+ *
+ * **The `catch` block's release is now conditioned on WHERE the failure occurred, not just THAT one
+ * occurred** (GPT-PM round-7 MAJOR #2 -- round 6's own doc comment had already flagged this
+ * ambiguity as an open, undecided residual; GPT-PM confirmed it needs an actual fix). A
+ * `revokePhase` marker tracks whether `googleClient.revokeToken` has been called yet:
+ * - **`'not-started'`** (a `stopWatch` or `decryptRefreshToken` failure, strictly BEFORE
+ *   `revokeToken` is ever invoked): genuinely nothing was sent to Google's revoke endpoint in this
+ *   attempt. Safe to release the lease immediately, as before.
+ * - **`'ambiguous'`** (set immediately before calling `revokeToken`; a rejection from THAT call):
+ *   the request may have reached Google before failing locally (e.g. a reset mid-response), so
+ *   whether the project-wide revocation actually happened is UNKNOWN. The lease is deliberately
+ *   **NOT released** -- the function throws `DisconnectAmbiguousRevokeError` instead, and per (3)
+ *   above, no automatic recovery exists; this is an explicit fail-closed, not a retryable failure.
+ * - **`'settled'`** (set immediately after `revokeToken` resolves; a LATER failure, only the local
+ *   `db.batch()`): Google's side is CONFIRMED done at this point -- the revoke already succeeded.
+ *   Safe to release the lease immediately; a follow-up `connectGmailAccount` would issue a brand
+ *   new, untouched credential, and the already-dead old token poses no risk.
  *
  * **CAS-fenced local finalization** (GPT-PM round-1 MAJOR #1 on this checkpoint) -- kept as an
- * extra layer of defense in depth, though the round-6 fix above means the race this originally
- * guarded against (a live reconnect landing between this function's lease acquisition and its own
- * `DELETE`) should now be structurally unreachable through this module's own guarded API: the final
- * `DELETE` is fenced on the EXACT `(encrypted_refresh_token, refresh_token_iv, kek_version)` tuple
- * read when the lease was acquired, the same "compare against the value actually observed, not just
- * the key" discipline `transitions.ts`'s own fenced UPDATEs use -- zero rows changed reports
- * `SUPERSEDED_BY_RECONNECT` rather than a false `DISCONNECTED`, kept as a safety net in case a
- * future change to this module reopens a path this analysis has not foreseen.
+ * extra layer of defense in depth, though the round-6/7 fixes above mean the race this originally
+ * guarded against (a live reconnect or a competing disconnect landing between this function's lease
+ * acquisition and its own `DELETE`) should now be structurally unreachable through this module's own
+ * guarded API: the final `DELETE` is fenced on the EXACT `(encrypted_refresh_token, refresh_token_iv,
+ * kek_version)` tuple read when the lease was acquired, PLUS `disconnect_lease_token` (round 7) --
+ * the same "compare against the value actually observed, not just the key" discipline
+ * `transitions.ts`'s own fenced UPDATEs use -- zero rows changed reports `SUPERSEDED_BY_RECONNECT`
+ * rather than a false `DISCONNECTED`, kept as a safety net in case a future change to this module
+ * reopens a path this analysis has not foreseen.
  *
  * **Atomic local cleanup** (GPT-PM round-1 MAJOR #2): the fenced connection delete and the
  * `oauth_flows` clear run in one `db.batch()` (the same atomic-multi-statement pattern
@@ -333,18 +390,6 @@ const DISCONNECT_LEASE_DURATION_MS = 60_000;
  * independent statements -- a failure of the second statement no longer leaves the connection row
  * already gone (which would make a retry return `NOT_CONNECTED` and never reach `oauth_flows`
  * cleanup again) while stale OAuth flow state survives until its own TTL.
- *
- * **Residual, narrower ambiguity, noted honestly rather than silently left implicit**: the
- * `catch` block below releases the lease (sets it back to `NULL`) on ANY thrown error from
- * `stopWatch`/decrypt/`revokeToken`/the batch, including a network-level error where the outbound
- * request to Google might have been received and processed before the connection failed locally
- * (e.g. a reset mid-response) -- in that narrow case, releasing immediately carries the same class
- * of ambiguity rounds 4-6 closed for the SLOW-BUT-ALIVE case, just for a THROWN-BUT-AMBIGUOUS one
- * instead. Not fixed here: GPT-PM has not flagged this specific case across six review rounds, and
- * closing it fully would require classifying which thrown errors are provably pre-Google (safe to
- * release immediately, e.g. a local `decryptRefreshToken` failure) versus ambiguously mid-flight
- * (unsafe to release immediately) -- a real distinction this module's current `GoogleOAuthClient`
- * interface has no way to express. Flagged for a future round rather than left invisible.
  *
  * `oauth_flows` has no account-scoping column (its PK is `state` alone) -- this project's MVP1
  * scope is single-operator/single-account, so "cancels any in-flight `oauth_flows` row for that
@@ -355,8 +400,9 @@ export interface DisconnectGmailAccountOptions {
   sourceAccountId: string;
   now: string;
   /** Overrides `DISCONNECT_LEASE_DURATION_MS` -- test-only escape hatch; production callers should
-   *  omit this. Governs only disconnect-vs-disconnect contention (see the doc comment above); it no
-   *  longer has any bearing on when `connectGmailAccount` may proceed. */
+   *  omit this. **Diagnostic only, as of GPT-PM round-7 MAJOR** -- does not gate anything on either
+   *  `connectGmailAccount` or `disconnectGmailAccount`'s own acquisition guards (both check only
+   *  `disconnect_lease_token IS NULL`); see `DISCONNECT_LEASE_DURATION_MS`'s own doc comment. */
   leaseDurationMs?: number;
 }
 
@@ -375,16 +421,17 @@ export async function disconnectGmailAccount(
       `UPDATE gmail_connections
        SET disconnect_lease_token = ?, disconnect_lease_expires_at = ?
        WHERE source_account_id = ?
-         AND (disconnect_lease_token IS NULL OR disconnect_lease_expires_at <= ?)
+         AND disconnect_lease_token IS NULL
        RETURNING encrypted_refresh_token, refresh_token_iv, kek_version`,
     )
-    .bind(leaseToken, leaseExpiresAt, opts.sourceAccountId, opts.now)
+    .bind(leaseToken, leaseExpiresAt, opts.sourceAccountId)
     .first<{ encrypted_refresh_token: string; refresh_token_iv: string; kek_version: string }>();
 
   if (row === null) {
-    // Either no connection exists at all, or another disconnect already holds an unexpired lease
-    // on it -- distinguish the two purely for the caller's reporting, since neither case may
-    // proceed regardless of which it is.
+    // Either no connection exists at all, or another disconnect already holds a lease on it --
+    // expired or not, per the round-7 fix (no automatic takeover; see the doc comment above).
+    // Distinguish the two purely for the caller's reporting, since neither case may proceed
+    // regardless of which it is.
     const existing = await db
       .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
       .bind(opts.sourceAccountId)
@@ -392,6 +439,7 @@ export async function disconnectGmailAccount(
     return existing === null ? { outcome: 'NOT_CONNECTED' } : { outcome: 'DISCONNECT_IN_PROGRESS' };
   }
 
+  let revokePhase: 'not-started' | 'ambiguous' | 'settled' = 'not-started';
   try {
     await googleClient.stopWatch(opts.sourceAccountId);
 
@@ -404,36 +452,46 @@ export async function disconnectGmailAccount(
       { ciphertext: row.encrypted_refresh_token, iv: row.refresh_token_iv },
       aad,
     );
+    revokePhase = 'ambiguous';
     await googleClient.revokeToken(refreshToken);
+    revokePhase = 'settled';
 
     const results = await db.batch([
       db
         .prepare(
           `DELETE FROM gmail_connections
-           WHERE source_account_id = ? AND encrypted_refresh_token = ? AND refresh_token_iv = ? AND kek_version = ?`,
+           WHERE source_account_id = ? AND encrypted_refresh_token = ? AND refresh_token_iv = ?
+             AND kek_version = ? AND disconnect_lease_token = ?`,
         )
         .bind(
           opts.sourceAccountId,
           row.encrypted_refresh_token,
           row.refresh_token_iv,
           row.kek_version,
+          leaseToken,
         ),
       db.prepare('DELETE FROM oauth_flows'),
     ]);
     const deleteResult = results[0];
     if (deleteResult === undefined || deleteResult.meta.changes === 0) {
-      // Structurally unreachable via this module's own guarded API as of round 6 (see the doc
+      // Structurally unreachable via this module's own guarded API as of round 7 (see the doc
       // comment above) -- kept as a safety net rather than asserted unreachable.
       return { outcome: 'SUPERSEDED_BY_RECONNECT' };
     }
 
     return { outcome: 'DISCONNECTED' };
   } catch (error) {
-    // Release the lease on a genuine, settled failure (stopWatch/decrypt/revoke/batch actually
-    // threw) so a retry is not blocked until DISCONNECT_LEASE_DURATION_MS elapses. Fenced on the
-    // exact lease token this call acquired, so a retry that already re-acquired a NEW lease (after
-    // this lease's own natural expiry) can never be clobbered by this cleanup running late. See the
-    // doc comment above for the narrower, honestly-tracked residual ambiguity this still carries.
+    if (revokePhase === 'ambiguous') {
+      // `revokeToken` itself rejected -- whether Google actually processed the revocation before
+      // failing locally is UNKNOWN, so the lease is deliberately left in place (NOT released) and
+      // no automatic recovery is offered. See `DisconnectAmbiguousRevokeError`'s own doc comment.
+      throw new DisconnectAmbiguousRevokeError(error);
+    }
+
+    // revokePhase is 'not-started' (stopWatch/decrypt threw, revokeToken was never called) or
+    // 'settled' (revokeToken already resolved; only the local batch threw) -- both are genuinely
+    // safe to release immediately. Fenced on the exact lease token this call acquired, so a retry
+    // that already re-acquired a NEW lease can never be clobbered by this cleanup running late.
     await db
       .prepare(
         `UPDATE gmail_connections

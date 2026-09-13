@@ -3,6 +3,67 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 4: comprehensive round-7 remediation, both MAJORs fixed in ONE batch
+(operator instruction against the one-finding-per-round pattern); sent for round 8 full-sweep review
+
+**Operator instruction, verbatim (translated): "GO, continue, but 7 rounds is excessive, why
+can't GPT-PM check all the places at once, what nonsense?? Clarify to GPT that it needs to search
+everywhere and always, from its side."** Direct, pointed correction of the round-by-round
+single-finding review pattern that produced 7 rounds on one invariant (see the round-7 entry
+below). Response: (1) both round-7 MAJORs fixed together in one remediation batch, not staged
+across further rounds; (2) round 8's review request will explicitly instruct GPT-PM to do a full
+adversarial sweep of the entire lease/exclusivity mechanism, not just re-verify the two fixed
+findings; (3) this instruction is now saved as standing operating behavior for every project going
+forward (`~/.claude` memory `feedback-always-instruct-gptpm-full-sweep-scope`, and the `pm-bridge`
+skill's escalation-ladder section), not just applied once here.
+
+**The fix, in `packages/domain/src/gmail/oauth.ts`:**
+
+1. **No automatic disconnect-vs-disconnect takeover.** `disconnectGmailAccount`'s own acquisition
+   guard changed from `(disconnect_lease_token IS NULL OR disconnect_lease_expires_at <= ?)` to
+   `disconnect_lease_token IS NULL` alone -- identical to round 6's fix for reconnect eligibility,
+   applied to the one place round 6 left it out. `DISCONNECT_LEASE_DURATION_MS` (and
+   `DisconnectGmailAccountOptions.leaseDurationMs`) are now diagnostic-only, authorize nothing.
+2. **The final `DELETE` is additionally fenced on `disconnect_lease_token = ?`** (the exact token
+   the call acquired), on top of the existing round-1 ciphertext-tuple fence -- GPT-PM's explicit
+   named requirement. Mutation-tested: removing this fence alone does NOT fail any current test
+   (fix #1 above makes the race it guards against structurally unreachable through this module's
+   own guarded API) -- kept as defense-in-depth, same treatment already given to
+   `SUPERSEDED_BY_RECONNECT`'s own fence, not asserted to be provably unreachable.
+3. **A new `revokePhase: 'not-started' | 'ambiguous' | 'settled'` marker gates the `catch` block's
+   lease release.** Set to `'ambiguous'` immediately before calling `googleClient.revokeToken`, to
+   `'settled'` immediately after it resolves. On failure: `'not-started'` (stopWatch/decrypt threw,
+   revokeToken never called) or `'settled'` (only the local `db.batch()` threw, after revoke
+   already succeeded) release the lease exactly as before; `'ambiguous'` (revokeToken itself
+   rejected) throws the new exported `DisconnectAmbiguousRevokeError` (wrapping the original error
+   via `cause`) WITHOUT releasing the lease -- no automatic recovery path exists for this state;
+   it requires future out-of-scope operator/admin reconciliation with Google's real token state.
+
+**A genuinely abandoned lease (the holding process crashed outright, never reaching its own catch)
+is now a deliberate, permanent dead end for this module's own public API** -- neither reconnect nor
+a fresh disconnect attempt may take it over, matching GPT-PM's own framing: *"fail closed into a
+durable recovery/uncertain state rather than automatically superseding an old disconnect."*
+Recovering such an account is explicitly out of this checkpoint's scope, the same deferral already
+applied to the real `fetch`-backed `GoogleOAuthClient` and key-ring resolution (§2.1).
+
+**Verification:** all 23 `oauth.test.ts` tests pass (147/147 across `packages/domain`), `tsc
+--noEmit` clean, `eslint .` clean. Three tests rewritten for the new semantics (the abandoned-lease
+"recovery via retry" test now expects `DISCONNECT_IN_PROGRESS`, not automatic takeover; the
+revokeToken-throws test now expects `DisconnectAmbiguousRevokeError` with the lease held rather
+than the raw error with the lease released), one new test added (stopWatch-throws-before-revoke
+still releases the lease), and the batch-failure test gained an assertion that the lease IS
+released when revoke had already settled. Mutation-tested by temporarily weakening each of the
+three guards above and confirming the relevant test(s) fail (and, for #2, confirming honestly that
+no test fails -- the fence is genuinely structural defense-in-depth, not something a test proves),
+then reverting.
+
+**Not yet closed**: this fixes the two round-7 MAJORs as GPT-PM named them; it does not build the
+durable "revocation outcome unknown" recovery state GPT-PM's round-7 language ultimately points
+toward (an admin/ops tool that independently reconciles an ambiguous account with Google's real
+token state) -- that remains explicitly out of scope, named in the new `DisconnectAmbiguousRevoke
+Error` doc comment. Round 8's review is scoped to a full adversarial sweep of the whole mechanism,
+not just these two fixes, per the operator's instruction above.
+
 ## 2026-09-13 — G3 checkpoint 4 round 7: two further MAJORs on the SAME invariant; operator
 instructed to stop iterating (**"заканчивай с этим"**) -- checkpoint 4 PAUSED OPEN, not closed
 

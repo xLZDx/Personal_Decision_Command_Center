@@ -93,6 +93,7 @@ export {
   consumeOAuthFlow,
   connectGmailAccount,
   disconnectGmailAccount,
+  DisconnectAmbiguousRevokeError,
 } from './gmail/oauth.js';
 export type {
   CreateOAuthFlowOptions,
