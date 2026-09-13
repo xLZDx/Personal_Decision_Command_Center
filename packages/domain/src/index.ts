@@ -116,3 +116,23 @@ export type {
   ReconcileWedgedGmailDisconnectLockOptions,
   ReconcileWedgedGmailDisconnectLockResult,
 } from './gmail/oauth.js';
+
+export {
+  syncGmailAccountHistory,
+  GmailHistoryCursorInvalidError,
+  GmailHistoryCursorMissingBootstrapError,
+} from './gmail/history-sync.js';
+export type {
+  GmailMessageRef,
+  GmailHistoryRecord,
+  GmailHistoryPage,
+  GmailMessageMetadata,
+  GmailListMessagesInWindowResult,
+  GmailHistoryClient,
+  GmailEventSubmitResult,
+  GmailEventSubmitter,
+  GmailCursorValue,
+  GmailHistorySyncCounts,
+  SyncGmailAccountHistoryResult,
+  SyncGmailAccountHistoryOptions,
+} from './gmail/history-sync.js';

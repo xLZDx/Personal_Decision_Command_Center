@@ -3,6 +3,105 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 5 (cursor/history-list sync + normalization, proposal §2.2/§2.3):
+implementation + internal review complete (BLOCKER + 5 MAJOR + 6 MINOR found and remediated in one
+batch), 22 tests, 8 mutation-tested guards, ready for GPT-PM round 1 under the new 3-round hard cap
+
+**Operator instruction this segment, verbatim: "Не больше 3 раундов на ревью запомни. И скажи гпт
+что у него 3 попытки все найти."** No more than 3 GPT-PM review rounds per gate, GPT-PM told this
+explicitly up front. This tightens CLAUDE.md §17's existing "one sweep, one remediation, one
+verification" budget into an explicit hard number rather than something re-derived each gate --
+recorded in memory (`feedback-review-round-hard-cap-3.md`), superseding the earlier
+"uncapped, fact-grounded consensus" memory from 2026-08-22.
+
+**New module**: `packages/domain/src/gmail/history-sync.ts` + tests at
+`packages/domain/tests/gmail/history-sync.test.ts`. Implements the crash-safe accept-then-advance
+cursor protocol against `source_cursors` (§2.2) and the Gmail-history-signal -> `NormalizedEvent`
+mapping (§2.3), mirroring `oauth.ts`'s `GoogleOAuthClient` dependency-injection pattern for the not-
+yet-built `services/gmail-connector` Worker's real Gmail API client and ingest-submission calls.
+
+**Design decisions made where the proposal's own §2.2/§2.3 text is silent** (documented in the
+module's own header comment, not invented silently):
+1. `occurred_at` for `MESSAGE_CREATED` = `messages.get`'s `internalDate` (the proposal's own §2.9
+   quota budget -- "`messages.get` (20 units) per new message" -- confirms this call is already
+   accounted for). `occurred_at` for `MESSAGE_DELETED`/`MESSAGE_UPDATED` = the sync's own processing
+   time, since Gmail exposes no per-signal timestamp for either and the budget model does not
+   account for an extra `messages.get` on those paths.
+2. `direction` for `MESSAGE_CREATED` derives from the same `messages.get` call (`labelIds.includes
+   ('SENT')`); `MESSAGE_DELETED`/`MESSAGE_UPDATED` default to `INBOUND` (not part of
+   `idempotencyKey()`, so this cannot cause a duplicate/dropped event, only a wrong UI hint).
+3. `content_locator.ref = message.id` -- NOT a gap; proposal §2.8 states this explicitly.
+4. Per-event permanent-failure handling and per-invocation work bounding are explicitly NOT built
+   this checkpoint (see MAJOR findings 2/3 below) -- accepted, narrow, documented limitations.
+
+**Internal specialist review (architect, database-reviewer, functional-test-reviewer, run BEFORE
+any GPT-PM round per CLAUDE.md §17) found, verified, and closed in one remediation batch:**
+
+- **BLOCKER (database-reviewer, confirmed FACT via direct repo grep)**: `gmail_connections.
+  watch_history_id` is never written anywhere in the codebase (not by `connectGmailAccount`, which
+  omits the column from its INSERT entirely, nor by anything else -- `startWatch` doesn't even exist
+  yet as a `GoogleOAuthClient` method). The bootstrap branch's hard dependency on that column being
+  non-null meant EVERY real account's first sync would throw `GmailHistoryCursorMissingBootstrapError`
+  permanently, in both POLL (the default) and PUSH mode. **Fix**: bootstrap falls back to
+  `historyClient.getCurrentHistoryId()` (`users.getProfile().historyId`, already used for 404
+  recovery) whenever `watch_history_id` is null but a `gmail_connections` row exists;
+  `GmailHistoryCursorMissingBootstrapError` is now reserved for the genuine case -- no
+  `gmail_connections` row at all (the account was never actually connected).
+- **MAJOR (architect)**: the invalid-cursor recovery window's upper bound (`beforeIso: opts.now`)
+  was captured BEFORE `getCurrentHistoryId()`'s own later call, leaving a real window where an
+  arriving message would be excluded from the `messages.list` enumeration AND already "in the past"
+  relative to the recovered cursor -- silent, permanent event loss on the exact path meant to
+  prevent it. **Fix**: `listMessagesInWindow` dropped `beforeIso` entirely (unbounded upper end --
+  over-inclusion is always safe via `idempotencyKey()`, under-inclusion is lossy).
+- **MAJOR (architect)**: no per-event permanent-failure handling -- a reproducibly-failing event
+  (schema-invalid construction, or a real ingest rejection once the real submitter exists) wedges
+  the account's sync indefinitely, since nothing is durable until the whole traversal succeeds.
+  **Accepted as an explicit limitation, not solved**: `GmailEventSubmitResult` has no `REJECTED`
+  variant today (proposal §2.1's ingress contract doesn't define one) and a real quarantine
+  mechanism needs new durable state this checkpoint's schema doesn't have.
+- **MAJOR (architect, HYPOTHESIS -- no Workers subrequest ceiling is recorded anywhere in this
+  repo)**: per-invocation work is unbounded (no page/record cap, no deadline), so a large enough
+  backlog could in principle exceed a real invocation's ceiling before ever reaching a page with no
+  `nextPageToken`, recording zero progress. **Accepted as an explicit limitation**: the real ceiling
+  is unmeasured; revisit once it is.
+- **MAJOR (functional-test-reviewer, confirmed via a traced mental mutation)**: the `labelsAdded`+
+  `labelsRemoved`-same-record test never asserted `event_type` for either event -- a mutation
+  misclassifying `LABEL_REMOVED`'s `event_type` while leaving `source_version` untouched passed every
+  existing test (confirmed by tracing `NormalizedEventSchema`'s own `superRefine`, which only
+  forbids the REVERSE case). **Fixed**: `event_type` now asserted for both.
+- **MAJOR (functional-test-reviewer)**: the proposal's own literally-named regression test --
+  2 pages, crash strictly BETWEEN page 1 completing and page 2 ever being fetched -- did not exist
+  (only a 2-page-no-crash test and a 1-page-with-crash test existed, neither combining both
+  conditions). **Added.**
+- **MINOR x6 (architect x4, functional-test-reviewer x2)**: unvalidated cursor JSON now routes into
+  the same bounded-recovery path as an explicit 404 instead of throwing uncaught (`isValidCursorValue`
+  / `tryParseCursor`); counts accumulated before an invalid-cursor transition are now passed through
+  to recovery instead of discarded; `PendingChange` is now a discriminated union so
+  `historyRecordId` cannot exist on a variant that never reads it; gap-recovery multi-page/cross-page
+  dedup is now tested; `messagesAdded`+`messagesDeleted` same-message-same-record is now tested;
+  the DECISION_LOG claim in the header comment is now true (this entry).
+- **Escalated, not resolved in this file (architect MINOR, INFERENCE)**: `packages/domain`'s single
+  barrel (`index.ts`) exports both `ingestEvent` and `syncGmailAccountHistory` with no subpath split,
+  which makes proposal §3's stated test obligation ("`services/gmail-connector` has no import of
+  `ingestEvent`") structurally unmeetable once that Worker is actually built. Not this checkpoint's
+  fix (the Worker doesn't exist yet) -- flagged for whichever checkpoint builds it.
+- **Accepted risk, not required to fix (database-reviewer MINOR)**: the bootstrap read of
+  `gmail_connections.watch_history_id` is a plain, unlocked SELECT that can race a concurrent
+  `disconnectGmailAccount` -- consistent with `disconnectGmailAccount` already never touching
+  `source_cursors` and tolerating stale cursors post-disconnect (oauth.ts's own documented design).
+
+**Verification**: 22 tests in `history-sync.test.ts` (453 total across the repo), all passing.
+8 new/changed guards from this remediation mutation-tested individually (backup / mutate / confirm
+the exact expected test fails / restore), on top of 4 mutation-tested in the original implementation
+pass: the CAS `WHERE` clause, the bootstrap null-check, within-record label dedup, the invalid-
+cursor catch branch, the bootstrap `??` fallback, both cursor-validation branches (malformed JSON
+and valid-JSON-wrong-shape), and the counts-passthrough-to-recovery fix. tsc/eslint/prettier clean.
+
+**Next**: send GPT-PM round 1 with an explicit scope note stating the 3-round hard cap up front (per
+this segment's operator instruction) and asking for a full sweep of the whole gate/mechanism/
+integrations (per the standing `feedback-always-instruct-gptpm-full-sweep-scope` memory) within that
+cap -- not one finding per round.
+
 ## 2026-09-13 — G3 CHECKPOINT 4 GATE CLOSED: round 13 (bounded verification, per the round-12 hard
 
 stop) returned `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR -- 13 total review rounds across

@@ -187,3 +187,56 @@ export async function seedSigningKey(db: D1Database, opts: SeedSigningKeyOptions
 /** A fixed test-only secret, standing in for a Cloudflare Worker Secret binding value -- never
  *  written to D1 (ingest_signing_keys is metadata-only by design). */
 export const TEST_HMAC_SECRET = 'test-only-hmac-secret-do-not-use-in-production';
+
+export interface SeedGmailConnectionOptions {
+  sourceAccountId: string;
+  watchHistoryId?: string | null;
+  connectedAt?: string;
+  collectionMode?: 'PUSH' | 'POLL';
+}
+
+/** A minimal `gmail_connections` row -- token/KEK fields are inert placeholders, never real
+ *  ciphertext; tests exercising `oauth.ts`'s crypto path seed those fields directly instead. */
+export async function seedGmailConnection(
+  db: D1Database,
+  opts: SeedGmailConnectionOptions,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO gmail_connections
+        (source_account_id, source, gmail_email, encrypted_refresh_token, refresh_token_iv,
+         kek_version, collection_mode, watch_history_id, watch_expiration, connected_at, updated_at)
+       VALUES (?, 'gmail', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      opts.sourceAccountId,
+      `${opts.sourceAccountId}@example.com`,
+      'encrypted-refresh-token-placeholder',
+      'iv-placeholder',
+      'v1',
+      opts.collectionMode ?? 'POLL',
+      opts.watchHistoryId ?? null,
+      null,
+      opts.connectedAt ?? FIXTURE_NOW,
+      FIXTURE_NOW,
+    )
+    .run();
+}
+
+export interface SeedSourceCursorOptions {
+  sourceAccountId: string;
+  /** The opaque cursor JSON string, or `null` for "row exists but no cursor set yet". */
+  cursorValue?: string | null;
+}
+
+export async function seedSourceCursor(
+  db: D1Database,
+  opts: SeedSourceCursorOptions,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO source_cursors (source_account_id, cursor_value, updated_at) VALUES (?, ?, ?)`,
+    )
+    .bind(opts.sourceAccountId, opts.cursorValue ?? null, FIXTURE_NOW)
+    .run();
+}

@@ -6,7 +6,15 @@ export {
   seedEvent,
   seedOutbox,
   seedSigningKey,
+  seedGmailConnection,
+  seedSourceCursor,
   testBudgetCap,
   TEST_HMAC_SECRET,
 } from './fixtures.js';
-export type { SeedAccountsResult, SeedEventOptions, SeedSigningKeyOptions } from './fixtures.js';
+export type {
+  SeedAccountsResult,
+  SeedEventOptions,
+  SeedSigningKeyOptions,
+  SeedGmailConnectionOptions,
+  SeedSourceCursorOptions,
+} from './fixtures.js';
