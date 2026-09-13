@@ -47,16 +47,16 @@ primary sources, then GPT-PM decides") and per `~/.claude/CLAUDE.md` §17's one-
 
 ## 1. Cross-reference: every BLOCKER/MAJOR from Round 1, and how this revision resolves it
 
-| # | Severity | GPT-PM's Round-1 finding | Resolved by | Where in this document |
-|---|---|---|---|---|
-| B1 | BLOCKER | Reconciler query cannot be both index-covered and authoritative against `ingest_events.state` — must stay joined, proven via `EXPLAIN QUERY PLAN` | `architect` | §3.1-§3.3 (design), §2.2 (executable proof) |
-| B2 | BLOCKER | DLQ transition at attempt cap must be atomic with the failing processing transaction, not a separate reconciler claim | `architect` | §3.5 |
-| B3 | BLOCKER | Stale-`PROCESSING` recovery is unspecified — no processing lease/claim-expiry protocol exists anywhere in the repo | `architect` | §3.4, §3.6 |
-| M1 | MAJOR | `devices` table breaks the migration's own stated scope-boundary rule | `database-reviewer` | §4.1 |
-| M2 | MAJOR | Provenance fail-open — `isAiSafe` needs discriminated node schemas, not just a `!== 'ALLOW'` flip | `type-design-analyzer` | §5 |
-| M3 | MAJOR | telegram+ALLOW needs structural composite-FK enforcement, not independent CHECKs | `database-reviewer` | §4.2 |
-| M4 | MAJOR | Idempotency fix needs a contract/migration change (`source_version`) | `database-reviewer` | §4.3 |
-| M5 | MAJOR (new, found mid-ruling) | `ProvenanceValueSchema` doesn't match the frozen TDD's generic `ProvenanceValue<T>` shape | `type-design-analyzer` | §5.3 |
+| #   | Severity                      | GPT-PM's Round-1 finding                                                                                                                          | Resolved by            | Where in this document                      |
+| --- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------- |
+| B1  | BLOCKER                       | Reconciler query cannot be both index-covered and authoritative against `ingest_events.state` — must stay joined, proven via `EXPLAIN QUERY PLAN` | `architect`            | §3.1-§3.3 (design), §2.2 (executable proof) |
+| B2  | BLOCKER                       | DLQ transition at attempt cap must be atomic with the failing processing transaction, not a separate reconciler claim                             | `architect`            | §3.5                                        |
+| B3  | BLOCKER                       | Stale-`PROCESSING` recovery is unspecified — no processing lease/claim-expiry protocol exists anywhere in the repo                                | `architect`            | §3.4, §3.6                                  |
+| M1  | MAJOR                         | `devices` table breaks the migration's own stated scope-boundary rule                                                                             | `database-reviewer`    | §4.1                                        |
+| M2  | MAJOR                         | Provenance fail-open — `isAiSafe` needs discriminated node schemas, not just a `!== 'ALLOW'` flip                                                 | `type-design-analyzer` | §5                                          |
+| M3  | MAJOR                         | telegram+ALLOW needs structural composite-FK enforcement, not independent CHECKs                                                                  | `database-reviewer`    | §4.2                                        |
+| M4  | MAJOR                         | Idempotency fix needs a contract/migration change (`source_version`)                                                                              | `database-reviewer`    | §4.3                                        |
+| M5  | MAJOR (new, found mid-ruling) | `ProvenanceValueSchema` doesn't match the frozen TDD's generic `ProvenanceValue<T>` shape                                                         | `type-design-analyzer` | §5.3                                        |
 
 ## 2. Executable validation (the evidence GPT-PM's plan-level BLOCKER required)
 
@@ -249,7 +249,7 @@ LIMIT :batch;
 BLOCKER B1's requirement that the query "stay joined against `ingest_events.state`."
 `'DISPATCHED'` is not excluded from `o.state`: a `DISPATCHED` row whose message evaporated (>24h
 queue outage) is still due and its event is still `ACCEPTED`, so it re-enters this query on its own
-— `docs/architecture/TDD.md:874-878`'s named resilience case, satisfied by the *event* state, not a
+— `docs/architecture/TDD.md:874-878`'s named resilience case, satisfied by the _event_ state, not a
 transport convention.
 
 ### 3.4 The processing lease (BLOCKER B3 — previously entirely unspecified)
@@ -352,15 +352,15 @@ NC6), so excluding `processing_attempt_count >= MAX` from the hot query hides no
 
 ### 3.6 Verification matrix, condensed (full scenario table in the agent's own output)
 
-| Outbox row | Event row | Query outcome | Invariant preserved |
-|---|---|---|---|
-| `DISPATCHED`, due | `ACCEPTED` | selected, re-dispatched | `TDD.md:874-878` queue-expiry recovery |
-| `DISPATCHED`, due (stale `CLOSED` write lost) | `PROCESSED`/`DLQ` | rejected by `e.state` filter | `INV-08`/`INV-29`, no duplicate |
-| any, due | `PROCESSING`, live lease | rejected | no double-dispatch mid-attempt |
-| any, due | `PROCESSING`, expired lease | reclaimed by Phase 1 first | B3 |
-| replayed queue message, live lease | — | claim CAS matches 0 rows, ACK | idempotent redelivery |
-| consumer crash mid-attempt | — | lease expires, Phase 1 reclaims or DLQs | crash safety |
-| queue message expires (>24h outage), never claimed | — | `dispatch_count` only, `processing_attempt_count` untouched | B2's budget-separation requirement |
+| Outbox row                                         | Event row                   | Query outcome                                               | Invariant preserved                    |
+| -------------------------------------------------- | --------------------------- | ----------------------------------------------------------- | -------------------------------------- |
+| `DISPATCHED`, due                                  | `ACCEPTED`                  | selected, re-dispatched                                     | `TDD.md:874-878` queue-expiry recovery |
+| `DISPATCHED`, due (stale `CLOSED` write lost)      | `PROCESSED`/`DLQ`           | rejected by `e.state` filter                                | `INV-08`/`INV-29`, no duplicate        |
+| any, due                                           | `PROCESSING`, live lease    | rejected                                                    | no double-dispatch mid-attempt         |
+| any, due                                           | `PROCESSING`, expired lease | reclaimed by Phase 1 first                                  | B3                                     |
+| replayed queue message, live lease                 | —                           | claim CAS matches 0 rows, ACK                               | idempotent redelivery                  |
+| consumer crash mid-attempt                         | —                           | lease expires, Phase 1 reclaims or DLQs                     | crash safety                           |
+| queue message expires (>24h outage), never claimed | —                           | `dispatch_count` only, `processing_attempt_count` untouched | B2's budget-separation requirement     |
 
 ## 4. Schema fixes (`database-reviewer`)
 
@@ -445,7 +445,7 @@ silently adopting it.
 ### 5.1 Discriminated node schemas replace the loose `ProvenanceNode` interface (MAJOR M2)
 
 Three node kinds — `SOURCE_EVENT`, `STATIC_CONFIG` (both `provenance: []`, exactly zero ancestors —
-a genuine root is now a *type*, not a doc-comment convention any empty array happens to satisfy),
+a genuine root is now a _type_, not a doc-comment convention any empty array happens to satisfy),
 and `DERIVED` (`provenance` non-empty) — combined via
 `z.discriminatedUnion('kind', [SourceEventNodeSchema, StaticConfigNodeSchema, DerivedNodeSchema])`.
 Full source: §2.3's `ts/nodes.ts`, typechecked clean.
@@ -457,8 +457,8 @@ export function isAiSafe(candidate: unknown, lookup: ProvenanceLookup, seen = ne
   const parsed = ProvenanceNodeSchema.safeParse(candidate);
   if (!parsed.success) return false;
   const node = parsed.data;
-  if (node.ai_policy !== 'ALLOW') return false;   // explicit allow, not `!== 'DENY'`
-  if (seen.has(node.id)) return false;             // cycle guard
+  if (node.ai_policy !== 'ALLOW') return false; // explicit allow, not `!== 'DENY'`
+  if (seen.has(node.id)) return false; // cycle guard
   // ... recurse into node.provenance, unresolved ancestor -> false
 }
 ```
@@ -503,11 +503,11 @@ a GPT-PM ruling or an erratum to the TDD before it is treated as normative.
 
 ## 6. Invariant-preservation check (required by GPT-PM's plan-level GO)
 
-| Invariant (from GPT-PM's Round-1 ruling) | Preserved? | Evidence |
-|---|---|---|
-| `ingest_events.state` remains sole processing authority; outbox `CLOSED` is optimization-only | Yes | §3.3's query reads `e.state`, never `o.state`, for eligibility; §2.2 negative control shows the plan changes but the *result set* does not depend on `CLOSED` for correctness, only for scan cost |
-| Queue dispatch/re-dispatch never consumes the processing-attempt budget | Yes | `dispatch_count` (outbox) and `processing_attempt_count` (events) are separate columns incremented by separate code paths (§3.0); §2.1's schema enforces this structurally, not by convention |
-| Atomic processor-side DLQ at cap coexists with a reclaimable expired lease | Yes | §3.5 (processor-side, transactional) and §3.4/Phase-1 (reconciler-side, lease-driven) both terminate into the same idempotent DLQ batch; verified schema-level in §2.1 (NC4/NC5/NC6 make the illegal intermediate states unrepresentable) |
+| Invariant (from GPT-PM's Round-1 ruling)                                                      | Preserved? | Evidence                                                                                                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ingest_events.state` remains sole processing authority; outbox `CLOSED` is optimization-only | Yes        | §3.3's query reads `e.state`, never `o.state`, for eligibility; §2.2 negative control shows the plan changes but the _result set_ does not depend on `CLOSED` for correctness, only for scan cost                                         |
+| Queue dispatch/re-dispatch never consumes the processing-attempt budget                       | Yes        | `dispatch_count` (outbox) and `processing_attempt_count` (events) are separate columns incremented by separate code paths (§3.0); §2.1's schema enforces this structurally, not by convention                                             |
+| Atomic processor-side DLQ at cap coexists with a reclaimable expired lease                    | Yes        | §3.5 (processor-side, transactional) and §3.4/Phase-1 (reconciler-side, lease-driven) both terminate into the same idempotent DLQ batch; verified schema-level in §2.1 (NC4/NC5/NC6 make the illegal intermediate states unrepresentable) |
 
 ## 7. Explicitly flagged, not decided here
 

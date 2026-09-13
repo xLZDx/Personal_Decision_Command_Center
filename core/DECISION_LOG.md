@@ -3,7 +3,94 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — PR #23's `verify` CI check failed on real pre-existing formatting debt; fixed
+
+**Decision.** Opening PR #23 triggered this branch's very first real CI run (`gate/g2-implementation`
+had been pushed several times across checkpoints 3-6 with no PR open, so `pull_request`-triggered
+CI never actually ran against it before now). The `verify` job's `npm run format`
+(`prettier --check .`) failed on 4 files: `core/DECISION_LOG.md` and the three
+`governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL*.md` documents — genuinely non-conforming
+content (markdown table separator rows not column-padded, `*emphasis*` not normalized to
+`_emphasis_`), not a CRLF artifact.
+
+**Why this wasn't caught by any local `prettier --check .` run across checkpoints 4-6**, each of
+which reported "6 pre-existing, untouched governance/ADR/plan documents remain non-conforming,
+unchanged" and treated that as accepted debt outside this gate's own diff: two OTHER files in that
+same local list (`core/adr/ADR-004-normalized-event.md`, `governance/gate-manifests/g2.yaml`) are
+NOT flagged by CI at all — verified directly: `git show main:core/adr/ADR-004-normalized-event.md`
+piped through `prettier --check` on a temp file passes cleanly. This repo's `core.autocrlf=true`
+with no `.gitattributes` and no `.prettierrc.json` line-ending override other than the already-set
+`"endOfLine": "lf"` means the Windows working-tree checkout of those two untouched files carries
+CRLF while the actual git blob (and the Linux CI runner's checkout) is LF — the same
+local-vs-CI divergence already on record in auto-memory
+(`branch-switch-crlf-breaks-vitest-locally.md`). So the "6 non-conforming" figure repeated across
+three checkpoints was actually **2 local CRLF artifacts + 4 genuinely non-conforming files**
+conflated into one count; nobody had verified the real 4 against an actual LF-checkout tool until
+CI ran for the first time just now.
+
+**Fix.** `npx prettier --write` on exactly the 4 CI-flagged files (all within G2's
+`allowed_paths` — `core/DECISION_LOG.md` and `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL*.md`
+are both named explicitly in `governance/gate-manifests/g2.yaml`). Verified content-preserving
+before committing: word-tokenized diff (`tr -s '[:space:]' '\n'` on old vs. new, then `diff`) shows
+the only changes are (a) markdown table separator padding, (b) `*text*` → `_text_` emphasis-marker
+normalization, and (c) the new decision-log prose this same session already added — no actual word
+of pre-existing content was altered, added, or removed. `npx prettier --check` on all 4 files now
+passes.
+
+**How to apply:** Before opening a PR for a long-lived gate branch that has never had CI actually
+run against it, run `prettier --check .` once against a **freshly cloned or `git show`-extracted**
+copy of each flagged file (not the Windows working tree) to separate real non-conformance from a
+CRLF-checkout artifact — the working-tree check alone cannot tell them apart on this machine's
+`core.autocrlf=true` setting.
+
+---
+
+## 2026-09-13 — G2 GATE CLOSED: GPT-PM round 4 `VERDICT: APPROVE` (final), PR #23 opened
+
+**Decision.** Sent checkpoint 6's diff (`git diff e1013e9...9e7779e`) to GPT-PM for round 4,
+scoped per §17 to "the round-3 reported fix plus any regression directly caused by it." GPT-PM
+returned `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR, `correlated: true` -- confirming the round-3
+MAJOR (inadequate regression test) is fully closed: the new probe genuinely distinguishes the
+current atomic implementation from the reconstructed old two-step one, and the crash/rollback test
+genuinely exercises the D1 shim's real transaction-rollback path. Re-sent the identical diff with
+`--final` per §15's design (a receipt records that a review ran, not that it approved; `--final` is
+the caller's own claim that the loop concluded, and `review.js` requires a live round to attach it
+-- there is no way to mark an already-completed round final after the fact). The final round
+independently reproduced `VERDICT: APPROVE`, `correlated: true`, `final: true`,
+`final_overridden: false`, `receipt_written: true` (`reviewRequestId: 4a8c56c5-e923-435c-8250-810ad724c919`,
+`replyId: f15d76fe-e33e-4907-ba4a-f08cb3241035`).
+
+**Per project §17: no unresolved BLOCKER/MAJOR after this round → gate CLOSED.** G2's full review
+loop: internal specialists (checkpoint 3) → GPT-PM round 1 (5 BLOCKER + 10 MAJOR, checkpoint 4) →
+round 2 (1 BLOCKER + 3 MAJOR, regressions from round 1's own remediation, checkpoint 5) → round 3
+(0 BLOCKER + 1 MAJOR, a regression-test defect in round 2's own remediation, checkpoint 6) →
+round 4 (0 BLOCKER / 0 MAJOR, APPROVE, final).
+
+**Push and PR.** Per global CLAUDE.md §22, the approved gate's push needed no separate operator
+word; per §15, the push also needed a genuine `--final` receipt, obtained above. Pushed
+`gate/g2-implementation` (`b690ebf..9e7779e`) to origin -- this is an existing, already-authorized
+branch (created and pushed in earlier G2 checkpoints), not a new branch, so §14's double consent
+does not apply. Opened PR #23 (`gate/g2-implementation` -> `main`):
+https://github.com/xLZDx/Personal_Decision_Command_Center/pull/23.
+
+**Not yet done, per §24's own conditions for a GPT-PM-authorized merge:** the round-4 APPROVE names
+head `9e7779e`, which is this PR's exact head -- but §24 also requires every CI check the repo's
+branch protection actually requires to be green on that same head before merging, and that has not
+yet been confirmed (CI was just triggered by opening the PR). Will check CI status before merging;
+if a new commit lands on the PR before merge, the APPROVE is stale and a fresh round is needed.
+
+**Evidence:** `D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\tasks\bc6wbh8w4.output`
+(the `--final` receipt JSON); `D:\Temp\claude\d--Repo\72f12469-cfde-4245-902b-988b5ee26b92\scratchpad\g2-review-round4-scope-note.md`
+(the scope note sent).
+
+**How to apply:** Once CI is confirmed green on `9e7779e`, merge PR #23 per §24 (ordinary merge
+method, no admin bypass) and proceed to G3 per the operator's standing autonomous-through-G6
+authorization -- no separate confirmation needed for that continuation.
+
+---
+
 ## 2026-09-13 — G2 implementation, checkpoint 6: GPT-PM gate review round 3 (0 BLOCKER + 1 MAJOR,
+
 scoped to checkpoint-5's own regression test), 337 tests, all green
 
 **Context.** Checkpoint 5's diff (`git diff e1013e9...HEAD`, the exact remediation round 2
@@ -14,6 +101,7 @@ BLOCKER, not a new production bug — confirmed real by direct source inspection
 per §3/§23.
 
 **MAJOR, verified and fixed:**
+
 - **Checkpoint 5's regression test for the atomic-retry BLOCKER proved an outcome, not the specific
   fix.** The test (`ev-atomic-retry` in `packages/domain/tests/transitions.test.ts`) awaited
   `moveToRetryableFailed` to full completion, then called `claimLease` and asserted it was rejected
@@ -77,16 +165,19 @@ unless a genuine regression from this batch surfaces).
 ---
 
 ## 2026-09-13 — G2 implementation, checkpoint 5: GPT-PM gate review round 2 (1 BLOCKER + 3 MAJOR,
+
 all scoped to checkpoint-4's own remediation), 334 tests, all green
 
 **Context.** Checkpoint 4's diff (`git diff b690ebf...HEAD`, the exact remediation round 1
 requested) went to GPT-PM for round 2 verification, scoped per §17 to "the reported fixes plus
 regressions directly caused by that remediation." GPT-PM returned `VERDICT: BLOCKER` with 1 BLOCKER
-+ 3 MAJOR, all genuinely within that scope (real regressions introduced by checkpoint 4's own
-fixes, or gaps in checkpoint 4's own new evidence) — confirmed real by direct source inspection
-before remediating, per §3/§23.
+
+- 3 MAJOR, all genuinely within that scope (real regressions introduced by checkpoint 4's own
+  fixes, or gaps in checkpoint 4's own new evidence) — confirmed real by direct source inspection
+  before remediating, per §3/§23.
 
 **BLOCKER, verified and fixed:**
+
 - **The retry-failure remediation's own "loser touches nothing" restructuring reintroduced the
   exact race it was meant to prevent.** `moveToRetryableFailed` ran the fenced `ingest_events`
   transition as a standalone `.run()`, checked its own `meta.changes`, and only THEN issued the
@@ -108,6 +199,7 @@ before remediating, per §3/§23.
   already `RETRY_PENDING`, never observably still `DISPATCHED`.
 
 **MAJORs, verified and fixed:**
+
 - **Heartbeat renewal had no error handling for a D1 call that THROWS, as opposed to returning
   `false`.** `startHeartbeat`'s fire-and-forget tick directly awaited `renewLease` with no
   try/catch; a transient D1/runtime error rejected the detached async function with no controlled
@@ -156,6 +248,7 @@ plus the pre-existing 328 from checkpoint 4). Manifest scope re-verified by hand
 scope unless a genuine regression from this batch surfaces).
 
 ## 2026-09-13 — G2 implementation, checkpoint 4: GPT-PM gate review round 1 (5 BLOCKER + 10 MAJOR),
+
 one-sweep remediation batch, 328 tests, all green
 
 **Context.** Checkpoint 3's diff (269,544 chars, under `review.js`'s `MAX_DIFF_CHARS` truncation
@@ -166,6 +259,7 @@ actual source (file:line, not GPT-PM's characterization) before remediation, per
 confirmed real. Remediated as one batch, per §17.
 
 **BLOCKERs, verified and fixed:**
+
 - **Manifest-scope violations.** `.gitignore`, `eslint.config.js`, and `tests/schema/**` were
   touched by checkpoint 3 outside `governance/gate-manifests/g2.yaml`'s own `allowed_paths` —
   confirmed by direct read of the manifest, not GPT-PM's say-so. Reverted `.gitignore` and
@@ -186,7 +280,7 @@ confirmed real. Remediated as one batch, per §17.
   dispatch to `PENDING`/`RETRY_PENDING`/`BUDGET_DEFERRED`) accidentally suppressed that symptom by
   introducing the opposite defect: a genuinely lost dispatch would never redispatch at all. Fixed
   both at once in `reconciler.ts`: every dispatch now sets `next_attempt_at = now +
-  REDISPATCH_TIMEOUT_MS`, and a new CAS branch redispatches a due DISPATCHED row fenced on the
+REDISPATCH_TIMEOUT_MS`, and a new CAS branch redispatches a due DISPATCHED row fenced on the
   OBSERVED `dispatch_count`. `REDISPATCH_TIMEOUT_MS` added as a runtime var
   (`infra/cloudflare/ingest.wrangler.toml`). Regression test added proving a lost dispatch becomes
   redispatch-eligible past the timeout, with `dispatch_count` incrementing correctly.
@@ -213,6 +307,7 @@ confirmed real. Remediated as one batch, per §17.
   completion safely reports `transitioned: false`.
 
 **MAJORs, verified and fixed (selected — full list in the round-1 receipt):**
+
 - `packages/domain/src/ingest.ts`'s INSERT never populated `source_thread_id` despite the column
   existing and `NormalizedEvent` carrying it. Fixed; regression test added.
 - `lookupSigningKeyStatus` fell through to `'VALID'` for a malformed `valid_from`/`valid_until`
@@ -248,6 +343,7 @@ confirmed real. Remediated as one batch, per §17.
   in the same migration. Three regression tests added.
 
 **Also added this checkpoint, closing gaps in the gate's own DoD (TDD §35/§71), not GPT-PM findings:**
+
 - `packages/domain/src/metrics.ts`: `getOldestUnprocessedEvent` — the "oldest accepted-unprocessed
   metric exists" line item, querying `ingest_events` for the oldest non-terminal row. Two tests.
 - `core/adr/ADR-006-durable-ingest-outbox.md`: an addendum (not a rewrite, per that ADR's own
@@ -260,7 +356,7 @@ confirmed real. Remediated as one batch, per §17.
   executions (reads vs. writes, classified by leading SQL keyword — explicitly documented as an
   operation-count estimate, not Cloudflare's row-based billing unit, since the test D1 shim never
   populates `rows_read`), Queue sends, and HTTP requests, all per-event. `Analytics
-  datapoints/event` reported honestly as 0 (G2 has no Analytics Engine binding in scope — not
+datapoints/event` reported honestly as 0 (G2 has no Analytics Engine binding in scope — not
   estimated, not invented).
 
 **Verification:** `npx tsc --build --force`, `npx eslint .` both clean repo-wide; `npx prettier
@@ -280,6 +376,7 @@ checked directly against the manifest text pending the actual commit).
 scope unless a genuine regression from this batch surfaces).
 
 ## 2026-09-13 — G2 implementation, checkpoint 3: internal specialist review (database/security/
+
 type-design), one-sweep remediation batch, 315 tests, all green
 
 **Context.** Per §17's own binding sequencing ("run the internal specialist reviewers BEFORE
@@ -290,6 +387,7 @@ batched and remediated together in one pass, per §17's "one sweep, not one find
 — not fixed one at a time across separate rounds.
 
 **Findings and remediation, in one batch:**
+
 - **BLOCKER (database-reviewer):** `reconciler.ts`'s DISPATCHED- and BUDGET_DEFERRED-marking
   UPDATEs were fenced only on `state <> 'CLOSED'`, not on the specific pre-dispatch-eligible states
   the candidate SELECT had actually observed. Two overlapping `reconcileDispatch` invocations (a
@@ -297,7 +395,7 @@ batched and remediated together in one pass, per §17's "one sweep, not one find
   could both match an already-DISPATCHED row: one double-dispatching the same event to the real
   Cloudflare Queue, the other clobbering a genuinely DISPATCHED row back to BUDGET_DEFERRED. Fixed
   by restricting both UPDATEs' WHERE clause to `state IN ('PENDING', 'RETRY_PENDING',
-  'BUDGET_DEFERRED')`, making each an atomic single-statement CAS backed by
+'BUDGET_DEFERRED')`, making each an atomic single-statement CAS backed by
   `result.meta.changes`. Accepted residual risk, documented in `reconciler.ts`'s own comment: a
   losing invocation may still have already reserved a budget slot before losing the CAS race,
   wasting it — bounded by `batchSize` per genuinely overlapping invocation, not a correctness
@@ -352,7 +450,7 @@ batched and remediated together in one pass, per §17's "one sweep, not one find
   accidentally carrying a stale `requireExpiredAsOf` by copy-paste, or a SWEEP fence from omitting
   it and silently degrading to a token-only fence (the exact ABA hole the field exists to close).
   Converted to a discriminated union (`{kind:'LIVE'; token} | {kind:'SWEEP'; token;
-  requireExpiredAsOf}`), with `fenceClause` and both call sites (`lease.ts`'s `failProcessing`,
+requireExpiredAsOf}`), with `fenceClause` and both call sites (`lease.ts`'s `failProcessing`,
   `lease-recovery.ts`'s `recoverStaleLeases`) updated accordingly. A `@ts-expect-error` type-only
   test was added to `transitions.test.ts` proving both misuse directions (LIVE with the extra
   field, SWEEP missing it) now fail to compile.
@@ -382,6 +480,7 @@ scenario noted as a remaining gap in checkpoint 2 (still not blocking — core r
 already covered by the unit suites, including the new concurrent-race ones added here).
 
 ## 2026-09-13 — G2 implementation, checkpoint 1: contracts + provenance + domain + testkit, 148
+
 new tests, all green
 
 **Context.** Operator gave a standing, explicit, broad authorization to proceed autonomously
@@ -394,6 +493,7 @@ merged `manifest-proposal/g2` commit), under the approved Rosetta plan
 `94031e52732abc334c102e2ec625474119978ce81c31e22d8d36ac114c72990f`).
 
 **What was built, in dependency order:**
+
 - `infra/migrations/0001_ingest_outbox.sql` — the 13-table G2 schema (rewritten per the plan's own
   5 review rounds; see the entries below for the specific fixes), verified by actually applying it
   to a real SQLite engine.
@@ -462,9 +562,11 @@ above, not yet run as the single combined command); the internal specialist revi
 GPT-PM per §17's sequencing; then the GPT-PM gate-level review itself.
 
 ## 2026-09-13 — G2 implementation, checkpoint 2: services/ingest + services/processor +
+
 wrangler configs + ported schema-integrity suite, 325 tests, all green
 
 **What was added on top of checkpoint 1:**
+
 - **`services/ingest`** — `env.ts` (`IngestEnv`, `resolveSecret` deriving a Worker Secret binding
   name by convention: `<CONNECTOR>_<KEYVERSION>_HMAC_SECRET`, so a new connector/key version is a
   binding + a wrangler.toml line, never a code change); `handler.ts` (`handleIngestRequest` —
@@ -519,6 +621,7 @@ specialist review (`database-reviewer`/`security-reviewer`/`type-design-analyzer
 GPT-PM per §17; then GPT-PM's own gate-level review.
 
 ## 2026-09-12/13 — G2 Revision 2: 3-agent redesign, executably validated, Rosetta plan revised
+
 after GPT-PM's own plan-level BLOCKER, GO obtained, V2 proposal sent
 
 **Context.** GPT-PM's `VERDICT: BLOCKER` on the original G2 proposal (3 BLOCKER + 4 MAJOR, see the
@@ -545,11 +648,12 @@ the correction this project's own §17 ground-truth-order habit calls for.
 
 **Revised plan (`personal-decision-os-2026-09-12T21-44-44-733Z-f21028`) fixed both:** added
 executable scratch validation as its own step, and set a deterministic boundary -- the plan closes
-the instant GPT-PM's reply to the V2 document is captured; recording that reply's *content* is
+the instant GPT-PM's reply to the V2 document is captured; recording that reply's _content_ is
 explicitly the next plan's job, not this one's. Sent for GO.
 
 **PM Bridge transport was genuinely unstable across this send**, not merely slow -- worth recording
 precisely since it cost several retries and two daemon restarts before resolving:
+
 1. First `gpt_send_and_await` (request_id `e3a4c8f1-...`, the first plan) returned
    `CHATGPT_SEND_UNCONFIRMED` ("No matching new ChatGPT user turn appeared after Enter within 32s").
 2. Retried the same request_id per the tool's own instruction twice; `pm_bridge_job_status` showed
@@ -630,7 +734,7 @@ the scratch harness outside the repo tree exercised anything resembling those sh
 
 **Per the deterministic boundary this plan itself sets: this entry does not record GPT-PM's ruling
 on the V2 document.** That send happens after this commit, under this same plan (its final step,
-per the approved scope), and the reply is captured but recording its *content* belongs to the next
+per the approved scope), and the reply is captured but recording its _content_ belongs to the next
 plan -- exactly the ambiguity the revised plan was built to avoid repeating.
 
 **Plan closed** (`pm_rosetta_close`, result `passed`, review class `LOCAL` -- 3 doc files, 1
@@ -674,7 +778,7 @@ combined defect) and M4/M5 remain contested.
    preflight measurement (network/D1/AI wait time is not active CPU per the TDD's own framing) --
    needs either a lease-renewal/heartbeat mechanism or a measured end-to-end wall-time bound.
 3. **MAJOR -- M4 (idempotency) only partially fixed.** `source_version` is nullable with no stated
-   rule for *when* it must be non-null, so the original collision (reused `source_event_id`, no
+   rule for _when_ it must be non-null, so the original collision (reused `source_event_id`, no
    version) still collapses onto one key for `MESSAGE_UPDATED`. Required: an executable rule (e.g.
    non-empty `source_version` mandatory for `MESSAGE_UPDATED`) plus named behavioral proofs (same
    revision retries to the same key; two revisions produce different keys; a required-but-absent
@@ -690,7 +794,7 @@ combined defect) and M4/M5 remain contested.
 capped non-terminal event is "unrepresentable," citing NC6 -- but NC6 only proved DLQ-with-zero-
 attempts is rejected. The schema CAN represent `RETRYABLE_FAILED` at count 5, and necessarily
 represents the live fifth attempt as `PROCESSING` at count 5 while it runs. The actual required
-proof is a *transition* invariant (no capped non-terminal row survives past the fifth attempt's
+proof is a _transition_ invariant (no capped non-terminal row survives past the fifth attempt's
 completion or lease expiry), not static unrepresentability -- this was an overreach in how strongly
 the DDL evidence was described, corrected here rather than repeated in the next round.
 
@@ -706,6 +810,7 @@ these four findings and their direct regression tests." No re-litigating the thr
 or the three closed MAJORs.
 
 ## 2026-09-13 — G2 Round 3: remediated GPT-PM's remaining 2 BLOCKER + 2 MAJOR (V3), operator
+
 authorized autonomous completion of MVP1
 
 **Operator instruction, this session:** "план меняется ГО делать все до конца, пм теперь работает
@@ -772,12 +877,14 @@ commit): every step executed as approved, reply captured and correlated
 (`replyId e96ddc1e-f38f-48a6-b317-d75acea7f11b`).
 
 ## 2026-09-13 — GPT-PM's Round-3 ruling on the G2 V3 proposal: `VERDICT: APPROVE`, 0 BLOCKER/0
+
 MAJOR -- G2 architecture is now GPT-PM-approved
 
 Verbatim reply (`replyId e96ddc1e-f38f-48a6-b317-d75acea7f11b`, correlated, `request_id
 2f8e4c91-6a3d-4b7e-9c1f-5d0a8b3e7f24`) preserved in this session's PM Bridge transcript.
 
 **All four remaining findings confirmed closed:**
+
 - B2/B3 (processor state machine): "permanent failure is terminal at any attempt count; retryable
   failure below the cap returns to RETRYABLE_FAILED; retryable failure at the cap reaches DLQ; and
   success reaches PROCESSED... replaces V2's incorrect static 'unrepresentable' assertion with the
@@ -793,6 +900,7 @@ Verbatim reply (`replyId e96ddc1e-f38f-48a6-b317-d75acea7f11b`, correlated, `req
 
 **Two non-blocking implementation notes for the actual code (not architecture-blocking, to carry
 into the implementation gate's own review):**
+
 1. Make `MESSAGE_UPDATED.source_version` non-empty as well as non-null at both boundaries (the
    architecture used `.min(1)`-style non-emptiness in the scratch validation; ensure the real
    implementation's CHECK/superRefine both enforce non-empty, not merely non-null).
@@ -840,7 +948,7 @@ gate's own `[GPT-ASKED]`-equivalent escape hatch rather than looping on an unrea
 
 **3. G2 synthesis sent, GPT-PM returns `VERDICT: BLOCKER`.** Addressed GPT-PM's own GO-round
 execution constraint first: re-checked `docs/architecture/TDD.md:693-697` (SS14) directly and found
-the binding spec *already names* a `source_version_if_needed` fourth key field that
+the binding spec _already names_ a `source_version_if_needed` fourth key field that
 `packages/contracts/src/event.ts:105-111`'s shipped `idempotencyKey()` never implements -- upgraded
 SS7's third finding from a hypothesis about connector behavior to a verified spec-vs-implementation
 deviation before sending. Sent the full `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md`
@@ -878,7 +986,7 @@ file:line citation independently checkable against this repo):**
 - **BLOCKER, SS3 (attempt-cap remedy): rejects `architect`'s unconditional-claim-then-partition
   fix.** Required semantics instead: the processing failure transaction that pushes
   `attempt_count` to `MAX_PROCESSING_ATTEMPTS` must itself atomically set `ingest_events.state =
-  DLQ` and insert the `dead_letter_events` row in the same transaction -- no separate reconciler
+DLQ` and insert the `dead_letter_events` row in the same transaction -- no separate reconciler
   claim to "discover" an already-exhausted event. Also: distinguish processing-attempt exhaustion
   from queue-dispatch expiry: expiry must not burn processing retry budget.
 - **BLOCKER, new finding, absent from all four agents and from Claude's own audit verification:
@@ -913,7 +1021,7 @@ file:line citation independently checkable against this repo):**
   `edit_date` changes) as corroborating primary-source evidence, independent of this repo.
 - **MAJOR, new defect not in the sent synthesis: `ProvenanceValueSchema` doesn't match the frozen
   TDD's own `ProvenanceValue<T>` shape.** TDD names `value, provenance[], derivation_method,
-  ai_policy, sensitivity, created_at, derivation_version` across strings/numbers/datetimes/booleans/
+ai_policy, sensitivity, created_at, derivation_version` across strings/numbers/datetimes/booleans/
   enums/assignments/aggregates; the shared schema hard-codes `value` to a non-empty string and omits
   `sensitivity`/`created_at`/`derivation_version`. Needs either a generic/discriminated
   implementation matching TDD, or an explicit GPT-PM TDD erratum.
@@ -937,7 +1045,7 @@ under a new plan/GO.
 **Retrospective Rosetta debt for the acts above, and why it stays open.** The session's Stop hook
 flagged (correctly) that steps 1/3/4/6/7/9/10 above ran with no plan of their own -- the only
 approved plan covering this session's work was the pre-existing one this section closes, whose own
-scope was authored (and GO'd) in the *prior* session, before any of today's routing/daemon/close work
+scope was authored (and GO'd) in the _prior_ session, before any of today's routing/daemon/close work
 was known to be needed. Filed a retrospective plan for it
 (`personal-decision-os-2026-09-12T19-54-32-480Z-3d3a29`, hash
 `76b175a85ff8400dafe8c19f1e2e5b902bf2e6cb133085985e0b2a145cee92c5`) and attempted to send its GO
@@ -948,7 +1056,7 @@ own explicit warning that letting it send could deliver this project's content i
 project's chat.** This is the identical failure mode the prior session already hit and declined to
 work around (see the "Conversation re-registered; then this session's own routing code went stale"
 entry above) -- except this time it is not the shared daemon that is stale (a same-session restart
-fixed that transport-level issue earlier today), it is *this specific process's own* loaded routing
+fixed that transport-level issue earlier today), it is _this specific process's own_ loaded routing
 code, which cannot be refreshed from inside the same running session. Declined
 `PM_BRIDGE_BREAK_GLASS_DIRECT` for the same reason as both prior occurrences: a real, mechanically
 detected cross-project-delivery risk, not a routine hiccup.
@@ -976,11 +1084,11 @@ right on all three points:**
 1. **BLOCKER -- a retrospective GO for already-completed work is a category error.** The retrospective
    plan asked GPT-PM to `APPROVE` work whose every act (including committing `c64b6f2`) had already
    happened before the plan was even filed. Rosetta's own contract is Plan -> GO -> Act; a verdict
-   issued now cannot retroactively authorize the past. GPT-PM's own words: *"A verdict now cannot
-   retroactively make already-completed work pre-authorized."* Correct outcome, applied: the plan was
+   issued now cannot retroactively authorize the past. GPT-PM's own words: _"A verdict now cannot
+   retroactively make already-completed work pre-authorized."_ Correct outcome, applied: the plan was
    closed via `pm_rosetta_close(result: "rejected")` -- the documented exit for a plan GPT-PM refuses
-   at GO, needing no evidence, terminal. This decision-log entry itself is the *"retrospective/
-   evidence/deviation record with zero execution authority"* GPT-PM asked for in its place.
+   at GO, needing no evidence, terminal. This decision-log entry itself is the _"retrospective/
+   evidence/deviation record with zero execution authority"_ GPT-PM asked for in its place.
 
 2. **BLOCKER -- the prior plan's `pm_rosetta_close(passed)` evidence overstated its own cleanliness.**
    GPT-PM's point, verified against this repo's own git history and accepted as correct: at the
@@ -988,8 +1096,8 @@ right on all three points:**
    (`personal-decision-os-2026-09-12T17-04-33-609Z-33a708`), the two edits to `core/DECISION_LOG.md`
    and `governance/plans/G2_PIPELINE_ARCHITECTURE_PROPOSAL.md` recording the G2 `BLOCKER` ruling were
    sitting **uncommitted** in the working tree -- they were committed only afterward, as `c64b6f2`,
-   which was chronologically part of *this* (the follow-up/retrospective) plan's own steps, not a
-   declared step of the *original* plan. The prior plan's own declared scope covered sending the
+   which was chronologically part of _this_ (the follow-up/retrospective) plan's own steps, not a
+   declared step of the _original_ plan. The prior plan's own declared scope covered sending the
    synthesis and reading/verifying the reply -- not writing the reply into the decision log. Calling
    that close's evidence "the plan's own two files" therefore blurred which plan those specific edits
    actually belonged to. **Correction, stated plainly: the prior plan's `passed` closure is not
@@ -1006,7 +1114,7 @@ right on all three points:**
    (`git stash push --keep-index`, dropped after `git stash pop` succeeded) was recovered from the
    repository's own unreachable-object graph, still present (`git fsck --no-reflog --unreachable`
    listed commit `9c8f9d6dd721b500b614639884f138d9ab750004` -- the exact hash the original `git stash
-   push` reported as dropped). That commit's tree holds the literal pre-close content of all 13
+push` reported as dropped). That commit's tree holds the literal pre-close content of all 13
    files. Comparing it directly against the current `HEAD` (`main` at `197d25b` by the time of this
    entry) across exactly those 13 paths:
 
@@ -1041,7 +1149,7 @@ Continuation of the transport-blocker entry below, same session. Operator asked 
    `6aa55285-de40-83eb-8a59-341c5cbd4191` (the conversation registered earlier today, per the
    handoff entry near the top of this log) — renamed/deleted/not in the sidebar.
 2. **Operator supplied a fresh conversation URL** (`https://chatgpt.com/c/6aa59064-c160-83eb-b803-
-   661df349ca22`); re-registered via `pm_project_register` (proper MCP tool, not a hand-edit of
+661df349ca22`); re-registered via `pm_project_register` (proper MCP tool, not a hand-edit of
    pm-bridge's `config/projects.json`). Confirmed: `e2f6b9a4-...` retried and still hit the OLD
    conversation id — its durable job record had already cached the stale `conversationId` at first
    creation, before re-registration, and reusing the same `request_id` reuses that cached binding.

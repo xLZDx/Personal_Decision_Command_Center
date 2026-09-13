@@ -16,7 +16,7 @@ Verified directly by Claude (not taken on an agent's word):
 
 - `docs/architecture/TDD.md:840-846` (the binding spec, not just the ADR) writes the reconciler
   query as `state IN (ACCEPTED, RETRYABLE_FAILED) AND next_attempt_at <= now AND attempt_count <
-  MAX_PROCESSING_ATTEMPTS`.
+MAX_PROCESSING_ATTEMPTS`.
 - `ACCEPTED`/`RETRYABLE_FAILED` are `ingest_events.state` values
   (`infra/migrations/0001_ingest_outbox.sql:99`).
 - `next_attempt_at`/`attempt_count` exist only on `processing_outbox`
@@ -35,12 +35,12 @@ afterward, so a late fix means a destructive table rebuild of the pipeline's cen
 
 ## 2. Four different resolutions were proposed — this is the actual decision GPT-PM needs to make
 
-| Agent | Resolution | Satisfies TDD's queue-expiry-recovery requirement? |
-|---|---|---|
-| `architect` | Add two new terminal states, `'DONE'`/`'TERMINAL'`, to `processing_outbox.state`'s CHECK. Reconciler query becomes purely `processing_outbox`-native: `state IN ('PENDING','RETRY_PENDING','BUDGET_DEFERRED','DISPATCHED') AND next_attempt_at <= now`, fully index-covered. | **Yes** — `DISPATCHED` stays in the query with `next_attempt_at` set to `dispatched_at + VISIBILITY_TIMEOUT`, so a lost message becomes due again on its own. |
-| `code-architect` | No schema change. Query `processing_outbox.state IN ('PENDING','RETRY_PENDING','BUDGET_DEFERRED')` only; treat `DISPATCHED` as terminal-by-convention after success. | **No** — `DISPATCHED` is excluded from the reconciler query entirely, so a message lost after being marked `DISPATCHED` (the queue-expiry case) would never be re-picked-up by anything. |
-| `database-reviewer` | Flagged the ambiguity, recommended documenting an explicit mapping, leaned toward a 3-state query including `BUDGET_DEFERRED`. Did not resolve the `DISPATCHED`-recovery question. | Not addressed. |
-| `type-design-analyzer` | Modeled the reconciler-eligible type as `PENDING`/`RETRY_PENDING` only. | **No** — same gap as `code-architect`: `DISPATCHED` never re-enters. |
+| Agent                  | Resolution                                                                                                                                                                                                                                                                   | Satisfies TDD's queue-expiry-recovery requirement?                                                                                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `architect`            | Add two new terminal states, `'DONE'`/`'TERMINAL'`, to `processing_outbox.state`'s CHECK. Reconciler query becomes purely `processing_outbox`-native: `state IN ('PENDING','RETRY_PENDING','BUDGET_DEFERRED','DISPATCHED') AND next_attempt_at <= now`, fully index-covered. | **Yes** — `DISPATCHED` stays in the query with `next_attempt_at` set to `dispatched_at + VISIBILITY_TIMEOUT`, so a lost message becomes due again on its own.                            |
+| `code-architect`       | No schema change. Query `processing_outbox.state IN ('PENDING','RETRY_PENDING','BUDGET_DEFERRED')` only; treat `DISPATCHED` as terminal-by-convention after success.                                                                                                         | **No** — `DISPATCHED` is excluded from the reconciler query entirely, so a message lost after being marked `DISPATCHED` (the queue-expiry case) would never be re-picked-up by anything. |
+| `database-reviewer`    | Flagged the ambiguity, recommended documenting an explicit mapping, leaned toward a 3-state query including `BUDGET_DEFERRED`. Did not resolve the `DISPATCHED`-recovery question.                                                                                           | Not addressed.                                                                                                                                                                           |
+| `type-design-analyzer` | Modeled the reconciler-eligible type as `PENDING`/`RETRY_PENDING` only.                                                                                                                                                                                                      | **No** — same gap as `code-architect`: `DISPATCHED` never re-enters.                                                                                                                     |
 
 **Claude's verification: `architect`'s resolution is the only one of the four that satisfies
 `docs/architecture/TDD.md:870`** ("This remains true even if the old outbox row says
@@ -103,9 +103,9 @@ should be confirmed with GPT-PM rather than left as a silent omission four propo
   against `infra/migrations/0001_ingest_outbox.sql:175-178`'s own comment describing a two-step
   "check and increment"): a real lost-update race under concurrent dispatch. `architect`'s fix
   (`INSERT ... ON CONFLICT(day) DO UPDATE ... WHERE dispatched_count + ?n <= ?cap RETURNING
-  dispatched_count`) is atomic and self-bootstraps the day row; `database-reviewer`'s independently
+dispatched_count`) is atomic and self-bootstraps the day row; `database-reviewer`'s independently
   proposed fix is equivalent in spirit; `code-architect`'s bare `UPDATE ... WHERE dispatched_count <
-  2500` does not bootstrap a new day's row and needs a separate insert step that reopens a smaller
+2500` does not bootstrap a new day's row and needs a separate insert step that reopens a smaller
   race. **Adopt `architect`'s single-statement upsert.**
 - **`devices` table breaks the migration's own stated scope-boundary rule**
   (`database-reviewer`, confirmed: `infra/migrations/0001_ingest_outbox.sql:1-15`'s header argues
@@ -148,7 +148,7 @@ sent to GPT-PM. Full verification record: `reports/G2_external_audit_verificatio
 - **Provenance fail-open in `packages/provenance/src/dag.ts:55-73`.** `isAiSafe()` checks only
   `node.ai_policy === 'DENY'`, never `=== 'ALLOW'`. At the TypeScript type level `AiPolicy` has no
   third value, but the check is not bound to the `zod` validation in `packages/contracts/src/
-  provenance.ts` (`AiPolicySchema` / `.strict()`) — any `ProvenanceNode` built without going through
+provenance.ts` (`AiPolicySchema` / `.strict()`) — any `ProvenanceNode` built without going through
   that schema, carrying an arbitrary `ai_policy` value (including `undefined`), passes as safe as
   long as it has no ancestors. `provenance.ts:9`'s own comment already says the shape layer is not
   enforcement ("a type that carries an ai_policy field does not by itself stop anyone from
@@ -157,7 +157,7 @@ sent to GPT-PM. Full verification record: `reports/G2_external_audit_verificatio
   valid root purely by a doc-comment convention ("never used to represent ancestry not loaded yet"),
   with nothing in the type system or at runtime distinguishing a genuine `SourceEvent` leaf from any
   other node that happens to carry an empty array. Needs: `isAiSafe` to require `ai_policy ===
-  'ALLOW'` explicitly (not merely `!== 'DENY'`), and either a runtime `AiPolicySchema.parse()` at
+'ALLOW'` explicitly (not merely `!== 'DENY'`), and either a runtime `AiPolicySchema.parse()` at
   the `ProvenanceNode` construction boundary or separate root/derived node types per the original
   audit's suggestion.
 - **`infra/migrations/0001_ingest_outbox.sql` allows a `telegram` source to carry an `ALLOW`
@@ -168,7 +168,7 @@ sent to GPT-PM. Full verification record: `reports/G2_external_audit_verificatio
   `source` need not match its `source_account`'s `source`, nor its `source_policy`'s `source`.
   Combined with the `dag.ts` gap above, a lost- or wrong-provenance Telegram event could resolve to
   an AI-safe node. Needs a composite CHECK (e.g. `CHECK (NOT (source = 'telegram' AND ai_policy =
-  'ALLOW'))` on `source_policies`, plus a trigger or application-level invariant tying
+'ALLOW'))` on `source_policies`, plus a trigger or application-level invariant tying
   `ingest_events.source` to both referenced rows' `source` — SQLite has no native cross-table CHECK).
 - **`idempotencyKey()` (`packages/contracts/src/event.ts:105-111`) collides across sequential
   `MESSAGE_UPDATED` events.** The key is a pure function of `source_account_id`, `source_event_id`,
