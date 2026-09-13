@@ -10,7 +10,13 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@cloudflare/workers-types": "*",
+    "@pdos/contracts": "*",
+    "@pdos/domain": "*",
     "@pdos/provenance": "*",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@pdos/testkit": "*"
   }
 }

@@ -13,19 +13,19 @@ export {
 export type { WorkersAiTokenUsage } from './workers-ai.js';
 
 export {
-  GmailEvidenceBundleSchema,
   GmailSourceEnrichmentSchema,
-  AIRequestSchema,
   GmailAIContextBuilder,
+  GmailAIEngine,
   AIContextPolicyError,
   NoAIProvider,
 } from './gmail-ai.js';
 export type {
   GmailEvidenceBundle,
   GmailSourceEnrichment,
-  AIRequest,
-  AIProvider,
-  AIProviderResult,
-  AIProviderUsage,
+  GmailAIEnrichmentResult,
+  GmailAIEngineOptions,
   GmailAIContextBuilderOptions,
+  GmailMessageContent,
+  GmailMessageLoader,
+  WorkersAiBinding,
 } from './gmail-ai.js';

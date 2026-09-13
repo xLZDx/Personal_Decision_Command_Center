@@ -1,14 +1,12 @@
 /**
  * G3 Workers AI policy checkpoint.
  *
- * The callable model alias and pricing-table model label do not currently match exactly:
- * Cloudflare documents `@cf/meta/llama-3.1-8b-instruct-fast` as the callable JSON-mode model,
- * while the lower fast rate is listed under an `...-fp8-fast` label. HARD_ZERO therefore does not
- * assume that those names are billing aliases. It reserves with the more expensive published
- * non-fast Llama 3.1 8B rates. See WORKERS_AI_MODEL_TERMS.md.
+ * The exact callable model id is also listed verbatim in Cloudflare's pricing table and JSON Mode
+ * support list. This exact-identity requirement avoids inferring billing equivalence between
+ * similar aliases. See WORKERS_AI_MODEL_TERMS.md.
  */
 
-export const WORKERS_AI_MODEL_ID = '@cf/meta/llama-3.1-8b-instruct-fast' as const;
+export const WORKERS_AI_MODEL_ID = '@cf/meta/llama-3.3-70b-instruct-fp8-fast' as const;
 
 /** Includes system instructions, schema, and minimized Gmail evidence after serialization. */
 export const WORKERS_AI_MAX_REQUEST_UTF8_BYTES = 16_000;
@@ -22,9 +20,9 @@ export const WORKERS_AI_MAX_OUTPUT_TOKENS = 256;
  */
 export const WORKERS_AI_TEMPLATE_TOKEN_OVERHEAD = 2_048;
 
-/** Published rates for the more expensive non-fast `@cf/meta/llama-3.1-8b-instruct` variant. */
-export const WORKERS_AI_CONSERVATIVE_INPUT_NEURONS_PER_MILLION_TOKENS = 25_608;
-export const WORKERS_AI_CONSERVATIVE_OUTPUT_NEURONS_PER_MILLION_TOKENS = 75_147;
+/** Published rates for the exact callable model id above. */
+export const WORKERS_AI_CONSERVATIVE_INPUT_NEURONS_PER_MILLION_TOKENS = 26_668;
+export const WORKERS_AI_CONSERVATIVE_OUTPUT_NEURONS_PER_MILLION_TOKENS = 204_805;
 
 function assertNonNegativeSafeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {

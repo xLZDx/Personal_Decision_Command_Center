@@ -11,7 +11,7 @@ import {
 describe('Workers AI HARD_ZERO policy', () => {
   it('computes a deterministic ceiling for a maximum-size request', () => {
     expect(WORKERS_AI_TEMPLATE_TOKEN_OVERHEAD).toBeGreaterThan(0);
-    expect(WORKERS_AI_MAX_ESTIMATED_NEURONS_PER_CALL).toBe(482);
+    expect(WORKERS_AI_MAX_ESTIMATED_NEURONS_PER_CALL).toBe(534);
     expect(estimateWorkersAiNeurons(WORKERS_AI_MAX_REQUEST_UTF8_BYTES)).toBe(
       WORKERS_AI_MAX_ESTIMATED_NEURONS_PER_CALL,
     );
@@ -39,7 +39,7 @@ describe('Workers AI HARD_ZERO policy', () => {
   });
 
   it('rounds complete reported usage upward using conservative rates', () => {
-    expect(workersAiNeuronsFromUsage({ promptTokens: 1_000, completionTokens: 100 })).toBe(34);
+    expect(workersAiNeuronsFromUsage({ promptTokens: 1_000, completionTokens: 100 })).toBe(48);
     expect(workersAiNeuronsFromUsage({ promptTokens: 0, completionTokens: 0 })).toBe(0);
   });
 

@@ -3,21 +3,72 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 7 round 1: AI boundary BLOCKER remediation implemented
+
+**External GPT-PM round 1:** `VERDICT: BLOCKER`, 1 BLOCKER / 1 MAJOR / 1 MINOR, correlated review
+of `8013585...49dc735` (`reviewInputHash
+ab3cd60f3ea049d76d7418581e244b28fe2d42e6eddc6234cabd980d9943cd8d`, `reviewRequestId
+76f93153-2e71-4db4-b656-46d10f2b25c1`, `replyId fc6a2246-9df9-4e05-b818-5bc5568068df`).
+Round 2 is explicitly bounded to those three findings and direct remediation regressions.
+
+**Independent specialist results:** AI-01 rejected with 2 BLOCKER / 2 MAJOR; SEC-01 rejected with
+0 BLOCKER / 3 MAJOR; PRIV-01 rejected with 1 BLOCKER / 4 MAJOR / 1 MINOR. Their overlapping
+findings formed one coherent remediation rather than separate patches:
+
+1. **BLOCKER — plain content was not bound to the checked DAG/current policy. Fixed.** Every
+   evidence scalar is now a `ProvenanceValue`; the bundle is opaque/nominal rather than publicly
+   constructible. `GmailAIEngine` accepts only an `eventId`, resolves the event and current joined
+   `source_policies` row from D1, refuses non-Gmail/DENY before content fetch, and itself invokes the
+   narrow Gmail loader using D1's `content_locator_ref`. Its private factory creates the Gmail source
+   node from that authoritative row and binds every serialized value to the exact event root.
+2. **BLOCKER — public raw provider/request bypass. Fixed.** `AIProvider`, `AIRequestSchema`, and the
+   structural request type were removed from the package API. The request and bundle are branded
+   with non-exported symbols. `GmailAIEngine` is the only execution gateway and orders authoritative
+   policy → Gmail fetch → context build → D1 Neuron reservation → provider call → local output
+   validation/provenance stamping. Public API tests prove the bypass exports are absent.
+3. **MAJOR — selected alias had no exact pricing identity. Fixed.** The model changed to the current
+   `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, whose exact callable id is listed verbatim by
+   Cloudflare in the model catalog, JSON Mode list, and pricing table. Exact published rates are
+   26,668 input / 204,805 output Neurons per million tokens; the deterministic max reservation is
+   now 534 Neurons. The dated artifact now links Meta's matching Llama 3.3 license/AUP.
+4. **MAJOR — prompt-injection boundary was implicit. Fixed.** The system instruction explicitly
+   declares delimited evidence untrusted data, rejects embedded commands/policy/role/tool/format
+   instructions, and grants no tools or authority. Each signal must contain an exact bounded quote
+   present in minimized Gmail evidence; adversarial tests carry an injection payload through as
+   data and reject fabricated quotes. Human-facing AI text rejects HTML and links.
+5. **MAJOR — output assignments lacked provenance. Fixed.** Provider payload and domain enrichment
+   are now distinct schemas. After strict validation, the application stamps summary, signal kind,
+   text, due date, and evidence quote with the exact Gmail event provenance and
+   `AI_EXTRACTION`; provider-authored provenance is never accepted.
+6. **MAJOR/MINOR documentation and minimization. Fixed.** ADR-009 now records the selected model,
+   exact execution gateway, snapshot, and re-check trigger. Event/message/thread IDs and recipients
+   are no longer submitted to AI. Markdown hard-break trailing spaces reported by PRIV-01 were
+   removed.
+
+Additional functional tests cover reservation-before-provider, complete-usage reconciliation,
+missing-usage conservative retention, quota-exhausted no-call, AI-off no-fetch/no-call,
+`MESSAGE_DELETED` zero-fetch/zero-Neuron, authoritative policy changed to DENY, real Telegram event,
+lease loss before fetch/AI, fully escaped request bounding, malformed/executable output, and opaque
+bundle compile-time rejection. Round-2 review is not yet recorded.
+
 ## 2026-09-14 — G3 checkpoint 7 implemented: selected Workers AI model, terms snapshot, and fail-closed Gmail-only AI boundary
 
+**Historical pre-review implementation record:** the model and boundary described below were
+superseded by the round-1 remediation entry immediately above; retain this section as the exact
+state that the independent reviewers assessed, not as the current design.
+
 **External preflight completed against primary sources:** the selected callable model is
-`@cf/meta/llama-3.1-8b-instruct-fast`; Cloudflare currently lists it as hosted, 128K context, and
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`; Cloudflare currently lists it as hosted, 24K context, and
 JSON-Mode-capable. Cloudflare's current Customer Content statement, free 10,000-Neuron/day
-allocation/reset, pricing table, and Meta's Llama 3.1 Community License/AUP were re-fetched live.
+allocation/reset, pricing table, and Meta's Llama 3.3 Community License/AUP were re-fetched live.
 The dated evidence and production re-check rule are in
 `packages/policy/WORKERS_AI_MODEL_TERMS.md`.
 
-**Conservative HARD_ZERO decision:** Cloudflare's callable `...instruct-fast` model name and the
-pricing table's cheaper `...instruct-fp8-fast` label are not identical, so the implementation does
-not assume they are billing aliases. It reserves/reconciles using the higher published non-fast
-Llama 3.1 8B rates (25,608 input / 75,147 output Neurons per million tokens), caps the entire
+**HARD_ZERO decision:** the exact callable model id is present verbatim in Cloudflare's pricing
+table. The implementation reserves/reconciles using its published rates (26,668 input / 204,805
+output Neurons per million tokens), caps the entire
 serialized request at 16,000 UTF-8 bytes, adds 2,048 provider-template tokens, and reserves the
-full 256-token output. The maximum admitted request deterministically reserves 482 Neurons before
+full 256-token output. The maximum admitted request deterministically reserves 534 Neurons before
 the provider call. Missing/partial provider usage leaves the conservative reservation untouched.
 
 **AI boundary implemented:** new `@pdos/policy` exports the sole
