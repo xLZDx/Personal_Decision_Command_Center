@@ -82,3 +82,6 @@ export type {
   PersistEnrichmentResult,
   Enrichment,
 } from './gmail/enrichment.js';
+
+export { importKek, encryptRefreshToken, decryptRefreshToken } from './gmail/crypto.js';
+export type { EncryptedRefreshToken, RefreshTokenAad } from './gmail/crypto.js';

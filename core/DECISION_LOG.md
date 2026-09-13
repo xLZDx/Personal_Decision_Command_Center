@@ -3,6 +3,57 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 implementation checkpoint 3: KEK crypto (`packages/domain/src/gmail/crypto.ts`)
+
+**Decision.** Third implementation checkpoint of gate G3, on branch `gate/g3-implementation`: the
+KEK (key-encryption-key) primitives from proposal §2.7 — `importKek`, `encryptRefreshToken`,
+`decryptRefreshToken` — that will encrypt/decrypt the Gmail OAuth refresh token stored at rest in
+`gmail_connections.encrypted_refresh_token` (migration 0002, checkpoint 1). A 256-bit AES-GCM key
+is imported directly as raw bytes from a base64 Worker Secret (`GMAIL_KEK_V{n}`) — never hashed
+from a passphrase, the exact correction GPT-PM made to the V1 design during the plan-review loop
+(a SHA-256 digest of a short human passphrase is length-guaranteed but not entropy-guaranteed). A
+fresh random 12-byte IV is generated per call; AAD binds each ciphertext to
+`gmail_account_id || kek_version` via a length-prefixed encoding (same collision-avoidance pattern
+`auth/hmac.ts`'s `canonicalSigningPayload` already uses in this codebase).
+
+**Internal review before GPT-PM (§17), two specialists in parallel** (R3 per §6 — crypto/security
+domain). A `security-reviewer` found 0 BLOCKER/0 MAJOR: confirmed correct AES-GCM parameter usage
+(96-bit random IV generated internally with no caller-controlled IV path, non-extractable key,
+minimal `['encrypt','decrypt']` usages, default 128-bit auth tag), the AAD encoding's collision
+resistance, and fail-closed error handling with no plaintext/key-material leak path. One MINOR: a
+malformed base64 input (corrupted D1 row, misconfigured secret) surfaced `atob`'s own unlabeled
+native `DOMException` rather than a module-owned, recognizable error. One NIT: the IV-uniqueness
+doc comment said "never reused" without the underlying probabilistic/birthday-bound caveat. A
+`functional-test-reviewer` found 0 BLOCKER/0 MAJOR and two MINOR coverage gaps: the IV's documented
+12-byte/96-bit size had no test pinning it (a regression to any other WebCrypto-accepted IV length
+would pass every existing test silently), and the length-prefixed AAD encoding's own stated
+anti-collision property (the reason it exists over a bare concatenation, per its docstring) had zero
+regression coverage — a future "simplification" back to bare concatenation would pass every existing
+AAD-mismatch test unchanged while reintroducing the exact cross-account confusion risk the encoding
+was added to prevent.
+
+**Fix, verified by mutation** (same discipline as checkpoints 1-2): wrapped `atob` in
+`base64ToBytes` to throw a module-owned `Invalid base64 input: ...` error; reworded the IV-uniqueness
+doc comment to state the probabilistic guarantee and its NIST SP 800-38D birthday bound explicitly,
+with the reasoning for why it's inert at this module's actual call frequency. Added a
+malformed-base64 test, an IV-length-pinning test, and an AAD-collision test (two AAD pairs —
+`{gmailAccountId:'acct-A1', kekVersion:''}` vs `{gmailAccountId:'acct-A', kekVersion:'1'}` — that
+concatenate to the identical string under a naive join but differ under length-prefixing).
+Mutation-verified all three: (1) stripped the `try/catch` around `atob` — confirmed the new
+malformed-base64 test (and only it) failed, with a materially different, unlabeled error message;
+(2) changed `AES_GCM_IV_BYTES` from 12 to 16 — confirmed the new IV-length test (and only it) failed;
+(3) reverted `aadBytes` to bare `gmailAccountId + kekVersion` concatenation — confirmed the new
+AAD-collision test (and only it) failed (`promise resolved "secret-token" instead of rejecting`).
+All three reverted after confirmation, full suite re-green.
+
+**Verification.** Full repo suite: 381/381 tests passing (32 files, 12 in the new
+`crypto.test.ts`). `npm run typecheck`/`npm run lint` both clean. `prettier --write` applied.
+
+**How to apply.** Checkpoint 3 is closed pending GPT-PM's own gate-review round on this diff.
+Remaining G3 checkpoints: OAuth lifecycle (§2.5 — the first actual consumer of this crypto module),
+cursor/history-list sync + normalization (§2.2/§2.3), quota limiter wiring (§2.9), drill-down
+endpoints (§2.8), and the `services/gmail-connector` Worker itself (§2.1).
+
 ## 2026-09-13 — G3 implementation checkpoint 2: `ClaimedEvent.leaseToken` extension + lease-fenced enrichment persistence
 
 **Decision.** Second implementation checkpoint of gate G3, on branch `gate/g3-implementation`: (1)
