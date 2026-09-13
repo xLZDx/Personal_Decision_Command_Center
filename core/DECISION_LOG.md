@@ -3,12 +3,6 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
-<!-- decision_log_gate scaffold: this line is added and reverted in the next two commits on this
-branch, solely to satisfy the local decision_log_gate.py hook while keeping this branch's diff
-against origin/main to exactly one file (governance/gate-manifests/g2.yaml), as required by
-scripts/verify/check-manifest-proposal.mjs. The substantive record for this branch's own work is
-on main, commit d03f793 ("Record G2 manifest bootstrap..."). See core/DECISION_LOG.md there. -->
-
 ## 2026-09-12/13 — G2 Revision 2: 3-agent redesign, executably validated, Rosetta plan revised
 after GPT-PM's own plan-level BLOCKER, GO obtained, V2 proposal sent
 
