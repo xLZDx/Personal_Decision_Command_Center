@@ -137,3 +137,23 @@ export type {
   SyncGmailAccountHistoryResult,
   SyncGmailAccountHistoryOptions,
 } from './gmail/history-sync.js';
+
+export {
+  GMAIL_RATE_WINDOW_CEILING,
+  GMAIL_API_DAILY_CEILING,
+  GMAIL_AI_NEURON_DAILY_CEILING,
+  GMAIL_API_UNIT_COST,
+  reserveGmailRateWindow,
+  reserveGmailApiUnits,
+  reserveGmailAiNeurons,
+  reconcileGmailAiNeurons,
+} from './gmail/quota.js';
+export type {
+  ReserveGmailRateWindowOptions,
+  ReserveGmailRateWindowResult,
+  ReserveGmailApiUnitsOptions,
+  ReserveGmailApiUnitsResult,
+  ReserveGmailAiNeuronsOptions,
+  ReserveGmailAiNeuronsResult,
+  ReconcileGmailAiNeuronsOptions,
+} from './gmail/quota.js';

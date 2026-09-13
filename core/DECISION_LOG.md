@@ -3,6 +3,105 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 6: quota limiter primitives (proposal §2.9) implemented, 4-specialist
+internal review completed and fully remediated in one batch, about to enter GPT-PM round 1 (3-round
+hard cap, told to GPT-PM up front per standing operator instruction)
+
+**Scope**: three independent atomic D1-reservation primitives for the three Gmail/Workers-AI quota
+resources the proposal names -- `reserveGmailRateWindow` (60s per-account window,
+`gmail_rate_reservations`, 6,000 units/min), `reserveGmailApiUnits` (daily project-wide,
+`gmail_api_budget_counters`, 80,000,000 units/day), `reserveGmailAiNeurons` +
+`reconcileGmailAiNeurons` (daily, `gmail_ai_neuron_budget`, 10,000 Neurons/day, reserve-before-call
++ reconcile-after-call). New file `packages/domain/src/gmail/quota.ts`, mirroring
+`packages/domain/src/budget.ts`'s `reserveBudget` UPSERT shape. PRIMITIVES ONLY -- no real caller
+exists yet (`services/gmail-connector` Worker is a later checkpoint), confirmed inert via
+repo-wide grep before and after remediation.
+
+**Internal review (4 specialists in parallel, per CLAUDE.md §17 "run internal review BEFORE
+GPT-PM")**: database-reviewer, type-design-analyzer, functional-test-reviewer, code-reviewer.
+Complete deduplicated finding set (2 findings independently confirmed by 2+ reviewers each are
+marked so):
+
+1. **[CONFIRMED x2] `windowStartEpochMinute` had zero runtime validation**, unlike every other
+   risky field in `reserveGmailRateWindow` -- a caller passing a millisecond-scale value (forgetting
+   the required `Math.floor(Date.now()/60000)`) would silently create a fresh never-repeated bucket
+   key per call, defeating the entire 60-second rate ceiling with no error. **Fixed**: added
+   `assertNonNegativeInteger` guard.
+2. **[CONFIRMED x3 -- database-reviewer, code-reviewer, type-design-analyzer] `reconcileGmailAiNeurons`'s
+   `cap` parameter was completely unvalidated**, contradicting the function's own documented
+   never-throw contract (an out-of-range `cap` could make the clamp itself produce a value outside
+   `[0, cap]`, defeating the one guarantee the clamp exists to provide). **Fixed**: moved `cap` into
+   `ReconcileGmailAiNeuronsOptions` (for shape parity with the three reserve functions, also flagged
+   independently) and validated it identically to its siblings.
+3. **[type-design-analyzer, MAJOR] `neuronsReserved` (cumulative day total, returned by
+   `reserveGmailAiNeurons`) vs. `estimatedNeurons` (per-call amount, required by
+   `reconcileGmailAiNeurons`) were easy to confuse** -- passing the former where the latter belongs
+   would corrupt the whole day's ledger in one call. **Fixed**: added `neuronsRequested` (echoes
+   `opts.neurons`) to `ReserveGmailAiNeuronsResult` so the correct per-call value is naturally in
+   scope at the reconcile call site; doc comments on both fields now cross-reference the risk
+   explicitly. A test asserts the two fields genuinely diverge on a second same-day call.
+4. **[functional-test-reviewer, MAJOR] `reserveGmailApiUnits`'s real 80,000,000/day boundary had
+   zero test coverage, and uniquely among the three quota tables, `gmail_api_budget_counters` had no
+   upper-bound schema `CHECK`** (its two siblings both have one) -- so this one resource's daily
+   ceiling was enforced ONLY by application code with no defense-in-depth backstop. **Fixed two
+   ways**: (a) added a 3-call boundary test reaching the exact 80,000,000 ceiling via large
+   single-call reservations (no 80M-iteration loop needed); (b) new migration
+   `0009_gmail_api_budget_counters_ceiling_check.sql` (DROP+CREATE rebuild, SQLite cannot ALTER ADD
+   CHECK -- same pattern migration 0008 already established) adds
+   `CHECK (units_consumed >= 0 AND units_consumed <= 80000000)`, giving this table the same
+   defense-in-depth its two siblings already had. `packages/testkit/src/schema.ts`'s `loadG3Schema()`
+   updated to include it.
+5. **[database-reviewer, MAJOR, with a worked arithmetic counter-example -- the most serious finding]
+   `reconcileGmailAiNeurons`'s clamp (`MAX(0, MIN(cap, neurons_reserved + delta))`) is NOT
+   associative under concurrent reconciliations of the same day.** Two reconciliations with the exact
+   same two logical deltas produce DIFFERENT final totals depending on D1's own serialization order,
+   whenever one delta alone would have needed clamping and the combined total would not have (or vice
+   versa) -- confirmed empirically: day total 200 (two 100-Neuron reservations, cap 10000); A
+   reconciles to actual=9950 (delta +9850, clamps to 10000 alone), B reconciles to actual=0 (delta
+   -100). A-then-B ends at 9900; B-then-A ends at 9950. **NOT fixed via redesign** -- a real fix
+   (tracking a raw, never-clamped running total in a separate column, clamping only at read time for
+   admission decisions) is a genuine schema/design change, not a mechanical validation gap, and per
+   CLAUDE.md §17 ("never silently reinterpret a product requirement... disagree out loud, with
+   evidence") this is being surfaced to GPT-PM in round 1's own scope note rather than redesigned
+   unilaterally. **Mitigated, not fixed**: the function's own doc comment (now in both
+   `quota.ts`'s module header and `reconcileGmailAiNeurons`'s own comment) states the exact limitation
+   and the worked counter-example precisely, replacing the prior overclaiming language ("the day's
+   real remaining budget reflects real usage"). A new test
+   (`documents (does not assert as correct) the known accepted concurrent-reconciliation ordering
+   limitation`) reproduces the exact counter-example against the real implementation (verified: 9900
+   vs. 9950, confirming the reviewer's arithmetic was correct) so the limitation stays honest against
+   the code rather than only asserted in prose. **Why this is being escalated rather than fixed
+   unilaterally**: the reviewer's own words were "a design tradeoff to hand back to the plan owner,
+   not something I should redesign here" -- the alternative fix has real complexity costs (new
+   column, dual-write bookkeeping) for what remains a bounded-drift, never-throws defect on a
+   resource whose actual backstop is Cloudflare's own platform-level Neuron allocation, not this
+   ledger's exactness. This module's existing invariant (never throw over an already-completed
+   external call; never leave `[0, cap]`) still holds under every interleaving -- only precision
+   degrades, not safety.
+6. **[functional-test-reviewer, MINOR x6, all fixed]**: softened the "genuinely CONCURRENT" test
+   doc comment to state what the concurrency tests actually prove (regression protection against a
+   future non-atomic reservation refactor, given the D1 test shim's FIFO queue already serializes
+   every statement) rather than overclaim live race-freedom proof; added missing
+   `assertPositiveInteger`-class tests for `reserveGmailApiUnits` and the non-integer half for
+   `reserveGmailAiNeurons`; added a missing exceeds-custom-cap test for `reserveGmailAiNeurons`; added
+   a concurrency test for `reserveGmailAiNeurons` (previously asymmetric with its two siblings); added
+   a cap-respected-via-options test for `reconcileGmailAiNeurons`.
+7. **[code-reviewer, MINOR, accepted as documented limitation, not fixed]**: the effective `cap` used
+   at reservation time is not persisted, so a caller reconciling under a different cap than the one
+   actually in force at reservation time could diverge -- documented in `reconcileGmailAiNeurons`'s
+   own doc comment (the caller must pass the identical cap to both calls); not schema-enforced, since
+   doing so would require persisting per-day cap state this primitives-only module does not yet need.
+
+**Verification after full remediation**: `packages/domain` test suite 237/237 passing (was 228
+before this checkpoint's 34-test `quota.test.ts`, net +9 from the original 25 written pre-review);
+`packages/testkit` 7/7 passing; `tsc --noEmit` clean across the whole repo; `prettier --check` clean
+on every file this checkpoint touched (a pre-existing, unrelated 51-file formatting drift elsewhere
+in the repo was observed and deliberately left untouched, per "preserve unrelated behavior").
+
+**Initial commit** carries this full remediated state (not the pre-review draft) -- the internal
+review ran before any commit, matching CLAUDE.md §17's sequencing rule ("run the internal specialist
+reviewers BEFORE GPT-PM... this is sequencing, not a suggestion").
+
 ## 2026-09-13 — G3 checkpoint 5 GATE CLOSED: round 3 (FINAL) verdict MAJOR (0 BLOCKER / 2 MAJOR /
 1 MINOR), gate-ruled closed by GPT-PM under the operator's 3-round hard cap; MINOR fixed, both
 MAJORs logged as accepted residual risk / mandatory follow-up backlog, push deferred pending a
