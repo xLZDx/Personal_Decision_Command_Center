@@ -1,0 +1,16 @@
+{
+  "name": "@pdos/ingest-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "G2 ingest Worker: HMAC-authenticated connector fetch endpoint, plus the scheduled stale-lease-recovery + budget-gated reconciler dispatch loop",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@cloudflare/workers-types": "*",
+    "@pdos/contracts": "*",
+    "@pdos/domain": "*"
+  },
+  "devDependencies": {
+    "@pdos/testkit": "*"
+  }
+}

@@ -1,0 +1,43 @@
+# G2 ingest Worker: the HMAC-authenticated connector fetch endpoint (POST /ingest/gmail,
+# POST /ingest/telegram) plus the scheduled stale-lease-recovery + budget-gated reconciler
+# dispatch loop (services/ingest/src/index.ts).
+#
+# Secrets (never in this file -- `wrangler secret put <NAME> --config infra/cloudflare/
+# ingest.wrangler.toml`): GMAIL_V1_HMAC_SECRET, TELEGRAM_V1_HMAC_SECRET. A new connector or a
+# rotated key version is a new secret of this same naming shape
+# (`<CONNECTOR>_<KEYVERSION>_HMAC_SECRET`, see services/ingest/src/env.ts's `resolveSecret`) plus
+# a matching `ingest_signing_keys` row (packages/domain/src/auth/keys.ts) -- never a code change.
+
+name = "pdos-ingest"
+main = "src/index.ts"
+compatibility_date = "2026-09-10"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pdos-g2"
+database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
+
+# Producer binding: the scheduled handler enqueues exactly the event_ids `reconcileDispatch`
+# (packages/domain/src/reconciler.ts) already marked DISPATCHED -- budget reserved and the outbox
+# row updated BEFORE this send, never after (the HARD_ZERO fix that module's own comment documents).
+[[queues.producers]]
+queue = "pdos-ingest-dispatch"
+binding = "INGEST_QUEUE"
+
+# TDD §17's Processing Reconciler + stale-lease-recovery sweep run on this schedule. Every 1
+# minute is Cloudflare Cron Triggers' own minimum granularity; a value should never be MUCH looser
+# than the lease duration configured for services/processor (infra/cloudflare/
+# processor.wrangler.toml's LEASE_DURATION_MS), or a genuinely stuck lease sits stale longer than
+# necessary before Phase 1 reclaims it.
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+# Runtime-configurable, always <= packages/domain's HARD_BUDGET_CEILING (2500) -- lowering this
+# needs no code review per TDD §16.3's "configurable downward without review" rule; raising it
+# above the hard ceiling is rejected by `reserveBudget()` itself before touching D1.
+QUEUE_BUDGET_CAP = "2500"
+MAX_PROCESSING_ATTEMPTS = "5"
+RECONCILER_BATCH_SIZE = "25"
+LEASE_RECOVERY_BATCH_SIZE = "25"
+HMAC_TIMESTAMP_WINDOW_MS = "300000"

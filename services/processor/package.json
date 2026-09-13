@@ -1,0 +1,15 @@
+{
+  "name": "@pdos/processor-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "G2 processor Worker: the Queue consumer implementing claim -> (process) -> complete/fail against the fenced processing lease",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@cloudflare/workers-types": "*",
+    "@pdos/domain": "*"
+  },
+  "devDependencies": {
+    "@pdos/testkit": "*"
+  }
+}

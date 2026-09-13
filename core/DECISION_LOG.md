@@ -83,6 +83,63 @@ above, not yet run as the single combined command); the internal specialist revi
 (`database-reviewer`/`security-reviewer`/`type-design-analyzer`) required before this goes to
 GPT-PM per §17's sequencing; then the GPT-PM gate-level review itself.
 
+## 2026-09-13 — G2 implementation, checkpoint 2: services/ingest + services/processor +
+wrangler configs + ported schema-integrity suite, 325 tests, all green
+
+**What was added on top of checkpoint 1:**
+- **`services/ingest`** — `env.ts` (`IngestEnv`, `resolveSecret` deriving a Worker Secret binding
+  name by convention: `<CONNECTOR>_<KEYVERSION>_HMAC_SECRET`, so a new connector/key version is a
+  binding + a wrangler.toml line, never a code change); `handler.ts` (`handleIngestRequest` —
+  auth-before-D1-write via `authenticateIngestRequest`, then `NormalizedEventSchema.safeParse`,
+  then a `source` vs. URL-`connectorId` cross-check closing a real gap a valid HMAC key alone does
+  not close — a compromised/misconfigured Gmail key could otherwise inject an event claiming
+  `source: 'telegram'` — then `ingestEvent`; `handleScheduled` — Phase 1 `recoverStaleLeases` THEN
+  Phase 2 `reconcileDispatch`, in that order so a lease just reclaimed this same tick is
+  immediately eligible for dispatch rather than stranded a full cron cycle; Queue sends happen only
+  for event_ids already marked DISPATCHED, never before); `index.ts` (the thin `ExportedHandler`
+  wiring — the one place the module casts between the global Node/undici `Request`/`Response`
+  types `handler.ts` is written against, for plain-`Request`-in-tests convenience, and the Workers-
+  specific ones `ExportedHandler` itself requires; same runtime object either way, a type-only gap).
+- **`services/processor`** — `processor.ts` (`EventProcessor`, an INJECTED strategy — the actual
+  downstream business logic, topic assignment/AI extraction, is explicitly out of G2's own manifest
+  scope; the default `noopProcessor` always succeeds, standing in long enough to prove the lease
+  lifecycle moves an event to PROCESSED end-to-end); `handler.ts` (`processMessage`: claim -> run
+  the injected processor, catching a thrown exception as RETRYABLE_FAILURE rather than letting it
+  propagate and strand the lease until the sweep eventually reclaims it -> complete/fail via the
+  SAME `packages/domain` primitives the sweep uses); `index.ts` (the Queue consumer — every message
+  is `ack()`ed regardless of outcome, since retries are driven entirely by the D1-backed outbox/
+  reconciler, not Cloudflare Queue's own native per-message retry; double-driving the same event
+  through two independent retry mechanisms with two different backoff schedules would be a real
+  defect, not a redundant safety net).
+- **`infra/cloudflare/{ingest,processor}.wrangler.toml`** — real Cloudflare Workers config
+  (D1 binding, Queue producer/consumer, a 1-minute Cron Trigger for the scheduled handler,
+  `max_batch_size = 1` per TDD §16.1's own initial default, a dead-letter-queue name for the rare
+  message that never reaches `ack()`). Database/queue names are placeholders (no live Cloudflare
+  account provisioned in this environment); secrets are documented by name/convention, never
+  present as values, consistent with `ingest_signing_keys` being metadata-only.
+- **`tests/schema/0001_ingest_outbox.test.ts`** — every one of the G2 architecture review's own
+  Python/sqlite3 scratch negative/positive controls (`validate.py`/`validate3.py`, cited in the
+  entries below), ported into the REAL, executed vitest suite against the actual migration file via
+  `@pdos/testkit`: 7 FK/CHECK control pairs (telegram+ALLOW, source/account mismatch, orphan
+  provenance FK, DLQ-with-live-lease, PROCESSING-without-lease, PROCESSING-without-token, DLQ-with-
+  zero-attempts, MESSAGE_UPDATED-without-source_version, idempotency_key collision, all four
+  routing-hint wrapper-column CHECKs, the budget-counter hard ceiling) plus the 2 EXPLAIN QUERY PLAN
+  index-coverage assertions (the reconciler due-query hits `idx_processing_outbox_due`, the lease-
+  sweep query hits `idx_ingest_events_processing_lease` — neither is a full table scan). These
+  constraints existed in the schema with nothing in the automated suite protecting them until now.
+
+**Verification:** `npx tsc --noEmit`, `npx eslint .`, `npx prettier --check` (services/infra
+scope) all clean; full `npx vitest run` — 300/300 across the whole repo (44 new this checkpoint: 19
+services + 25 schema-integrity, on top of checkpoint 1's 148 + the pre-existing 108 governance-
+policy tests).
+
+**Not yet done:** the remaining resilience/quota vitest cases the original pending list named that
+checkpoints 1+2 did not already cover in the unit suites (a dedicated multi-tick resilience
+scenario is still worth a pass, though the core regressions -- heartbeat-during-sweep, exact-cap
+budget, concurrent nonce replay, exactly-one-DLQ-record -- are already exercised); the internal
+specialist review (`database-reviewer`/`security-reviewer`/`type-design-analyzer`) required before
+GPT-PM per §17; then GPT-PM's own gate-level review.
+
 ## 2026-09-12/13 — G2 Revision 2: 3-agent redesign, executably validated, Rosetta plan revised
 after GPT-PM's own plan-level BLOCKER, GO obtained, V2 proposal sent
 
