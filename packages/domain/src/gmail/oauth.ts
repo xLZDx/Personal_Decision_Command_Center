@@ -122,40 +122,68 @@ export type ConnectGmailAccountResult =
 
 /**
  * `GET /oauth/callback`'s post-consumption step (proposal §2.5): exchanges the code, then --
- * fail-closed -- refuses to touch `gmail_connections` at all if Google omitted a refresh token,
- * so a reconnect that unexpectedly doesn't yield one can never silently overwrite a working
- * connection with a token-less state. `ON CONFLICT ... DO UPDATE` makes this idempotent for both a
- * first-time connect and a reconnect while a connection row still exists (disconnect deletes the
- * row entirely, but a reconnect without an intervening disconnect is also valid per §2.5's
- * `prompt=consent` semantics).
+ * fail-closed -- refuses to touch `gmail_connections` at all if Google omitted a refresh token, so
+ * a reconnect that unexpectedly doesn't yield one can never silently overwrite a working connection
+ * with a token-less state.
  *
- * **`DISCONNECT_IN_PROGRESS` fence, unconditional on lease PRESENCE (not freshness)** (GPT-PM
- * round-2 through round-6 MAJOR on checkpoint 4, verified against Google's own documentation --
- * see `disconnectGmailAccount`'s doc comment for the full evidence and the round-5/6 history of why
- * two earlier attempts at this were each found unsafe): the `ON CONFLICT ... DO UPDATE ... WHERE`
- * clause refuses to write whenever `disconnect_lease_token IS NOT NULL` on this row -- regardless of
- * `disconnect_lease_expires_at`. Without this, a reconnect landing during an unrelated disconnect's
- * Google-side revoke call would issue a credential that revoke call then invalidates -- Google's
- * revocation is project-wide, not scoped to the single token passed to the endpoint, so no amount of
- * purely-local fencing on the connect side alone could close this; the disconnect side must hold an
- * exclusive window instead. That window is deliberately NOT time-bounded from connect's perspective:
- * `disconnectGmailAccount` never knows in advance how long a genuine Google revoke call will take,
- * and no client-side elapsed-time signal (a timeout, a renewal heartbeat) can prove the actual
- * outbound HTTP request has stopped running at Google -- only the row's lease actually clearing
- * (via `disconnectGmailAccount` completing, or being retried to completion) is honest proof. A
- * disconnect that crashes mid-flight leaves the account's lease held until a LATER
- * `disconnectGmailAccount` call is retried for the same account (safe and idempotent, per that
- * function's own doc comment) and actually finishes -- never resolved by `connectGmailAccount`
- * itself silently timing out and proceeding.
+ * **History (rounds 1-7): a lease held only on `gmail_connections` itself, checked at the final
+ * write.** Rounds 1-6 closed reconnect-vs-disconnect and (round 7) disconnect-vs-disconnect races
+ * by having `disconnectGmailAccount` hold an exclusive `disconnect_lease_token` on its row for the
+ * whole Google-revoke window, and having this function's own `INSERT ... ON CONFLICT ... DO
+ * UPDATE ... WHERE disconnect_lease_token IS NULL` refuse to write while that lease was held --
+ * unconditional on the lease's freshness, never on elapsed client-side time (two earlier
+ * timeout/heartbeat-based attempts at bounding it were each correctly rejected: neither one can
+ * cancel the actual outbound HTTP request to Google, so elapsed time is never proof the request has
+ * stopped running there).
+ *
+ * **Round 8's full-sweep MAJOR (GPT-PM, requested as one comprehensive review rather than one
+ * finding per round): that lease lived ONLY on `gmail_connections`, and this function called
+ * `exchangeCode()` BEFORE checking it at all.** The `WHERE disconnect_lease_token IS NULL` clause
+ * is evaluated only on the `ON CONFLICT` (`DO UPDATE`) branch -- the plain `INSERT` branch, taken
+ * whenever the row does not currently exist, evaluates no `WHERE` clause at all. Failure scenario
+ * GPT-PM demonstrated: reconnect A calls `exchangeCode()` (unchecked) while disconnect B is already
+ * mid-`revokeToken()` on the same account; B finishes, deletes the row (the same lease that would
+ * have refused A is now gone WITH the row); A's own `INSERT` then finds no conflicting row and
+ * succeeds unconditionally -- A's fresh credential is persisted as `CONNECTED` having been minted
+ * inside the exact revocation window this mechanism exists to exclude.
+ *
+ * **The fix: a SEPARATE, never-deleted `gmail_oauth_lifecycle` row (migration
+ * `0004_gmail_oauth_lifecycle_lock.sql`) that BOTH `connectGmailAccount` and `disconnectGmailAccount`
+ * acquire as a single mutually exclusive lock, BEFORE either one makes its own first Google call.**
+ * At most one of {a connect attempt, a disconnect attempt} may hold `lock_token` for a given account
+ * at any time -- acquired here, atomically, before `exchangeCode()` is ever invoked, and held for
+ * this function's ENTIRE external-call + write window, released only after the local
+ * `gmail_connections` write actually completes (or on any failure, see below). Because the lock
+ * lives on a row that `disconnectGmailAccount` never deletes, it survives exactly the case that
+ * broke the old design: a competing disconnect deleting `gmail_connections` mid-flight can no
+ * longer make this function's own exclusivity check silently disappear along with it.
+ *
+ * **The SAME acquisition also enforces `REVOKE_PROPAGATION_BUFFER_MS`** (GPT-PM round-8 MAJOR #2,
+ * see that constant's own doc comment for the honest limits of this mitigation): the guard is
+ * `lock_token IS NULL AND (revoke_settled_at IS NULL OR revoke_settled_at <= ?)`, refusing to
+ * acquire (and therefore refusing `exchangeCode()`) until the configured buffer has elapsed since
+ * the account's last completed revoke, not merely since the lease cleared.
+ *
+ * **Round-9 internal review MAJOR (architect): the credential write is now FENCED on still holding
+ * this exact lock, not merely checked once at acquisition.** `exchangeCode()` is an `await` boundary
+ * -- between acquiring the lock above and this function's own `db.batch()` write below, a DIFFERENT
+ * actor could, in principle, steal this account's lock (see `disconnectGmailAccount`'s stale-
+ * CONNECT-lock takeover, itself only safe BECAUSE of this fence). Architect demonstrated this is
+ * reachable via the documented manual-recovery path: an operator clearing a wedged lock (see
+ * `DisconnectAmbiguousExternalCallError`'s doc comment) while this call is still mid-`exchangeCode()`
+ * opens exactly that window. The credential INSERT below is therefore written as
+ * `INSERT INTO ... SELECT ... WHERE EXISTS (SELECT 1 FROM gmail_oauth_lifecycle WHERE
+ * source_account_id = ? AND lock_token = ?)` -- an `INSERT ... SELECT` inserts zero rows (on EITHER
+ * the plain-insert or the `ON CONFLICT` branch -- both are fed by the same `SELECT`) if the fence
+ * fails, exactly the "condition the write itself, not just the branch that happens to run" fix that
+ * closed round-8 finding 1 in the first place, applied here symmetrically. If the fence fails,
+ * `ConnectLockLostBeforeWriteError` is thrown rather than ever reporting `CONNECTED` without having
+ * actually held exclusivity for the write.
  *
  * **`DISCONNECT_IN_PROGRESS` is NOT ordinarily retryable with the same callback** (GPT-PM round-4
- * MINOR): `exchangeCode` above runs BEFORE this guard, and Google authorization codes are one-time-
- * use -- by the time this function can even observe an active disconnect lease, the code has already
- * been irreversibly consumed at Google. A caller (the future `services/gmail-connector` Worker,
- * §2.1) that receives `DISCONNECT_IN_PROGRESS` from this function MUST treat it as "the OAuth flow
- * needs to be restarted from `/oauth/start` for a fresh code," never as "retry this same callback
- * shortly" -- retrying with the same, already-consumed code will fail at Google regardless of
- * whether the disconnect lease has since cleared.
+ * MINOR, unchanged by round 8): Google authorization codes are one-time-use, so a caller (the future
+ * `services/gmail-connector` Worker, §2.1) that receives `DISCONNECT_IN_PROGRESS` MUST restart the
+ * OAuth flow from `/oauth/start` for a fresh code, never retry this same callback.
  */
 export async function connectGmailAccount(
   db: D1Database,
@@ -163,45 +191,153 @@ export async function connectGmailAccount(
   googleClient: GoogleOAuthClient,
   opts: ConnectGmailAccountOptions,
 ): Promise<ConnectGmailAccountResult> {
-  const exchanged = await googleClient.exchangeCode(opts.code, opts.codeVerifier);
-  if (!exchanged.refreshToken) return { outcome: 'NO_REFRESH_TOKEN' };
+  const lockToken = generateRandomToken();
+  const eligibleAfter = new Date(Date.parse(opts.now) - REVOKE_PROPAGATION_BUFFER_MS).toISOString();
 
-  const aad: RefreshTokenAad = {
-    gmailAccountId: opts.sourceAccountId,
-    kekVersion: opts.kekVersion,
-  };
-  const encrypted = await encryptRefreshToken(kek, exchanged.refreshToken, aad);
-
-  const result = await db
+  const acquired = await db
     .prepare(
-      `INSERT INTO gmail_connections
-         (source_account_id, gmail_email, encrypted_refresh_token, refresh_token_iv, kek_version,
-          collection_mode, connected_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO gmail_oauth_lifecycle (source_account_id, source, lock_token, lock_kind, lock_acquired_at)
+       VALUES (?, 'gmail', ?, 'CONNECT', ?)
        ON CONFLICT (source_account_id) DO UPDATE SET
-         gmail_email = excluded.gmail_email,
-         encrypted_refresh_token = excluded.encrypted_refresh_token,
-         refresh_token_iv = excluded.refresh_token_iv,
-         kek_version = excluded.kek_version,
-         collection_mode = excluded.collection_mode,
-         updated_at = excluded.updated_at
-       WHERE disconnect_lease_token IS NULL`,
+         lock_token = excluded.lock_token,
+         lock_kind = excluded.lock_kind,
+         lock_acquired_at = excluded.lock_acquired_at
+       WHERE lock_token IS NULL AND (revoke_settled_at IS NULL OR revoke_settled_at <= ?)`,
     )
-    .bind(
-      opts.sourceAccountId,
-      exchanged.gmailEmail,
-      encrypted.ciphertext,
-      encrypted.iv,
-      opts.kekVersion,
-      opts.collectionMode,
-      opts.now,
-      opts.now,
-    )
+    .bind(opts.sourceAccountId, lockToken, opts.now, eligibleAfter)
     .run();
 
-  if (result.meta.changes === 0) return { outcome: 'DISCONNECT_IN_PROGRESS' };
+  if (acquired.meta.changes === 0) return { outcome: 'DISCONNECT_IN_PROGRESS' };
 
-  return { outcome: 'CONNECTED' };
+  try {
+    const exchanged = await googleClient.exchangeCode(opts.code, opts.codeVerifier);
+    if (!exchanged.refreshToken) {
+      await releaseLifecycleLock(db, opts.sourceAccountId, lockToken);
+      return { outcome: 'NO_REFRESH_TOKEN' };
+    }
+
+    const aad: RefreshTokenAad = {
+      gmailAccountId: opts.sourceAccountId,
+      kekVersion: opts.kekVersion,
+    };
+    const encrypted = await encryptRefreshToken(kek, exchanged.refreshToken, aad);
+
+    // Both statements in one batch: the credential write and the lock release/revoke_settled_at
+    // reset happen together, or neither does -- a batch failure leaves the lock held (safe;
+    // matches this function's own catch-all release below) rather than ever releasing exclusivity
+    // without the credential actually having been persisted. The credential write is itself FENCED
+    // on still holding `lockToken` (round-9 MAJOR fix, see this function's own doc comment) -- an
+    // `INSERT ... SELECT ... WHERE EXISTS (...)` inserts zero rows on either branch if the fence
+    // fails, rather than only checking ownership on the `ON CONFLICT` branch the way the pre-round-8
+    // design did for the lock acquisition itself.
+    const results = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO gmail_connections
+             (source_account_id, gmail_email, encrypted_refresh_token, refresh_token_iv, kek_version,
+              collection_mode, connected_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM gmail_oauth_lifecycle WHERE source_account_id = ? AND lock_token = ?
+           )
+           ON CONFLICT (source_account_id) DO UPDATE SET
+             gmail_email = excluded.gmail_email,
+             encrypted_refresh_token = excluded.encrypted_refresh_token,
+             refresh_token_iv = excluded.refresh_token_iv,
+             kek_version = excluded.kek_version,
+             collection_mode = excluded.collection_mode,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(
+          opts.sourceAccountId,
+          exchanged.gmailEmail,
+          encrypted.ciphertext,
+          encrypted.iv,
+          opts.kekVersion,
+          opts.collectionMode,
+          opts.now,
+          opts.now,
+          opts.sourceAccountId,
+          lockToken,
+        ),
+      db
+        .prepare(
+          `UPDATE gmail_oauth_lifecycle
+           SET lock_token = NULL, lock_kind = NULL, lock_acquired_at = NULL, revoke_settled_at = NULL
+           WHERE source_account_id = ? AND lock_token = ?`,
+        )
+        .bind(opts.sourceAccountId, lockToken),
+    ]);
+
+    const credentialWrite = results[0];
+    const lockRelease = results[1];
+    if (
+      credentialWrite === undefined ||
+      credentialWrite.meta.changes === 0 ||
+      lockRelease === undefined ||
+      lockRelease.meta.changes === 0
+    ) {
+      // The fence failed: this call no longer held `lockToken` by the time the batch ran, so the
+      // credential write above did NOT happen (the `WHERE EXISTS` fence made it a no-op) even
+      // though `exchangeCode()` genuinely succeeded. Never report CONNECTED without having actually
+      // held exclusivity for the write -- see ConnectLockLostBeforeWriteError's own doc comment.
+      throw new ConnectLockLostBeforeWriteError(opts.sourceAccountId);
+    }
+
+    return { outcome: 'CONNECTED' };
+  } catch (error) {
+    // Covers both exchangeCode() failing (no lingering external effect to be ambiguous about --
+    // unlike revokeToken()/stopWatch() below, it is a one-way "give me a token" call that never
+    // mutates anything at Google) and ConnectLockLostBeforeWriteError above (this call no longer
+    // holds `lockToken`, so this release is a harmless fenced no-op) -- releasing immediately on ANY
+    // failure here is always safe.
+    await releaseLifecycleLock(db, opts.sourceAccountId, lockToken);
+    throw error;
+  }
+}
+
+/** Shared by both `connectGmailAccount` and `disconnectGmailAccount`'s own failure paths: releases
+ *  the `gmail_oauth_lifecycle` lock fenced on the exact token the caller acquired, so a retry that
+ *  has already re-acquired a NEW lock can never be clobbered by this running late. Never touches
+ *  `revoke_settled_at` -- only `disconnectGmailAccount`'s own successful-revoke path sets that. */
+async function releaseLifecycleLock(
+  db: D1Database,
+  sourceAccountId: string,
+  lockToken: string,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE gmail_oauth_lifecycle SET lock_token = NULL, lock_kind = NULL, lock_acquired_at = NULL
+       WHERE source_account_id = ? AND lock_token = ?`,
+    )
+    .bind(sourceAccountId, lockToken)
+    .run();
+}
+
+/**
+ * Thrown by `connectGmailAccount` when its credential-write fence (`WHERE EXISTS (SELECT 1 FROM
+ * gmail_oauth_lifecycle WHERE source_account_id = ? AND lock_token = ?)`, see that function's own
+ * doc comment) finds it no longer holds the lock it acquired at the start of the call -- a
+ * DIFFERENT actor (in practice: an operator/admin reconciliation step clearing a wedged lock, or a
+ * disconnect that stole a stale CONNECT lock, see `disconnectGmailAccount`'s own doc comment)
+ * acquired it in the window between this call's own acquisition and its final write. `exchangeCode()`
+ * genuinely succeeded -- a real, live refresh token was obtained from Google -- but it was
+ * deliberately NOT persisted, since doing so without exclusivity would reproduce round-8 finding 1's
+ * exact failure class (a credential written without a currently-held guarantee that no competing
+ * disconnect is concurrently revoking it). The caller should treat this like `DISCONNECT_IN_PROGRESS`:
+ * restart the OAuth flow from `/oauth/start` for a fresh authorization code rather than retrying this
+ * same callback (the code Google issued was already consumed by the `exchangeCode()` call above).
+ */
+export class ConnectLockLostBeforeWriteError extends Error {
+  constructor(sourceAccountId: string) {
+    super(
+      `connectGmailAccount: the gmail_oauth_lifecycle lock for source_account_id=${sourceAccountId} ` +
+        'was no longer held by the time the credential write ran (exchangeCode() succeeded, but ' +
+        'persisting its result was refused to avoid writing without exclusivity). Restart the OAuth ' +
+        'flow from /oauth/start for a fresh authorization code.',
+    );
+    this.name = 'ConnectLockLostBeforeWriteError';
+  }
 }
 
 export type DisconnectGmailAccountResult =
@@ -211,237 +347,230 @@ export type DisconnectGmailAccountResult =
   | { outcome: 'DISCONNECT_IN_PROGRESS' };
 
 /**
- * Thrown by `disconnectGmailAccount` when `googleClient.revokeToken` itself rejects (GPT-PM round-7
- * MAJOR). Distinct from an ordinary thrown error on purpose: the request may have reached Google
- * before failing locally (e.g. a connection reset after the server already processed it), so
- * whether the project-wide revocation actually happened is UNKNOWN, not merely "failed and safe to
- * retry." The disconnect lease is deliberately left in place when this is thrown (never released --
- * see the function's own doc comment) so neither a reconnect nor a fresh disconnect attempt can
- * proceed while that ambiguity is unresolved. Recovering from this requires an explicit
- * reconciliation step outside this domain module's current scope (e.g. an operator/admin action
- * that independently confirms the token's actual state with Google before clearing the lease) --
- * deferred here the same way the real `fetch`-backed `GoogleOAuthClient` implementation and
- * key-ring resolution are deferred to the `services/gmail-connector` Worker, §2.1. A caller MUST
- * treat this differently from an ordinary error: it is not "try again," it is "stop and escalate."
+ * Thrown by `disconnectGmailAccount` when an external Google call it made (`stopWatch` OR
+ * `revokeToken`) itself rejects (GPT-PM round-7 MAJOR, widened to `stopWatch` by round-8 MAJOR #3 --
+ * see the function's own doc comment). Distinct from an ordinary thrown error on purpose: the
+ * request may have reached Google before failing locally (e.g. a connection reset after the server
+ * already processed it), so whether that call's real effect at Google actually happened is UNKNOWN,
+ * not merely "failed and safe to retry." The `gmail_oauth_lifecycle` lock is deliberately left held
+ * when this is thrown (never released -- see the function's own doc comment) so neither a reconnect
+ * nor a fresh disconnect attempt can proceed while that ambiguity is unresolved.
+ *
+ * **Recovering from this requires an operator/admin action that independently confirms the
+ * account's actual state with Google, THEN calls `reconcileWedgedGmailDisconnectLock` (below) --
+ * never a hand-written `UPDATE gmail_oauth_lifecycle SET lock_token = NULL ...`.** Round-9 internal
+ * review MAJOR (architect): an earlier revision of this comment said only "clearing the lock,"
+ * which is UNSAFE to follow literally -- if Google confirms the revoke genuinely happened,
+ * `revoke_settled_at` MUST also be recorded at the confirmation time, or `connectGmailAccount`'s
+ * `REVOKE_PROPAGATION_BUFFER_MS` guard (which reads `revoke_settled_at`) never applies, and a
+ * reconnect could proceed immediately after reconciliation with zero propagation buffer --
+ * defeating the exact protection round-8 MAJOR #2 added. `reconcileWedgedGmailDisconnectLock` takes
+ * the confirmed outcome as an explicit parameter so this cannot be gotten wrong by omission the way
+ * free-hand SQL could. `listWedgedGmailDisconnectLocks` (below) is the companion read path -- there
+ * was previously no way to even find which accounts are wedged, since `lock_acquired_at` was written
+ * in several places but read in none. Building a full admin UI/tool around these two primitives is
+ * still out of this domain module's scope, deferred the same way the real `fetch`-backed
+ * `GoogleOAuthClient` implementation and key-ring resolution are deferred to the
+ * `services/gmail-connector` Worker, §2.1 -- but the SAFETY-CRITICAL part (the write must be atomic
+ * and must not omit `revoke_settled_at` when appropriate) is not something a future admin tool
+ * should have to rediscover from prose, so it lives here as a tested primitive instead. A caller
+ * MUST treat this differently from an ordinary error: it is not "try again," it is "stop and
+ * escalate."
  */
-export class DisconnectAmbiguousRevokeError extends Error {
+export class DisconnectAmbiguousExternalCallError extends Error {
   constructor(cause: unknown) {
     super(
-      'disconnectGmailAccount: revokeToken failed ambiguously -- Google may have already processed ' +
-        'the revocation before this error surfaced locally, so the disconnect lease was ' +
-        'intentionally left in place rather than released. This account needs explicit ' +
-        'reconciliation before any further connect or disconnect attempt can safely proceed.',
+      'disconnectGmailAccount: an external Google call (stopWatch or revokeToken) failed ' +
+        'ambiguously -- Google may have already processed it before this error surfaced locally, ' +
+        'so the OAuth lifecycle lock was intentionally left in place rather than released. This ' +
+        'account needs explicit reconciliation before any further connect or disconnect attempt ' +
+        'can safely proceed.',
       { cause },
     );
-    this.name = 'DisconnectAmbiguousRevokeError';
+    this.name = 'DisconnectAmbiguousExternalCallError';
   }
 }
 
 /**
- * How long a disconnect holds exclusive rights to revoke/finalize this account's connection.
- *
- * **Diagnostic only, as of GPT-PM round-7 MAJOR -- does not gate anything.** Rounds up to 6 used
- * this to let a LATER `disconnectGmailAccount` call automatically take over an "expired" lease from
- * an earlier one; GPT-PM round 7 correctly rejected that too, for the SAME reason rounds 4-6
- * rejected using elapsed time to authorize reconnect: two disconnect attempts could then both have
- * a genuine `revokeToken` in flight at once, and whichever finishes first deletes the row and opens
- * the door to reconnect while the OTHER's revoke might still be live -- no client-side timing signal
- * can rule that out. Both `connectGmailAccount`'s and `disconnectGmailAccount`'s OWN guards now
- * check only `disconnect_lease_token IS NULL`, never this duration. The column and this constant
- * are still written (as `disconnect_lease_expires_at`) purely so a future observability/ops tool can
- * query "which accounts have held a disconnect lease for longer than expected" and flag them for
- * manual investigation -- see `DisconnectAmbiguousRevokeError`'s own doc comment for why automatic
- * recovery is deliberately NOT provided by this module.
+ * Conservative best-effort buffer between a successful `revokeToken()` response and treating this
+ * account as eligible for a fresh `connectGmailAccount` (GPT-PM round-8 MAJOR #2, verified against
+ * Google's own OAuth documentation): a 200 response from Google's revoke endpoint is NOT the same
+ * claim as "revocation has taken full effect everywhere" -- Google's own documentation states
+ * revocation can take additional time to propagate after a successful response. This module's
+ * `GoogleOAuthClient` interface has no reconciliation/observability primitive that could confirm
+ * propagation has actually finished (the same class of gap already named for cancellation -- see
+ * `disconnectGmailAccount`'s own doc comment), and no Google-documented SLA exists to derive an
+ * exact bound from. This buffer is therefore an honest, conservative mitigation, NOT a proven
+ * safety guarantee: `connectGmailAccount`'s own lock acquisition additionally requires this much
+ * time to have elapsed since `revoke_settled_at` before a fresh connect may proceed. Revisit if
+ * Google ever publishes an authoritative propagation bound, or once a real reconciliation
+ * capability exists (deferred to `services/gmail-connector`, §2.1, same as the rest of this
+ * module's real-network concerns).
  */
-const DISCONNECT_LEASE_DURATION_MS = 60_000;
+const REVOKE_PROPAGATION_BUFFER_MS = 5 * 60_000;
+
+/**
+ * Round-9 internal review MAJOR (architect): a CONNECT-kind `gmail_oauth_lifecycle` lock, unlike a
+ * DISCONNECT-kind one, has NO legitimate reason to ever be left held past `connectGmailAccount`'s
+ * own `try`/`catch` -- every path through that function releases it (see its own doc comment), and
+ * `exchangeCode()` is explicitly a one-way, non-mutating call at Google (it never revokes or stops
+ * anything), so there is no "Google may have already processed it" ambiguity a stuck CONNECT lock
+ * could ever be protecting. A stuck CONNECT lock can therefore only mean the process holding it
+ * crashed outright (e.g. a Worker eviction) before its `catch` block ran -- pure crash debris, not a
+ * safety signal. Before this fix, that debris permanently blocked `disconnectGmailAccount` too (the
+ * acquisition guard did not read `lock_kind` anywhere), with no way to recover short of a hand-
+ * written `UPDATE gmail_oauth_lifecycle SET lock_token = NULL ...` against undocumented invariants.
+ *
+ * `disconnectGmailAccount`'s acquisition guard may now steal a CONNECT-kind lock once this much
+ * time has passed since `lock_acquired_at` -- but NEVER a DISCONNECT-kind one, which stays a
+ * deliberate dead end exactly as before (see `disconnectGmailAccount`'s own doc comment and the
+ * round-7 MAJOR #1 test). This is safe even if a "stale" CONNECT lock turns out to still be
+ * genuinely in flight (a slow `exchangeCode()`, not a crash): `connectGmailAccount`'s own
+ * credential-write fence (`ConnectLockLostBeforeWriteError`, above) means a late writer that lost
+ * the lock to a steal simply fails cleanly instead of silently overwriting whatever the stealing
+ * disconnect did -- the two fixes compose. The bound itself is generous crash-debris cleanup, not a
+ * correctness contract: `exchangeCode()` is a single outbound HTTP call plus a local encrypt+write,
+ * which should complete in well under a minute even on a slow network.
+ */
+const CONNECT_LOCK_STALE_MS = 2 * 60_000;
+
+export interface DisconnectGmailAccountOptions {
+  sourceAccountId: string;
+  now: string;
+}
 
 /**
  * `POST /oauth/disconnect` (proposal §2.5). Order matters, and is the actual property under test
- * (functional-test review, "disconnect ordering"): acquire the disconnect lease, stop the watch,
- * THEN decrypt+revoke the token, THEN delete the local row, THEN cancel any in-flight OAuth flow.
- * This ordering is the approved design (§2.5's own stated rationale: "a failure between revoke and
- * local delete still leaves the token unusable at Google even if local cleanup is retried later")
- * -- nothing in this function is deleted until every prior step succeeds, so a thrown error at any
- * point (stopWatch, decrypt, or revoke) leaves `gmail_connections` untouched and a retried call is
- * safe and idempotent (`stopWatch` on an already-stopped watch and `revokeToken` on an
- * already-revoked token are expected to be no-ops/idempotent at Google's API, the same assumption
- * G2 already makes about its own retried operations).
+ * (functional-test review, "disconnect ordering"): acquire the lifecycle lock, stop the watch, THEN
+ * decrypt+revoke the token, THEN delete the local row, THEN cancel any in-flight OAuth flow. This
+ * ordering is the approved design (§2.5's own stated rationale: "a failure between revoke and local
+ * delete still leaves the token unusable at Google even if local cleanup is retried later") --
+ * nothing in this function is deleted until every prior step succeeds, so a thrown error at any
+ * point leaves `gmail_connections` untouched and a retried call is safe and idempotent (`stopWatch`
+ * on an already-stopped watch and `revokeToken` on an already-revoked token are expected to be
+ * no-ops/idempotent at Google's API, the same assumption G2 already makes about its own retried
+ * operations).
  *
  * **Tracked risk, not a defect in this function** (security review, checkpoint 4): `kek` is a
  * single `CryptoKey` supplied by the caller, while `row.kek_version` records which key-ring version
- * actually encrypted this row. If a future caller (the `services/gmail-connector` Worker, §2.1)
- * ever passes a key that does NOT match `row.kek_version` -- e.g. naively always importing the
- * newest `GMAIL_KEK_V{n}` instead of resolving the row's own version from the key ring -- `decrypt`
- * fails deterministically and PERMANENTLY for that row (unlike a transient `stopWatch`/`revokeToken`
- * network failure, no retry with the SAME wrong key ever succeeds). Key-ring resolution is already
- * explicitly out of this checkpoint's scope (mirrors checkpoint 3's own GPT-PM-endorsed framing:
- * "the future caller still has to choose the matching versioned key... that responsibility is
- * expressly deferred by this checkpoint rather than missing from the primitive itself") -- the
- * Worker checkpoint that supplies the real `kek` argument MUST resolve the exact key for
- * `row.kek_version`, not a single default, or this exact permanent-stuck-row failure mode becomes
- * live.
+ * actually encrypted this row. Key-ring resolution is explicitly out of this checkpoint's scope
+ * (mirrors checkpoint 3's own GPT-PM-endorsed framing) -- the Worker checkpoint that supplies the
+ * real `kek` argument MUST resolve the exact key for `row.kek_version`, not a single default.
  *
- * **Disconnect lease across the Google revoke boundary, unconditional on freshness** (GPT-PM
- * round-2 through round-6 MAJOR on this checkpoint, migration `0003_gmail_oauth_disconnect_lock.sql`
- * -- see the full history below of two earlier attempts GPT-PM correctly rejected): the round-1 CAS
- * fix further below protects only the LOCAL `gmail_connections` row, but Google's revocation is
- * documented as project-wide -- "Revocation removes all OAuth 2.0 scopes previously granted to a
- * project, invalidating any issued access or refresh tokens for all clients registered under that
- * project" (developers.google.com/identity/protocols/oauth2/native-app). A reconnect that lands
- * DURING this function's `revokeToken` call can issue a credential that the SAME revoke call then
- * invalidates, even though the local row holding it survives untouched. Closed by acquiring an
- * exclusive lease on this row (`disconnect_lease_token`/`disconnect_lease_expires_at`) in the SAME
- * atomic `UPDATE ... RETURNING` that reads the row, BEFORE calling Google at all --
- * `connectGmailAccount`'s own `ON CONFLICT ... DO UPDATE ... WHERE disconnect_lease_token IS NULL`
- * refuses to write for as long as ANY lease value is present, however old, so a reconnect racing the
- * revoke window is refused (`DISCONNECT_IN_PROGRESS`) rather than silently issued and then
- * invalidated underneath the local state.
+ * **History (rounds 1-7), condensed -- the full per-round arc lives in `core/DECISION_LOG.md`, not
+ * repeated in full here since round 8 supersedes the mechanism it describes:** round 1 added a
+ * CAS-fenced `DELETE` and an atomic `db.batch()` for local cleanup (still true today, see below).
+ * Rounds 2-3 discovered Google's revocation is project-wide, not scoped to one token, and added a
+ * `disconnect_lease_token` lease on `gmail_connections` itself, acquired before any Google call.
+ * Rounds 4-5 each tried to bound that lease by elapsed client-side time (a timeout, then a renewal
+ * heartbeat) and GPT-PM correctly rejected both: neither can cancel the real outbound HTTP request,
+ * so elapsed time is never proof it stopped running at Google. Round 6 made reconnect eligibility
+ * depend only on the lease being genuinely cleared, never on its stored expiry. Round 7 applied the
+ * same fix to disconnect-vs-disconnect and started distinguishing WHERE a failure occurred
+ * (`revokePhase`) before deciding whether releasing the lease was safe.
  *
- * **Two rejected earlier attempts, kept here because the reasoning is what actually closes this,
- * not the final shape alone.** Round 4 raced this function's critical section against a client-side
- * timeout and released the lease when it fired -- GPT-PM correctly rejected it: `Promise.race`
- * stops THIS function from awaiting `revokeToken`, but does not cancel the actual outbound HTTP
- * request, so Google's revoke could still complete afterward. Round 5 replaced the timeout with a
- * renewal heartbeat that kept extending the lease's expiry for as long as this function was still
- * running, racing the critical section against "proof of a lost fence" instead of elapsed time --
- * GPT-PM correctly rejected this too, for two compounding reasons: (a) the heartbeat's own renewal
- * write could itself throw or hang, silently stalling renewal with no failure signal ever raised,
- * letting the lease's *stored* expiry lapse regardless of whether this function was still genuinely
- * working; and (b) even a CORRECTLY detected lost fence still could not cancel the real
- * `revokeToken` call already in flight -- the same uncancellable-HTTP-request problem as round 4,
- * now reachable via a different trigger. Both attempts shared the same flawed premise: that SOME
- * client-side signal (a timer, a renewal check) could stand in for actual proof that the external
- * side effect had settled. It cannot, given this module's `GoogleOAuthClient` interface has no
- * cancellation contract (`fetch`-backed cancellation is deferred to the `services/gmail-connector`
- * Worker, §2.1, same deferral as every other real-network concern in this domain module).
+ * **Round 8's full-sweep MAJORs (GPT-PM, requested as one comprehensive review): the
+ * `disconnect_lease_token` mechanism above could not close two further gaps, both because it lived
+ * ONLY on `gmail_connections` and only ever tracked ONE external call (`revokeToken`):**
  *
- * **The round-6 fix: `disconnect_lease_expires_at` no longer governs whether RECONNECT may proceed
- * at all** -- `connectGmailAccount`'s guard checks only `IS NULL`, never the expiry, so no amount of
- * elapsed client-side time can ever authorize a reconnect while a disconnect's lease is present.
- * GPT-PM round 7 confirmed this specific fix closes the reconnect-vs-disconnect race correctly.
+ * 1. This function's own lease disappeared the moment its `DELETE` ran, which meant
+ *    `connectGmailAccount`'s exclusivity check (evaluated only on its `ON CONFLICT` branch) could
+ *    be silently bypassed by a reconnect's plain `INSERT` landing after that `DELETE` -- see
+ *    `connectGmailAccount`'s own doc comment for the full failure scenario and fix. This function's
+ *    exclusivity is now provided by acquiring the SAME `gmail_oauth_lifecycle` lock
+ *    `connectGmailAccount` acquires (mutually exclusive between the two), not a lease private to
+ *    this function's own row.
+ * 2. A successful `revokeToken()` response was treated as proof the project-wide revocation had
+ *    FULLY taken effect, when Google's own documentation says propagation can continue afterward --
+ *    see `REVOKE_PROPAGATION_BUFFER_MS`'s own doc comment for the fix and its honest limits.
+ * 3. `stopWatch()` (Gmail's `users.stop`) is itself a remote, mutating Google API call, but a
+ *    `stopWatch()` failure was treated as provably local/pre-Google, releasing the lease
+ *    immediately on what could be the exact same "request reached Google, response did not reach
+ *    us" ambiguity already handled for `revokeToken()`. Fixed by widening the phase tracking below
+ *    to cover BOTH external calls symmetrically, and by widening
+ *    `DisconnectAmbiguousExternalCallError` (renamed from `DisconnectAmbiguousRevokeError`, which
+ *    named only the `revokeToken` case) to cover either one.
  *
- * **The round-7 fix: the SAME reasoning now also applies to DISCONNECT-vs-DISCONNECT, and to the
- * `catch` block's own release** (GPT-PM round-7 MAJOR, 2 findings on this checkpoint). Round 6 left
- * two places where elapsed time (or an unverified thrown error) still stood in for actual proof of
- * settlement -- both closed here, not patched one at a time:
+ * **The lock and phase tracking, current design.** `externalPhase` tracks which Google-facing call
+ * is in flight, set BEFORE that call so a rejection can be classified correctly:
+ * - **`'stop-ambiguous'`** (the initial value, set before `stopWatch` -- nothing local happens
+ *   first): a `stopWatch` rejection here is ambiguous, not provably local, exactly like a
+ *   `revokeToken` rejection -- throws `DisconnectAmbiguousExternalCallError`, lock held.
+ * - **`'stop-settled'`** (set once `stopWatch` resolves): a LATER failure here (decrypt, or
+ *   `revokeToken` never even starting) never touched Google's revoke endpoint -- safe to release
+ *   the lock immediately, `revoke_settled_at` untouched (this attempt never learned anything new
+ *   about the account's revoke state).
+ * - **`'revoke-ambiguous'`** (set immediately before `revokeToken`): a rejection here is the
+ *   original round-7 case -- throws `DisconnectAmbiguousExternalCallError`, lock held.
+ * - **`'revoke-settled'`** (set once `revokeToken` resolves): a LATER failure here (only the local
+ *   `db.batch()`) means Google's revoke genuinely succeeded -- safe to release the lock, AND
+ *   `revoke_settled_at` is recorded (this is what `connectGmailAccount`'s propagation buffer reads).
  *
- * 1. **No automatic disconnect-vs-disconnect takeover.** Rounds 1-6 let a SECOND
- *    `disconnectGmailAccount` call take over an "expired" lease from a first one and redo the
- *    revoke -- GPT-PM round 7 showed this reopens the exact same race one level down: if the first
- *    attempt (A) is still genuinely inside `revokeToken` when a second attempt (B) takes over, EITHER
- *    B finishes first (deletes the row, opens the door to reconnect, and A's still-running revoke
- *    can later invalidate whatever the reconnect just issued) OR A finishes late (its own DELETE,
- *    fenced only on the ciphertext tuple, still matches and deletes the row out from under B, again
- *    opening the door while B's revoke may still be live). No client-side elapsed-time signal can
- *    rule either sequence out, for the identical reason rounds 4-6 already established. Fixed by
- *    changing the acquisition guard from `(disconnect_lease_token IS NULL OR
- *    disconnect_lease_expires_at <= ?)` to `disconnect_lease_token IS NULL` alone -- a second
- *    disconnect attempt while ANY lease is held, however old, is refused (`DISCONNECT_IN_PROGRESS`),
- *    exactly like `connectGmailAccount`'s own guard. `DISCONNECT_LEASE_DURATION_MS` is now purely
- *    diagnostic (see its own doc comment) -- it authorizes nothing.
- * 2. **The final `DELETE` is now ALSO fenced on `disconnect_lease_token = ?`** (the exact token
- *    THIS call acquired), in addition to the round-1 ciphertext-tuple fence -- GPT-PM's explicit,
- *    named required change. With (1) above in place this is structurally redundant (no second
- *    disconnect can ever hold a different token on this row while the first is still live), but
- *    costs nothing and is kept as the SAME "defense in depth even when believed unreachable"
- *    discipline already applied to `SUPERSEDED_BY_RECONNECT` itself below.
- * 3. **A genuinely abandoned lease (the holding process crashed outright, never reaching its own
- *    `catch`) is now a DELIBERATE dead end for this module's own public API, not an automatic
- *    recovery path.** GPT-PM round 7, verbatim: *"Without that guarantee \[of a real external-
- *    operation cancellation/settlement contract\], fail closed into a durable recovery/uncertain
- *    state rather than automatically superseding an old disconnect."* Recovering such an account
- *    needs an explicit, out-of-scope reconciliation step (an operator/admin action that
- *    independently confirms the token's true state with Google) -- this checkpoint does not build
- *    that tool, the same way it does not build the real `fetch`-backed `GoogleOAuthClient` or
- *    key-ring resolution. `DISCONNECT_LEASE_DURATION_MS`'s stored value exists so a future ops/
- *    observability tool can find and flag these accounts, nothing more.
- *
- * **The `catch` block's release is now conditioned on WHERE the failure occurred, not just THAT one
- * occurred** (GPT-PM round-7 MAJOR #2 -- round 6's own doc comment had already flagged this
- * ambiguity as an open, undecided residual; GPT-PM confirmed it needs an actual fix). A
- * `revokePhase` marker tracks whether `googleClient.revokeToken` has been called yet:
- * - **`'not-started'`** (a `stopWatch` or `decryptRefreshToken` failure, strictly BEFORE
- *   `revokeToken` is ever invoked): genuinely nothing was sent to Google's revoke endpoint in this
- *   attempt. Safe to release the lease immediately, as before.
- * - **`'ambiguous'`** (set immediately before calling `revokeToken`; a rejection from THAT call):
- *   the request may have reached Google before failing locally (e.g. a reset mid-response), so
- *   whether the project-wide revocation actually happened is UNKNOWN. The lease is deliberately
- *   **NOT released** -- the function throws `DisconnectAmbiguousRevokeError` instead, and per (3)
- *   above, no automatic recovery exists; this is an explicit fail-closed, not a retryable failure.
- * - **`'settled'`** (set immediately after `revokeToken` resolves; a LATER failure, only the local
- *   `db.batch()`): Google's side is CONFIRMED done at this point -- the revoke already succeeded.
- *   Safe to release the lease immediately; a follow-up `connectGmailAccount` would issue a brand
- *   new, untouched credential, and the already-dead old token poses no risk.
- *
- * **CAS-fenced local finalization** (GPT-PM round-1 MAJOR #1 on this checkpoint) -- kept as an
- * extra layer of defense in depth, though the round-6/7 fixes above mean the race this originally
- * guarded against (a live reconnect or a competing disconnect landing between this function's lease
- * acquisition and its own `DELETE`) should now be structurally unreachable through this module's own
- * guarded API: the final `DELETE` is fenced on the EXACT `(encrypted_refresh_token, refresh_token_iv,
- * kek_version)` tuple read when the lease was acquired, PLUS `disconnect_lease_token` (round 7) --
+ * **CAS-fenced local finalization** (GPT-PM round-1 MAJOR #1) -- kept as defense in depth even
+ * though the lifecycle lock above should make the race it originally guarded against structurally
+ * unreachable through this module's own guarded API: the final `DELETE` is fenced on the EXACT
+ * `(encrypted_refresh_token, refresh_token_iv, kek_version)` tuple read when the row was claimed,
  * the same "compare against the value actually observed, not just the key" discipline
  * `transitions.ts`'s own fenced UPDATEs use -- zero rows changed reports `SUPERSEDED_BY_RECONNECT`
- * rather than a false `DISCONNECTED`, kept as a safety net in case a future change to this module
- * reopens a path this analysis has not foreseen.
+ * rather than a false `DISCONNECTED`.
  *
- * **Atomic local cleanup** (GPT-PM round-1 MAJOR #2): the fenced connection delete and the
- * `oauth_flows` clear run in one `db.batch()` (the same atomic-multi-statement pattern
- * `lease.ts`'s `completeProcessing`/`transitions.ts`'s `moveToDlq` already use) rather than as two
- * independent statements -- a failure of the second statement no longer leaves the connection row
- * already gone (which would make a retry return `NOT_CONNECTED` and never reach `oauth_flows`
- * cleanup again) while stale OAuth flow state survives until its own TTL.
+ * **Atomic local cleanup** (GPT-PM round-1 MAJOR #2, now three statements instead of two): the
+ * fenced connection delete, the `oauth_flows` clear, and the lifecycle lock release/
+ * `revoke_settled_at` write all run in one `db.batch()` -- a failure of any one of them leaves ALL
+ * THREE unapplied (the lock stays held, handled by the `catch` block below), never a partial state
+ * where e.g. the credential is gone but the lock is still held with no route to release it.
  *
  * `oauth_flows` has no account-scoping column (its PK is `state` alone) -- this project's MVP1
  * scope is single-operator/single-account, so "cancels any in-flight `oauth_flows` row for that
  * account" is implemented as clearing the whole table, the only reading the actual schema shape
  * supports. Revisit when a second account is ever added (security review, checkpoint 4).
  */
-export interface DisconnectGmailAccountOptions {
-  sourceAccountId: string;
-  now: string;
-  /** Overrides `DISCONNECT_LEASE_DURATION_MS` -- test-only escape hatch; production callers should
-   *  omit this. **Diagnostic only, as of GPT-PM round-7 MAJOR** -- does not gate anything on either
-   *  `connectGmailAccount` or `disconnectGmailAccount`'s own acquisition guards (both check only
-   *  `disconnect_lease_token IS NULL`); see `DISCONNECT_LEASE_DURATION_MS`'s own doc comment. */
-  leaseDurationMs?: number;
-}
-
 export async function disconnectGmailAccount(
   db: D1Database,
   kek: CryptoKey,
   googleClient: GoogleOAuthClient,
   opts: DisconnectGmailAccountOptions,
 ): Promise<DisconnectGmailAccountResult> {
-  const leaseDurationMs = opts.leaseDurationMs ?? DISCONNECT_LEASE_DURATION_MS;
-  const leaseToken = generateRandomToken();
-  const leaseExpiresAt = new Date(Date.parse(opts.now) + leaseDurationMs).toISOString();
+  const lockToken = generateRandomToken();
+  const staleConnectLockBefore = new Date(
+    Date.parse(opts.now) - CONNECT_LOCK_STALE_MS,
+  ).toISOString();
+
+  const acquired = await db
+    .prepare(
+      `INSERT INTO gmail_oauth_lifecycle (source_account_id, source, lock_token, lock_kind, lock_acquired_at)
+       VALUES (?, 'gmail', ?, 'DISCONNECT', ?)
+       ON CONFLICT (source_account_id) DO UPDATE SET
+         lock_token = excluded.lock_token,
+         lock_kind = excluded.lock_kind,
+         lock_acquired_at = excluded.lock_acquired_at
+       WHERE lock_token IS NULL
+          OR (lock_kind = 'CONNECT' AND lock_acquired_at <= ?)`,
+    )
+    .bind(opts.sourceAccountId, lockToken, opts.now, staleConnectLockBefore)
+    .run();
+
+  if (acquired.meta.changes === 0) return { outcome: 'DISCONNECT_IN_PROGRESS' };
 
   const row = await db
     .prepare(
-      `UPDATE gmail_connections
-       SET disconnect_lease_token = ?, disconnect_lease_expires_at = ?
-       WHERE source_account_id = ?
-         AND disconnect_lease_token IS NULL
-       RETURNING encrypted_refresh_token, refresh_token_iv, kek_version`,
+      'SELECT encrypted_refresh_token, refresh_token_iv, kek_version FROM gmail_connections WHERE source_account_id = ?',
     )
-    .bind(leaseToken, leaseExpiresAt, opts.sourceAccountId)
+    .bind(opts.sourceAccountId)
     .first<{ encrypted_refresh_token: string; refresh_token_iv: string; kek_version: string }>();
 
   if (row === null) {
-    // Either no connection exists at all, or another disconnect already holds a lease on it --
-    // expired or not, per the round-7 fix (no automatic takeover; see the doc comment above).
-    // Distinguish the two purely for the caller's reporting, since neither case may proceed
-    // regardless of which it is.
-    const existing = await db
-      .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
-      .bind(opts.sourceAccountId)
-      .first();
-    return existing === null ? { outcome: 'NOT_CONNECTED' } : { outcome: 'DISCONNECT_IN_PROGRESS' };
+    // Never connected, or an earlier disconnect already removed the credential row -- nothing to
+    // do at Google. Release the lock we just acquired (no external call was ever made this call).
+    await releaseLifecycleLock(db, opts.sourceAccountId, lockToken);
+    return { outcome: 'NOT_CONNECTED' };
   }
 
-  let revokePhase: 'not-started' | 'ambiguous' | 'settled' = 'not-started';
+  let externalPhase: 'stop-ambiguous' | 'stop-settled' | 'revoke-ambiguous' | 'revoke-settled' =
+    'stop-ambiguous';
   try {
     await googleClient.stopWatch(opts.sourceAccountId);
+    externalPhase = 'stop-settled';
 
     const aad: RefreshTokenAad = {
       gmailAccountId: opts.sourceAccountId,
@@ -452,54 +581,160 @@ export async function disconnectGmailAccount(
       { ciphertext: row.encrypted_refresh_token, iv: row.refresh_token_iv },
       aad,
     );
-    revokePhase = 'ambiguous';
+    externalPhase = 'revoke-ambiguous';
     await googleClient.revokeToken(refreshToken);
-    revokePhase = 'settled';
+    externalPhase = 'revoke-settled';
 
     const results = await db.batch([
       db
         .prepare(
           `DELETE FROM gmail_connections
            WHERE source_account_id = ? AND encrypted_refresh_token = ? AND refresh_token_iv = ?
-             AND kek_version = ? AND disconnect_lease_token = ?`,
+             AND kek_version = ?`,
         )
         .bind(
           opts.sourceAccountId,
           row.encrypted_refresh_token,
           row.refresh_token_iv,
           row.kek_version,
-          leaseToken,
         ),
       db.prepare('DELETE FROM oauth_flows'),
+      db
+        .prepare(
+          `UPDATE gmail_oauth_lifecycle
+           SET lock_token = NULL, lock_kind = NULL, lock_acquired_at = NULL, revoke_settled_at = ?
+           WHERE source_account_id = ? AND lock_token = ?`,
+        )
+        .bind(opts.now, opts.sourceAccountId, lockToken),
     ]);
     const deleteResult = results[0];
     if (deleteResult === undefined || deleteResult.meta.changes === 0) {
-      // Structurally unreachable via this module's own guarded API as of round 7 (see the doc
+      // Structurally unreachable via this module's own guarded API as of round 8 (see the doc
       // comment above) -- kept as a safety net rather than asserted unreachable.
       return { outcome: 'SUPERSEDED_BY_RECONNECT' };
     }
 
-    return { outcome: 'DISCONNECTED' };
-  } catch (error) {
-    if (revokePhase === 'ambiguous') {
-      // `revokeToken` itself rejected -- whether Google actually processed the revocation before
-      // failing locally is UNKNOWN, so the lease is deliberately left in place (NOT released) and
-      // no automatic recovery is offered. See `DisconnectAmbiguousRevokeError`'s own doc comment.
-      throw new DisconnectAmbiguousRevokeError(error);
+    const lockReleaseResult = results[2];
+    if (lockReleaseResult === undefined || lockReleaseResult.meta.changes === 0) {
+      // Round-9 internal review MINOR (database-reviewer, symmetry with connectGmailAccount's own
+      // fenced-write check): structurally this should never happen -- nothing else can steal a
+      // DISCONNECT-kind lock (connectGmailAccount's own guard requires lock_token IS NULL, and a
+      // second disconnect sees a non-null lock_token and is refused DISCONNECT_IN_PROGRESS before
+      // it ever gets here). If it ever does, the credential row above is already gone but the lock
+      // release did NOT land, which would wedge this account forever with no route to a retry --
+      // fail loudly instead of silently reporting DISCONNECTED over that state.
+      throw new Error(
+        `disconnectGmailAccount: lock release did not apply for source_account_id=` +
+          `${opts.sourceAccountId} after the credential delete succeeded -- an internal invariant ` +
+          'was violated (nothing else should have been able to change this lock during this call).',
+      );
     }
 
-    // revokePhase is 'not-started' (stopWatch/decrypt threw, revokeToken was never called) or
-    // 'settled' (revokeToken already resolved; only the local batch threw) -- both are genuinely
-    // safe to release immediately. Fenced on the exact lease token this call acquired, so a retry
-    // that already re-acquired a NEW lease can never be clobbered by this cleanup running late.
-    await db
-      .prepare(
-        `UPDATE gmail_connections
-         SET disconnect_lease_token = NULL, disconnect_lease_expires_at = NULL
-         WHERE source_account_id = ? AND disconnect_lease_token = ?`,
-      )
-      .bind(opts.sourceAccountId, leaseToken)
-      .run();
+    return { outcome: 'DISCONNECTED' };
+  } catch (error) {
+    if (externalPhase === 'stop-ambiguous' || externalPhase === 'revoke-ambiguous') {
+      // The in-flight external call itself rejected -- whether Google actually processed it before
+      // failing locally is UNKNOWN, so the lock is deliberately left in place (NOT released) and no
+      // automatic recovery is offered. See DisconnectAmbiguousExternalCallError's own doc comment.
+      throw new DisconnectAmbiguousExternalCallError(error);
+    }
+
+    if (externalPhase === 'revoke-settled') {
+      // Only the local batch threw, AFTER revokeToken() genuinely resolved -- release the lock and
+      // record revoke_settled_at, since connectGmailAccount's propagation buffer needs to know a
+      // real revoke happened even though this attempt's own local cleanup did not complete.
+      await db
+        .prepare(
+          `UPDATE gmail_oauth_lifecycle
+           SET lock_token = NULL, lock_kind = NULL, lock_acquired_at = NULL, revoke_settled_at = ?
+           WHERE source_account_id = ? AND lock_token = ?`,
+        )
+        .bind(opts.now, opts.sourceAccountId, lockToken)
+        .run();
+    } else {
+      // externalPhase === 'stop-settled': revokeToken was never invoked this attempt (decrypt threw
+      // first), so Google's revoke state is unchanged -- release the lock without touching
+      // revoke_settled_at.
+      await releaseLifecycleLock(db, opts.sourceAccountId, lockToken);
+    }
     throw error;
   }
+}
+
+export interface WedgedGmailDisconnectLock {
+  sourceAccountId: string;
+  lockAcquiredAt: string;
+}
+
+/**
+ * Read path for the reconciliation primitives named in `DisconnectAmbiguousExternalCallError`'s own
+ * doc comment (round-9 internal review MAJOR, architect: previously there was no way to even find a
+ * wedged account -- `lock_acquired_at` was written in several places but read in none). Lists every
+ * account currently holding a DISCONNECT-kind lock -- the only kind that can stay wedged
+ * indefinitely (a CONNECT-kind lock either releases itself or becomes stealable after
+ * `CONNECT_LOCK_STALE_MS`, see that constant's own doc comment) -- so an operator/admin tool can
+ * find candidates for manual reconciliation with Google before calling
+ * `reconcileWedgedGmailDisconnectLock` below. Ordering and pagination are deliberately not
+ * implemented here -- MVP1 scope is single-operator/single-account (see `disconnectGmailAccount`'s
+ * own doc comment on `oauth_flows`), so an unbounded scan of this table is not a real concern yet.
+ */
+export async function listWedgedGmailDisconnectLocks(
+  db: D1Database,
+): Promise<WedgedGmailDisconnectLock[]> {
+  const rows = await db
+    .prepare(
+      `SELECT source_account_id, lock_acquired_at FROM gmail_oauth_lifecycle
+       WHERE lock_kind = 'DISCONNECT'`,
+    )
+    .all<{ source_account_id: string; lock_acquired_at: string }>();
+  return rows.results.map((row) => ({
+    sourceAccountId: row.source_account_id,
+    lockAcquiredAt: row.lock_acquired_at,
+  }));
+}
+
+export interface ReconcileWedgedGmailDisconnectLockOptions {
+  sourceAccountId: string;
+  /** The EXACT token from `listWedgedGmailDisconnectLocks`'s corresponding row (read immediately
+   *  before calling this, not cached) -- fences the release so a lock that was somehow already
+   *  re-acquired by a legitimate new attempt between listing and reconciling is never clobbered. */
+  lockToken: string;
+  now: string;
+  /**
+   * The confirmed outcome of independently checking this account's actual state with Google --
+   * MUST be determined by the caller outside this module (this module's `GoogleOAuthClient` has no
+   * reconciliation/observability primitive, see `REVOKE_PROPAGATION_BUFFER_MS`'s own doc comment).
+   * `'REVOKE_CONFIRMED'` records `revoke_settled_at = now`, so `connectGmailAccount`'s propagation
+   * buffer still applies from the confirmation time -- this is the case the earlier, unsafe "just
+   * clear the lock" prose would have silently skipped. `'REVOKE_NOT_APPLICABLE'` is for the case
+   * where Google confirms the revoke never actually reached it (e.g. the ambiguous failure was
+   * genuinely pre-Google) -- the lock is cleared without touching `revoke_settled_at`, since nothing
+   * happened at Google to buffer against.
+   */
+  googleConfirmedOutcome: 'REVOKE_CONFIRMED' | 'REVOKE_NOT_APPLICABLE';
+}
+
+/**
+ * Write path for reconciling a wedged `DisconnectAmbiguousExternalCallError` lock -- see that
+ * error's own doc comment for why this exists instead of a hand-written `UPDATE`. Fenced on the
+ * exact `lockToken` supplied (same discipline as `releaseLifecycleLock`), so this is a safe no-op
+ * (zero rows changed) rather than a clobber if the lock was already resolved some other way between
+ * listing and calling this.
+ */
+export async function reconcileWedgedGmailDisconnectLock(
+  db: D1Database,
+  opts: ReconcileWedgedGmailDisconnectLockOptions,
+): Promise<void> {
+  if (opts.googleConfirmedOutcome === 'REVOKE_CONFIRMED') {
+    await db
+      .prepare(
+        `UPDATE gmail_oauth_lifecycle
+         SET lock_token = NULL, lock_kind = NULL, lock_acquired_at = NULL, revoke_settled_at = ?
+         WHERE source_account_id = ? AND lock_token = ?`,
+      )
+      .bind(opts.now, opts.sourceAccountId, opts.lockToken)
+      .run();
+    return;
+  }
+  await releaseLifecycleLock(db, opts.sourceAccountId, opts.lockToken);
 }

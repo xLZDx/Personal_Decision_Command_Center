@@ -3,7 +3,138 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-13 — G3 checkpoint 4 round 8 (full-sweep fix) + round 9 (internal review + remediation
+
+in one batch): `gmail_oauth_lifecycle`, a never-deleted mutual-exclusion lock shared by connect and
+disconnect, replacing the round-1-7 lease that lived only on `gmail_connections`
+
+**Round 8: GPT-PM's requested full adversarial sweep (per the previous entry's operator
+instruction) found 3 NEW MAJORs, all rooted in the same structural cause** -- the round-1-7
+`disconnect_lease_token`/`disconnect_lease_expires_at` lease lived ONLY on `gmail_connections`
+itself: (1) `connectGmailAccount` called `exchangeCode()` before any exclusion check at all -- the
+lease guard was only ever evaluated on the `ON CONFLICT` branch, so a reconnect landing after a
+concurrent disconnect's `DELETE` (which takes the lease WITH the row) bypassed it entirely; (2) a
+successful `revokeToken()` response was treated as proof Google's revocation had fully taken
+effect, when Google's own documentation says propagation can continue afterward; (3) `stopWatch()`
+failures were treated as provably local/pre-Google, when it is itself a remote mutating call with
+the same ambiguity already fixed for `revokeToken()` in round 7.
+
+**Round 8 fix, `infra/migrations/0004_gmail_oauth_lifecycle_lock.sql` + `oauth.ts` rewrite:** a new
+table, `gmail_oauth_lifecycle`, acquired as a single mutual-exclusion lock by BOTH
+`connectGmailAccount` and `disconnectGmailAccount` before either makes its own first Google call,
+on a row that is never deleted (survives a concurrent disconnect's `gmail_connections` DELETE,
+closing finding 1 structurally rather than by re-checking harder). `REVOKE_PROPAGATION_BUFFER_MS`
+(5 minutes, honest best-effort mitigation, no Google SLA exists) gates a fresh connect's lock
+acquisition on `revoke_settled_at`, closing finding 2. `externalPhase` widened to
+`'stop-ambiguous'|'stop-settled'|'revoke-ambiguous'|'revoke-settled'`, tracking both external calls
+symmetrically; `DisconnectAmbiguousRevokeError` renamed `DisconnectAmbiguousExternalCallError`,
+closing finding 3. Mutation-tested (6 aspects: connect's propagation-buffer clause, connect's
+`lock_token IS NULL` clause, disconnect's acquisition guard, both ambiguous-phase no-release
+branches, both settled-phase release branches, the `revoke-settled`-only gate on the
+`revoke_settled_at` write) -- all caught, all reverted.
+
+**Per §17's "run internal specialists BEFORE GPT-PM" rule, round 8's fix was reviewed internally
+(architect, database-reviewer, functional-test-reviewer, R3 routing -- architecture, concurrency,
+migration) BEFORE being sent to GPT-PM as round 9.** This found substantially more than the
+round-8 self-testing had caught, confirming §17's own stated rationale for the rule:
+
+- **architect, CHANGES REQUESTED, 5 MAJOR:** (1) `connectGmailAccount`'s own credential-write batch
+  never re-verified lock ownership at write time (`results` discarded) -- reproduces round-8
+  finding 1's exact class via the documented manual-recovery path as trigger; (2) a leaked/abandoned
+  CONNECT lock permanently blocked disconnect too, even though `exchangeCode()` is a one-way,
+  non-mutating call with no ambiguity to protect (the "deliberate dead end" reasoning only ever
+  applied to DISCONNECT locks) -- `lock_kind` was written in 4 places, read in 0; (3) the lock is
+  keyed per `source_account_id` while Google's revocation is project-wide -- flagged as needing
+  Google's own primary documentation opened before deciding, not GPT-PM's or the module's own
+  restatement of the claim; (4) the "never delete this row" invariant was enforced nowhere in the
+  database, only in TypeScript prose; (5) the documented manual reconciliation procedure never said
+  to also set `revoke_settled_at`, defeating the propagation-buffer fix if followed literally.
+- **functional-test-reviewer, 1 MAJOR:** the `AND lock_token = ?` CAS-fencing on every lock-release
+  statement had zero test coverage -- no test seeded a different token and verified a stale release
+  didn't clobber it.
+- **database-reviewer, APPROVE with 2 MINOR:** connect's own batch didn't check its lock-release
+  statement's `meta.changes` (same root cause as architect's #1); the never-delete design's
+  restricting FK to `source_accounts` (no `ON DELETE` clause) was undocumented.
+
+**Finding 3 (lock granularity vs. Google's revocation blast radius) was verified against Google's
+actual primary documentation before any remediation decision, per operator standing instruction and
+CLAUDE.md §3/§23** (not accepted from GPT-PM's or this module's own prior restatement of it).
+Fetched independently twice, consistent both times, from
+`developers.google.com/identity/protocols/oauth2/native-app`, "Token revocation" section:
+
+> "Revocation removes all OAuth 2.0 scopes previously granted to a project, invalidating any issued
+> access or refresh tokens for all clients registered under that project."
+> "Following a successful revocation response, it might take some time before the revocation has
+> full effect."
+
+This CONFIRMS (now `FACT`, not `INFERENCE`) both the module's existing "project-wide, not scoped to
+one token" claim and the propagation-delay claim behind `REVOKE_PROPAGATION_BUFFER_MS`. It also
+confirmed the finding was real and reachable: `source_accounts`/`gmail_connections` had no
+uniqueness on the actual Google identity at all (`gmail_connections.gmail_email` -- no unique
+index), so nothing prevented two different `source_account_id` rows from holding a live connection
+to the same real Gmail address, in which case revoking through one would silently invalidate the
+other at Google with neither the lock nor `revoke_settled_at` ever learning about it.
+
+**Round 9 remediation, one batch (per §17's "fix the whole reported package, then verify"):**
+
+1. **Credential-write fencing (architect MAJOR #1 + database-reviewer MINOR):**
+   `connectGmailAccount`'s credential INSERT rewritten as `INSERT ... SELECT ... WHERE EXISTS
+(SELECT 1 FROM gmail_oauth_lifecycle WHERE source_account_id = ? AND lock_token = ?) ON CONFLICT
+...` -- an `INSERT ... SELECT` inserts zero rows on EITHER branch if the fence fails, the same
+   "condition the write itself" fix that closed round-8 finding 1, applied symmetrically. Both the
+   credential write's and the lock-release's `meta.changes` are now checked; either being 0 throws
+   the new `ConnectLockLostBeforeWriteError` instead of ever reporting `CONNECTED` without having
+   held exclusivity for the write. Disconnect's own final lock-release `meta.changes` is now also
+   checked (structurally should never be 0; throws loudly instead of silently reporting
+   `DISCONNECTED` over a wedge if it ever is).
+2. **CONNECT-lock-wedge fix (architect MAJOR #2):** `disconnectGmailAccount`'s acquisition guard
+   widened to `WHERE lock_token IS NULL OR (lock_kind = 'CONNECT' AND lock_acquired_at <=
+now - CONNECT_LOCK_STALE_MS)` (2 minutes) -- a CONNECT lock is stealable once stale (pure crash
+   debris, since `exchangeCode()` is one-way and every code path already releases it), a DISCONNECT
+   lock stays a deliberate permanent dead end exactly as before. Safe even if a "stale" lock is
+   still genuinely in flight, because of fix 1: a late writer that lost the lock to a steal fails
+   cleanly via `ConnectLockLostBeforeWriteError` instead of clobbering the stealer.
+3. **Lock granularity fix (architect MAJOR #3), `infra/migrations/0005_gmail_connections_unique_
+email.sql`:** `CREATE UNIQUE INDEX ... ON gmail_connections(LOWER(gmail_email))`, chosen over
+   re-keying `gmail_oauth_lifecycle` itself (a much larger change) -- makes it structurally
+   impossible for two `source_account_id` rows to hold a live connection to the same Gmail address
+   at once, closing the only reachable shape of the actual bug. A genuinely new `source_account_id`
+   attempting to connect an already-connected address now fails the write outright (raw constraint
+   violation propagates -- safe-by-default); a friendlier typed outcome is noted as future UX work,
+   out of this checkpoint's scope (tracked risk, not a defect, same framing already used for the
+   key-ring-resolution gap).
+4. **Never-delete DB enforcement (architect MAJOR #4):** `BEFORE DELETE` trigger added to migration
+   0004, rejecting any `DELETE` against `gmail_oauth_lifecycle` unconditionally; the FK-pinning
+   consequence for `source_accounts` (database-reviewer MINOR) documented directly in the migration.
+5. **Reconciliation procedure fix (architect MAJOR #5):** `DisconnectAmbiguousExternalCallError`'s
+   doc comment corrected -- it previously said only "clear the lock," which is unsafe to follow
+   literally. Two new exported primitives replace hand-written SQL: `listWedgedGmailDisconnectLocks`
+   (read path -- previously no way to even find a wedged account, since `lock_acquired_at` was
+   written in several places, read in none) and `reconcileWedgedGmailDisconnectLock` (write path,
+   takes the confirmed Google outcome as an explicit parameter so `revoke_settled_at` cannot be
+   omitted by accident the way free-hand SQL could).
+6. **CAS-fencing test coverage (functional-test-reviewer MAJOR):** new test seeds a different
+   lock-holder token mid-flight and asserts a failed call's release attempt does NOT clear it.
+   Exact-boundary test added for the propagation buffer (`elapsed === REVOKE_PROPAGATION_BUFFER_MS`
+   exactly, previously untested).
+
+**Verification:** 35 `oauth.test.ts` tests pass (7 new: credential-write fencing, CAS-fencing,
+propagation-buffer boundary, CONNECT-lock staleness/steal, never-delete trigger, UNIQUE-email
+conflict, reconciliation primitives), 416/416 across the whole workspace, `tsc --noEmit` clean,
+`eslint .` clean. Mutation-tested the two highest-risk new guards by temporarily reverting each to
+its pre-fix behavior and confirming the corresponding new test fails: the credential-write
+`WHERE EXISTS` fence (reverted to unconditional -- the fencing test then failed with the credential
+silently persisted, as architect's reproduction predicted) and the CONNECT-lock staleness clause
+(reverted to unconditional-block -- the staleness test then failed, still `DISCONNECT_IN_PROGRESS`
+after the stale window). Both reverted after confirming the kill.
+
+**Not yet done:** round 9 has not yet been sent to GPT-PM (next step, with an explicit full-sweep
+scope note per §17/operator standing instruction, covering the whole gate/mechanism/integrations,
+not just the fixed findings). This entry and the commit that carries it happen first, per the
+operator's standing autonomous-through-G6 authorization.
+
 ## 2026-09-13 — G3 checkpoint 4: comprehensive round-7 remediation, both MAJORs fixed in ONE batch
+
 (operator instruction against the one-finding-per-round pattern); sent for round 8 full-sweep review
 
 **Operator instruction, verbatim (translated): "GO, continue, but 7 rounds is excessive, why
@@ -41,8 +172,8 @@ skill's escalation-ladder section), not just applied once here.
 
 **A genuinely abandoned lease (the holding process crashed outright, never reaching its own catch)
 is now a deliberate, permanent dead end for this module's own public API** -- neither reconnect nor
-a fresh disconnect attempt may take it over, matching GPT-PM's own framing: *"fail closed into a
-durable recovery/uncertain state rather than automatically superseding an old disconnect."*
+a fresh disconnect attempt may take it over, matching GPT-PM's own framing: _"fail closed into a
+durable recovery/uncertain state rather than automatically superseding an old disconnect."_
 Recovering such an account is explicitly out of this checkpoint's scope, the same deferral already
 applied to the real `fetch`-backed `GoogleOAuthClient` and key-ring resolution (§2.1).
 
@@ -65,6 +196,7 @@ Error` doc comment. Round 8's review is scoped to a full adversarial sweep of th
 not just these two fixes, per the operator's instruction above.
 
 ## 2026-09-13 — G3 checkpoint 4 round 7: two further MAJORs on the SAME invariant; operator
+
 instructed to stop iterating (**"заканчивай с этим"**) -- checkpoint 4 PAUSED OPEN, not closed
 
 **GPT-PM round 7: `VERDICT: MAJOR`, 0 BLOCKER / 2 MAJOR / 0 MINOR**, reviewing commit `736ecdf`
@@ -81,7 +213,7 @@ touch:**
    a SECOND `disconnectGmailAccount` call take over an "expired" lease from a first one that might
    still be genuinely running (same reasoning as rounds 4-6, just one level removed). Additionally,
    the final `DELETE` is fenced only on `(source_account_id, encrypted_refresh_token,
-   refresh_token_iv, kek_version)`, never on `disconnect_lease_token` -- so a second disconnect (B)
+refresh_token_iv, kek_version)`, never on `disconnect_lease_token` -- so a second disconnect (B)
    that has taken over can have its own `DELETE` executed by a LATE-finishing first attempt (A),
    whose fence still matches the unchanged ciphertext tuple, deleting the row out from under B while
    B's own revoke may still be in flight.
@@ -91,19 +223,19 @@ touch:**
    confirming it needs an actual fix, not just an honest footnote.
 
 **GPT-PM's required change is now stated at the level of a genuine architectural gap, not a tunable
-detail**: *"An ownership recovery mechanism must not permit deletion/reconnect until every earlier
+detail**: _"An ownership recovery mechanism must not permit deletion/reconnect until every earlier
 potentially-live revoke is known settled... For automatic takeover, you need an external-operation
 lifecycle/cancellation guarantee that makes the previous revoke definitively dead. Without that
 guarantee, fail closed into a durable recovery/uncertain state rather than automatically superseding
-an old disconnect."* This describes a genuinely different, larger primitive than a lease with any
+an old disconnect."_ This describes a genuinely different, larger primitive than a lease with any
 timing parameter can provide on its own: a durable, explicit "revocation outcome unknown" state that
 blocks BOTH reconnect and automatic takeover until resolved by something with real settlement
 authority (a `GoogleOAuthClient` with actual cancellation/idempotency-key semantics, or an operator/
 support-driven manual reconciliation) -- not a difference of degree from rounds 4-6's fixes, a
 difference of kind.
 
-**Operator instruction, verbatim, received while round 7 was already in flight**: *"заканчивай с
-этим"* -- stop iterating on this review loop. Per global CLAUDE.md §11 ("a new operator message
+**Operator instruction, verbatim, received while round 7 was already in flight**: _"заканчивай с
+этим"_ -- stop iterating on this review loop. Per global CLAUDE.md §11 ("a new operator message
 supersedes the current plan... stop launching new work"), no round 8 was sent. This is an honest,
 deliberate STOP, not a disguised close: **checkpoint 4 remains OPEN with an unresolved `VERDICT:
 MAJOR`** (2 MAJOR from round 7, neither remediated). The seven-round arc (rounds 1-7) is a genuine
@@ -225,14 +357,14 @@ rather than passing a single default key, per the tracked risk documented in `oa
 comment.
 
 ## 2026-09-13 — G3 checkpoint 4 round 2/3: MAJOR #1 re-opened with new evidence (Google revocation
-is project-wide); a genuine rebuttal exchange, conceded; fixed with a disconnect lease (migration
-0003)
+
+is project-wide); a genuine rebuttal exchange, conceded; fixed with a disconnect lease (migration 0003)
 
 **GPT-PM round 2: `VERDICT: MAJOR`, 0 BLOCKER / 1 MAJOR.** Round-1 MAJOR #2 (atomic `db.batch()`)
 confirmed CLOSED, no regression. Round-1 MAJOR #1's CAS fix was found insufficient: the fenced
-`DELETE` correctly protects the *local* `gmail_connections` row, but Google's OAuth revocation is
+`DELETE` correctly protects the _local_ `gmail_connections` row, but Google's OAuth revocation is
 documented as project-wide, not scoped to the single token passed to the `/revoke` endpoint — so a
-`connectGmailAccount` reconnect that lands *during* `disconnectGmailAccount`'s `revokeToken` call can
+`connectGmailAccount` reconnect that lands _during_ `disconnectGmailAccount`'s `revokeToken` call can
 issue a credential (T2) that the SAME revoke call then invalidates at Google, even though the local
 CAS fencing correctly leaves T2's row untouched. The existing concurrent-reconnect test asserted the
 opposite (T2 survives and is reported `SUPERSEDED_BY_RECONNECT`) — proving locally-correct behavior
@@ -248,11 +380,11 @@ invalidates a co-existing different one. Sent a rebuttal citing this apparent co
 than either blindly complying or blindly dismissing the finding.
 
 **GPT-PM round 3: `VERDICT: MAJOR` maintained, with the missing exact citation.** Quoted, verbatim,
-from `https://developers.google.com/identity/protocols/oauth2/native-app` (a *different* page than
+from `https://developers.google.com/identity/protocols/oauth2/native-app` (a _different_ page than
 the 100-token-limit one, immediately following that page's documented `oauth2.googleapis.com/revoke`
-request), labeled "Key Point": *"Revocation removes all OAuth 2.0 scopes previously granted to a
+request), labeled "Key Point": _"Revocation removes all OAuth 2.0 scopes previously granted to a
 project, invalidating any issued access or refresh tokens for all clients registered under that
-project."* Explained the two Google statements are not contradictory: many refresh tokens may coexist
+project."_ Explained the two Google statements are not contradictory: many refresh tokens may coexist
 under ordinary issuance (the 100-token eviction rule), but explicit programmatic revocation is
 documented as revoking the whole project grant — a separate, broader, project-wide mechanism.
 
@@ -261,7 +393,7 @@ Confirmed genuine — present verbatim on the page GPT-PM named. **Conceded the 
 rebuttal was based on an incomplete reading that conflated two distinct Google mechanisms (passive
 token-retention limits vs. explicit revocation semantics); GPT-PM's citation, once checked against
 the primary source rather than its paraphrase, settles the question. This is §23's converse applied
-correctly: verify before accepting *and* before rejecting, and update the conclusion when evidence
+correctly: verify before accepting _and_ before rejecting, and update the conclusion when evidence
 actually settles it.
 
 **Fix: a disconnect lease spanning the Google revoke boundary, not just the local DELETE** — new
@@ -327,6 +459,7 @@ consumed by the time this outcome can even be observed; the correct caller-facin
 after GPT-PM's round-4 review caught this).
 
 ## 2026-09-13 — G3 checkpoint 4 round 4: GPT-PM found the lease had no bound on its own critical
+
 section, and that `DISCONNECT_IN_PROGRESS` cannot be retried with the same code; both fixed
 
 **GPT-PM round 4: `VERDICT: MAJOR`, 0 BLOCKER / 1 MAJOR / 1 MINOR**, reviewing commit
@@ -336,7 +469,7 @@ disconnects excluded, connect's upsert respects an active lease, failure cleanup
 exact token the failed attempt itself acquired) — one MAJOR and one MINOR against it, both verified
 against the actual source before remediating.
 
-**MAJOR**: `DISCONNECT_LEASE_DURATION_MS` is a fixed 60s bound on the lease's *local D1 row state*,
+**MAJOR**: `DISCONNECT_LEASE_DURATION_MS` is a fixed 60s bound on the lease's _local D1 row state_,
 but nothing bounded how long `disconnectGmailAccount`'s own `stopWatch`/decrypt/`revokeToken`/batch
 sequence could actually take. A slow or hung `revokeToken` call genuinely still in flight past 60s
 would leave the lease reading as "expired" to a reconnect (`disconnect_lease_expires_at <= now`)
@@ -397,6 +530,7 @@ assume GitHub-connector visibility exists for this branch without checking.
 two findings and any direct regression, per §17. Checkpoint 4 remains open until `VERDICT: APPROVE`.
 
 ## 2026-09-13 — G3 checkpoint 4 round 5: GPT-PM rejected the timeout-release fix as still unsafe;
+
 replaced with real lease-renewal (heartbeat), matching `lease.ts`'s own established pattern
 
 **GPT-PM round 5: `VERDICT: MAJOR`, 0 BLOCKER / 1 MAJOR / 0 MINOR**, reviewing commit `3a4176c`
@@ -482,6 +616,7 @@ as a test escape hatch (documented as such in their own doc comments) — a futu
 caller should not treat them as production tuning knobs without a reason to revisit the defaults.
 
 ## 2026-09-13 — G3 checkpoint 4 round 6: heartbeat renewal also rejected; the actual fix drops
+
 elapsed-time reasoning from reconnect eligibility entirely
 
 **GPT-PM round 6: `VERDICT: MAJOR`, 0 BLOCKER / 1 MAJOR / 0 MINOR**, reviewing commit `36465b3`
@@ -501,9 +636,9 @@ revoke could still complete afterward, reinvalidating whatever the "winning" rec
 This is the SAME structural flaw as round 4, reachable through a different trigger (fence loss
 instead of a timer), not a new, unrelated finding.
 
-**GPT-PM's required change, read carefully rather than half-applied**: *"expiry alone cannot
+**GPT-PM's required change, read carefully rather than half-applied**: _"expiry alone cannot
 authorize reconnect while an external project-wide revoke may still exist... rather than
-automatically treating elapsed lease time as permission to reconnect."* This is a stronger claim
+automatically treating elapsed lease time as permission to reconnect."_ This is a stronger claim
 than "the timing needs tuning" — it says NO client-side elapsed-time signal (a fixed timeout, a
 renewal heartbeat, however carefully built) can ever be a valid basis for letting reconnect proceed,
 because none of them can prove the external side effect has actually stopped. Accepted directly,

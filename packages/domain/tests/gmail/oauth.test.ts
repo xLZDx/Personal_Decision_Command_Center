@@ -11,7 +11,10 @@ import {
   consumeOAuthFlow,
   connectGmailAccount,
   disconnectGmailAccount,
-  DisconnectAmbiguousRevokeError,
+  DisconnectAmbiguousExternalCallError,
+  ConnectLockLostBeforeWriteError,
+  listWedgedGmailDisconnectLocks,
+  reconcileWedgedGmailDisconnectLock,
 } from '../../src/gmail/oauth.js';
 import type {
   GoogleOAuthClient,
@@ -339,6 +342,168 @@ describe('connectGmailAccount', () => {
       expect(result).toEqual({ outcome: 'NO_REFRESH_TOKEN' });
     },
   );
+
+  it(
+    'NO_REFRESH_TOKEN releases the gmail_oauth_lifecycle lock it acquired -- a follow-up connect ' +
+      'attempt is not left stuck behind an abandoned lock',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      const noTokenClient = fakeGoogleClient({
+        exchangeCode: async () => ({ refreshToken: null, gmailEmail: 'owner@example.com' }),
+      });
+      const first = await connectGmailAccount(db, kek, noTokenClient, {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-1',
+        codeVerifier: 'verifier-1',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(first).toEqual({ outcome: 'NO_REFRESH_TOKEN' });
+
+      const retry = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(retry).toEqual({ outcome: 'CONNECTED' });
+    },
+  );
+
+  it(
+    'a thrown exchangeCode() failure releases the gmail_oauth_lifecycle lock -- exchangeCode() ' +
+      'never mutates anything at Google (unlike stopWatch/revokeToken), so releasing immediately ' +
+      'on ANY failure here is always safe, not merely a specific pre-Google case',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      const exchangeFails = new Error('google exchange transport failure');
+      const failingClient = fakeGoogleClient({
+        exchangeCode: async () => {
+          throw exchangeFails;
+        },
+      });
+
+      await expect(
+        connectGmailAccount(db, kek, failingClient, {
+          sourceAccountId: accounts.gmailAccountId,
+          code: 'auth-code-1',
+          codeVerifier: 'verifier-1',
+          collectionMode: 'PUSH',
+          kekVersion: KEK_VERSION,
+          now: FIXTURE_NOW,
+        }),
+      ).rejects.toThrow(exchangeFails);
+
+      const retry = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(retry).toEqual({ outcome: 'CONNECTED' });
+    },
+  );
+
+  it(
+    'GPT-PM round-8 MAJOR #1: connectGmailAccount acquires the gmail_oauth_lifecycle lock BEFORE ' +
+      'calling exchangeCode(), so a disconnectGmailAccount attempted WHILE connect is mid-' +
+      'exchangeCode() is refused (DISCONNECT_IN_PROGRESS) rather than being able to run to ' +
+      'completion and delete gmail_connections out from under the connect that is about to ' +
+      'persist a fresh credential -- the exact failure scenario GPT-PM demonstrated: the OLD ' +
+      "design's only guard lived on gmail_connections itself and was bypassable once that row " +
+      'was deleted mid-flight',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-1',
+        codeVerifier: 'verifier-1',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      let disconnectResult: DisconnectGmailAccountResult | null = null;
+      const reconnectClient = fakeGoogleClient({
+        exchangeCode: async () => {
+          disconnectResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+            sourceAccountId: accounts.gmailAccountId,
+            now: FIXTURE_NOW,
+          });
+          return { refreshToken: '1//reconnect-token', gmailEmail: 'owner@example.com' };
+        },
+      });
+
+      const reconnectResult = await connectGmailAccount(db, kek, reconnectClient, {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      expect(disconnectResult).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+      expect(reconnectResult).toEqual({ outcome: 'CONNECTED' });
+
+      const row = await db
+        .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
+        .bind(accounts.gmailAccountId)
+        .first();
+      expect(row).not.toBeNull();
+    },
+  );
+
+  it(
+    'GPT-PM round-8 MAJOR #2: a reconnect immediately after a successful disconnect is refused ' +
+      '(REVOKE_PROPAGATION_BUFFER_MS not yet elapsed since revoke_settled_at), but a reconnect ' +
+      'long enough afterward succeeds -- Google documents that revocation can continue ' +
+      'propagating after a successful response, so a bare cleared lock is not by itself proof it ' +
+      'is safe to reopen',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-1',
+        codeVerifier: 'verifier-1',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const disconnectResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+      });
+      expect(disconnectResult).toEqual({ outcome: 'DISCONNECTED' });
+
+      const tooSoon = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(tooSoon).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+
+      const wayLater = new Date(Date.parse(FIXTURE_NOW) + 60 * 60_000).toISOString();
+      const afterBuffer = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-3',
+        codeVerifier: 'verifier-3',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: wayLater,
+      });
+      expect(afterBuffer).toEqual({ outcome: 'CONNECTED' });
+    },
+  );
 });
 
 describe('disconnectGmailAccount', () => {
@@ -437,11 +602,11 @@ describe('disconnectGmailAccount', () => {
   );
 
   it(
-    'GPT-PM round-7 MAJOR #2: revokeToken throwing raises DisconnectAmbiguousRevokeError (wrapping ' +
-      'the original error via .cause) rather than the raw error or being silently swallowed -- the ' +
-      'connection row and oauth_flows are left completely untouched, AND the disconnect lease is ' +
-      'deliberately NOT released, since whether Google actually processed the revoke before this ' +
-      'error surfaced locally is unknown',
+    'GPT-PM round-7 MAJOR #2: revokeToken throwing raises DisconnectAmbiguousExternalCallError ' +
+      '(wrapping the original error via .cause) rather than the raw error or being silently ' +
+      'swallowed -- the connection row and oauth_flows are left completely untouched, AND the ' +
+      'lifecycle lock is deliberately NOT released, since whether Google actually processed the ' +
+      'revoke before this error surfaced locally is unknown',
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -470,8 +635,8 @@ describe('disconnectGmailAccount', () => {
       } catch (error) {
         caught = error;
       }
-      expect(caught).toBeInstanceOf(DisconnectAmbiguousRevokeError);
-      expect((caught as DisconnectAmbiguousRevokeError).cause).toBe(revokeFails);
+      expect(caught).toBeInstanceOf(DisconnectAmbiguousExternalCallError);
+      expect((caught as DisconnectAmbiguousExternalCallError).cause).toBe(revokeFails);
 
       const row = await db
         .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
@@ -485,7 +650,7 @@ describe('disconnectGmailAccount', () => {
         .first();
       expect(flow).not.toBeNull();
 
-      // The lease was NOT released: neither a retried disconnect nor a reconnect may proceed.
+      // The lock was NOT released: neither a retried disconnect nor a reconnect may proceed.
       const retryDisconnect = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
@@ -505,10 +670,11 @@ describe('disconnectGmailAccount', () => {
   );
 
   it(
-    'GPT-PM round-7 MAJOR #2, pre-revoke failure path: stopWatch throwing (strictly BEFORE ' +
-      'revokeToken is ever called) DOES release the lease immediately, unlike an ambiguous ' +
-      'revokeToken failure -- nothing was ever sent to Google in this attempt, so a retry is not ' +
-      'blocked',
+    'GPT-PM round-8 MAJOR #3: stopWatch throwing ALSO raises DisconnectAmbiguousExternalCallError ' +
+      '(not released) exactly like an ambiguous revokeToken failure -- stopWatch (Gmail users.stop) ' +
+      'is itself a remote, mutating Google call, so a transport failure after the request may have ' +
+      'been sent is exactly as ambiguous as a revokeToken failure, not provably local the way round ' +
+      "7's design incorrectly treated it",
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -527,27 +693,95 @@ describe('disconnectGmailAccount', () => {
         },
       });
 
-      await expect(
-        disconnectGmailAccount(db, kek, failingClient, {
+      let caught: unknown = null;
+      try {
+        await disconnectGmailAccount(db, kek, failingClient, {
           sourceAccountId: accounts.gmailAccountId,
           now: FIXTURE_NOW,
-        }),
-      ).rejects.toThrow(stopWatchFails);
-
-      const retryResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
-        sourceAccountId: accounts.gmailAccountId,
-        now: FIXTURE_NOW,
-      });
-      expect(retryResult).toEqual({ outcome: 'DISCONNECTED' });
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(DisconnectAmbiguousExternalCallError);
+      expect((caught as DisconnectAmbiguousExternalCallError).cause).toBe(stopWatchFails);
 
       const row = await db
         .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
         .bind(accounts.gmailAccountId)
         .first();
-      expect(row).toBeNull();
+      expect(row).not.toBeNull();
+
+      const retryDisconnect = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+      });
+      expect(retryDisconnect).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+
+      const reconnectAttempt = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(reconnectAttempt).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
     },
   );
 
+  it(
+    'GPT-PM round-8 MAJOR #3, post-stopWatch failure path: a LOCAL decrypt failure AFTER ' +
+      "stopWatch has already resolved (externalPhase 'stop-settled') DOES release the lock " +
+      "immediately -- revokeToken was never invoked this attempt, so Google's revoke state is " +
+      'genuinely unchanged, unlike an ambiguous stopWatch/revokeToken rejection',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      // Corrupt the stored IV so decryptRefreshToken's AES-GCM authentication check fails --
+      // stopWatch (called first, before decrypt) still resolves normally.
+      await db
+        .prepare('UPDATE gmail_connections SET refresh_token_iv = ? WHERE source_account_id = ?')
+        .bind('AAAAAAAAAAAAAAAA', accounts.gmailAccountId)
+        .run();
+
+      await expect(
+        disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+          sourceAccountId: accounts.gmailAccountId,
+          now: FIXTURE_NOW,
+        }),
+      ).rejects.toThrow();
+
+      // The lock WAS released (this failure is provably local/pre-Google) -- clean up the
+      // corrupted row directly, then confirm a fresh connect is no longer refused.
+      await db
+        .prepare('DELETE FROM gmail_connections WHERE source_account_id = ?')
+        .bind(accounts.gmailAccountId)
+        .run();
+      const reconnectAttempt = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(reconnectAttempt).toEqual({ outcome: 'CONNECTED' });
+    },
+  );
+
+  // NOTE (round-9, functional-test-reviewer MINOR): this test and 'GPT-PM round 5/6 MAJOR' below
+  // look near-identical (both race a reconnect against disconnect's own in-flight revokeToken()) --
+  // intentionally preserved as two separate tests, not merged, since they document two DIFFERENT
+  // historical GPT-PM findings (rounds 2-3's original discovery vs. rounds 5-6's fix to what
+  // "cleared" means) that happen to share the same reproduction shape under the current design.
   it(
     'GPT-PM round-2/round-3 MAJOR (superseding round-1 MAJOR #1): a reconnect attempted DURING ' +
       "disconnect's own revokeToken call is refused with DISCONNECT_IN_PROGRESS -- Google's " +
@@ -644,11 +878,11 @@ describe('disconnectGmailAccount', () => {
   );
 
   it(
-    'GPT-PM round 5/6 MAJOR (superseding rounds 4/5): a reconnect is refused even when the ' +
-      "lease's OWN stored expiry has already passed, as long as disconnect is still genuinely " +
-      'running -- proving reconnect eligibility depends on the lease being CLEARED (an actual ' +
-      'settlement), never on elapsed client-side time, which is exactly the property rounds 4 and ' +
-      '5 each got wrong in a different way',
+    'GPT-PM round 5/6 MAJOR (superseding rounds 4/5), preserved under the round-8 lock design: a ' +
+      "reconnect is refused for as long as disconnect's own gmail_oauth_lifecycle lock is genuinely " +
+      'held, proving reconnect eligibility depends on the lock actually being CLEARED, never on any ' +
+      'elapsed-time signal -- the acquisition guard reads only lock_token IS NULL, so there is no ' +
+      'stored expiry left to manipulate the way rounds 4 and 5 each incorrectly relied on one',
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -663,20 +897,6 @@ describe('disconnectGmailAccount', () => {
       let reconnectResult: ConnectGmailAccountResult | null = null;
       const client = fakeGoogleClient({
         revokeToken: async () => {
-          // While disconnect is still genuinely mid-flight (inside its own revokeToken call),
-          // force the row's OWN stored expiry into the past -- exactly what a round 4/5-style
-          // design would have read as "safe to let reconnect through." A correct design must
-          // still refuse here, since this disconnect attempt has not settled.
-          await db
-            .prepare(
-              'UPDATE gmail_connections SET disconnect_lease_expires_at = ? WHERE source_account_id = ?',
-            )
-            .bind(
-              new Date(Date.parse(FIXTURE_NOW) - 1_000_000).toISOString(),
-              accounts.gmailAccountId,
-            )
-            .run();
-
           reconnectResult = await connectGmailAccount(
             db,
             kek,
@@ -709,13 +929,11 @@ describe('disconnectGmailAccount', () => {
   );
 
   it(
-    'GPT-PM round-7 MAJOR #1: an abandoned lease (the shape a disconnect that crashed outright, ' +
-      'never reaching its own catch block, would leave behind) is a DELIBERATE dead end for this ' +
-      "module's own public API -- neither a reconnect NOR a fresh disconnectGmailAccount call may " +
-      'take it over, no matter how long ago its stored expiry passed, because elapsed client-side ' +
-      "time can never prove the original attempt's revokeToken call actually finished. Both " +
-      "connectGmailAccount's and disconnectGmailAccount's OWN guards check disconnect_lease_token " +
-      'IS NULL alone.',
+    'GPT-PM round-7 MAJOR #1, preserved under the round-8 lock design: an abandoned lock (the ' +
+      'shape a disconnect that crashed outright, never reaching its own catch block, would leave ' +
+      "behind on gmail_oauth_lifecycle) is a DELIBERATE dead end for this module's own public API " +
+      '-- neither a reconnect NOR a fresh disconnectGmailAccount call may take it over, because no ' +
+      "client-side signal can prove the original attempt's external call actually finished",
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -727,17 +945,17 @@ describe('disconnectGmailAccount', () => {
         now: FIXTURE_NOW,
       });
 
-      // Simulate an abandoned lease directly at the schema level, with a stored expiry far in the
-      // past -- the exact shape a crashed disconnectGmailAccount call would leave behind.
+      // Simulate an abandoned lock directly at the schema level -- the exact shape a crashed
+      // disconnectGmailAccount call would leave behind on gmail_oauth_lifecycle.
+      // The row already exists (connectGmailAccount above created and then released it), so this
+      // seeds the abandoned lock via UPDATE, not INSERT.
       await db
         .prepare(
-          'UPDATE gmail_connections SET disconnect_lease_token = ?, disconnect_lease_expires_at = ? WHERE source_account_id = ?',
+          `UPDATE gmail_oauth_lifecycle
+           SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?
+           WHERE source_account_id = ?`,
         )
-        .bind(
-          'abandoned-lease',
-          new Date(Date.parse(FIXTURE_NOW) - 1_000_000).toISOString(),
-          accounts.gmailAccountId,
-        )
+        .bind('abandoned-lock', FIXTURE_NOW, accounts.gmailAccountId)
         .run();
 
       const reconnectAttempt = await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -756,22 +974,25 @@ describe('disconnectGmailAccount', () => {
       });
       expect(disconnectTakeoverAttempt).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
 
-      // Still stuck: the row is untouched and the abandoned lease token is still exactly what was
-      // seeded, proving neither attempt above silently cleared or replaced it.
-      const row = await db
-        .prepare('SELECT disconnect_lease_token FROM gmail_connections WHERE source_account_id = ?')
+      // Still stuck: the abandoned lock token is still exactly what was seeded, proving neither
+      // attempt above silently cleared or replaced it.
+      const lifecycle = await db
+        .prepare('SELECT lock_token FROM gmail_oauth_lifecycle WHERE source_account_id = ?')
         .bind(accounts.gmailAccountId)
-        .first<{ disconnect_lease_token: string }>();
-      expect(row?.disconnect_lease_token).toBe('abandoned-lease');
+        .first<{ lock_token: string }>();
+      expect(lifecycle?.lock_token).toBe('abandoned-lock');
     },
   );
 
   it(
-    'GPT-PM round-1 MAJOR #2: the connection delete and the oauth_flows clear are ONE atomic ' +
-      'db.batch() -- when the batch itself fails, NEITHER takes effect, so a retry is never stuck ' +
-      'seeing a half-cleaned-up state. Also GPT-PM round-7 MAJOR #2, post-settlement failure path: ' +
-      'since revokeToken already resolved successfully before the batch threw, the lease IS ' +
-      "released (Google's side is confirmed settled), unlike an ambiguous revokeToken failure",
+    'GPT-PM round-1 MAJOR #2: the connection delete, the oauth_flows clear, and the lifecycle ' +
+      'lock release/revoke_settled_at write are now THREE statements in ONE atomic db.batch() -- ' +
+      'when the batch itself fails, NONE of them take effect, so a retry is never stuck seeing a ' +
+      'half-cleaned-up state. Also GPT-PM round-7 MAJOR #2 + round-8 MAJOR #2, post-settlement ' +
+      'failure path: since revokeToken already resolved successfully before the batch threw, the ' +
+      "catch block's OWN separate release records revoke_settled_at (Google's side is confirmed " +
+      'settled) -- an immediate reconnect is still refused by the propagation buffer, but a ' +
+      'disconnect retry (unaffected by that buffer) succeeds',
     async () => {
       const { db, accounts, kek } = await setup();
       await connectGmailAccount(db, kek, fakeGoogleClient(), {
@@ -811,13 +1032,337 @@ describe('disconnectGmailAccount', () => {
         .first();
       expect(flow).not.toBeNull();
 
-      // The lease was released (revokeToken had already resolved) -- a retry against the real db
-      // succeeds rather than being refused.
+      // The lock WAS released (revokeToken had already resolved) -- a disconnect retry against the
+      // real db succeeds. Delete the leftover row first (it was only "not yet deleted" because the
+      // batch failed, not because it is a fresh connection) so the retry has a clean row to act on.
+      await db
+        .prepare('DELETE FROM gmail_connections WHERE source_account_id = ?')
+        .bind(accounts.gmailAccountId)
+        .run();
+
+      // But revoke_settled_at WAS recorded from the failed attempt -- an immediate reconnect is
+      // still refused by the propagation buffer even though the lock itself is free.
+      const immediateReconnect = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      expect(immediateReconnect).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+
       const retryResult = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
         sourceAccountId: accounts.gmailAccountId,
         now: FIXTURE_NOW,
       });
-      expect(retryResult).toEqual({ outcome: 'DISCONNECTED' });
+      expect(retryResult).toEqual({ outcome: 'NOT_CONNECTED' });
+    },
+  );
+});
+
+describe('round-9 remediation (internal review: architect, database-reviewer, functional-test-reviewer)', () => {
+  it(
+    "functional-test-reviewer MAJOR: releaseLifecycleLock's CAS fence on lock_token is load-bearing " +
+      "-- a release attempt whose own token no longer matches the row's CURRENT holder (a different " +
+      "actor took over in between) does NOT clear that other, currently-legitimate holder's lock",
+    async () => {
+      const { db, accounts, kek } = await setup();
+      const exchangeFails = new Error('transport failure');
+      const failingClient = fakeGoogleClient({
+        exchangeCode: async () => {
+          // Simulate a different actor (e.g. a disconnect) taking over this account's lock in
+          // between this call's own acquisition and its about-to-happen release attempt.
+          await db
+            .prepare(
+              `UPDATE gmail_oauth_lifecycle
+               SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?
+               WHERE source_account_id = ?`,
+            )
+            .bind('other-holder-token', FIXTURE_NOW, accounts.gmailAccountId)
+            .run();
+          throw exchangeFails;
+        },
+      });
+
+      await expect(
+        connectGmailAccount(db, kek, failingClient, {
+          sourceAccountId: accounts.gmailAccountId,
+          code: 'auth-code',
+          codeVerifier: 'verifier',
+          collectionMode: 'PUSH',
+          kekVersion: KEK_VERSION,
+          now: FIXTURE_NOW,
+        }),
+      ).rejects.toThrow(exchangeFails);
+
+      const lifecycle = await db
+        .prepare(
+          'SELECT lock_token, lock_kind FROM gmail_oauth_lifecycle WHERE source_account_id = ?',
+        )
+        .bind(accounts.gmailAccountId)
+        .first<{ lock_token: string; lock_kind: string }>();
+      expect(lifecycle?.lock_token).toBe('other-holder-token');
+      expect(lifecycle?.lock_kind).toBe('DISCONNECT');
+    },
+  );
+
+  it(
+    'functional-test-reviewer MINOR: the propagation buffer boundary -- a reconnect exactly ' +
+      'REVOKE_PROPAGATION_BUFFER_MS (5 minutes) after revoke_settled_at is allowed, proving the ' +
+      'guard is an inclusive <=, not a strict <',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-1',
+        codeVerifier: 'verifier-1',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+      await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: FIXTURE_NOW,
+      });
+
+      const exactlyAtBuffer = new Date(Date.parse(FIXTURE_NOW) + 5 * 60_000).toISOString();
+      const result = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: exactlyAtBuffer,
+      });
+      expect(result).toEqual({ outcome: 'CONNECTED' });
+    },
+  );
+
+  it(
+    'architect MAJOR: an abandoned CONNECT-kind lock (crash debris -- exchangeCode() never mutates ' +
+      'anything at Google, so unlike a DISCONNECT lock there is no ambiguity to protect) no longer ' +
+      'permanently wedges disconnectGmailAccount -- refused until CONNECT_LOCK_STALE_MS (2 minutes) ' +
+      'has elapsed since lock_acquired_at, then stealable',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      // Simulate crash debris: a CONNECT lock left behind with no release ever having run.
+      await db
+        .prepare(
+          `UPDATE gmail_oauth_lifecycle
+           SET lock_token = ?, lock_kind = 'CONNECT', lock_acquired_at = ?
+           WHERE source_account_id = ?`,
+        )
+        .bind('abandoned-connect-lock', FIXTURE_NOW, accounts.gmailAccountId)
+        .run();
+
+      const tooSoon = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: new Date(Date.parse(FIXTURE_NOW) + 60_000).toISOString(),
+      });
+      expect(tooSoon).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
+
+      const afterStale = new Date(Date.parse(FIXTURE_NOW) + 2 * 60_000 + 1).toISOString();
+      const result = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: afterStale,
+      });
+      expect(result).toEqual({ outcome: 'DISCONNECTED' });
+    },
+  );
+
+  it(
+    'architect MAJOR: the never-delete invariant on gmail_oauth_lifecycle is enforced at the ' +
+      'database level (a BEFORE DELETE trigger), not only in TypeScript prose',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      await expect(
+        db
+          .prepare('DELETE FROM gmail_oauth_lifecycle WHERE source_account_id = ?')
+          .bind(accounts.gmailAccountId)
+          .run(),
+      ).rejects.toThrow();
+    },
+  );
+
+  it(
+    "architect MAJOR #1 (this checkpoint's own reproduction): the credential write is fenced on " +
+      'still holding the acquired lock at write time, not merely checked once at acquisition -- if ' +
+      "a different actor takes the lock between acquisition and the final write (architect's own " +
+      'scenario: the documented manual-recovery path clearing a wedged lock mid-exchangeCode()), ' +
+      'connectGmailAccount throws ConnectLockLostBeforeWriteError instead of silently reporting ' +
+      'CONNECTED without exclusivity, and never persists the credential',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      const client = fakeGoogleClient({
+        exchangeCode: async () => {
+          // Simulate the lock being reclaimed by someone else mid-flight -- our own lockToken is no
+          // longer the current holder by the time this function's own write runs.
+          await db
+            .prepare(
+              `UPDATE gmail_oauth_lifecycle
+               SET lock_token = ?, lock_kind = 'DISCONNECT', lock_acquired_at = ?
+               WHERE source_account_id = ?`,
+            )
+            .bind('someone-else-token', FIXTURE_NOW, accounts.gmailAccountId)
+            .run();
+          return { refreshToken: '1//stolen-window-token', gmailEmail: 'owner@example.com' };
+        },
+      });
+
+      await expect(
+        connectGmailAccount(db, kek, client, {
+          sourceAccountId: accounts.gmailAccountId,
+          code: 'auth-code',
+          codeVerifier: 'verifier',
+          collectionMode: 'PUSH',
+          kekVersion: KEK_VERSION,
+          now: FIXTURE_NOW,
+        }),
+      ).rejects.toThrow(ConnectLockLostBeforeWriteError);
+
+      const row = await db
+        .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
+        .bind(accounts.gmailAccountId)
+        .first();
+      expect(row).toBeNull();
+
+      // The other holder's lock is untouched -- the catch block's own release attempt (with our
+      // now-stale token) was a safe fenced no-op, not a clobber.
+      const lifecycle = await db
+        .prepare('SELECT lock_token FROM gmail_oauth_lifecycle WHERE source_account_id = ?')
+        .bind(accounts.gmailAccountId)
+        .first<{ lock_token: string }>();
+      expect(lifecycle?.lock_token).toBe('someone-else-token');
+    },
+  );
+
+  it(
+    "architect MAJOR #3 (verified against Google's own primary OAuth documentation -- revocation " +
+      'is project-wide, not scoped to one source_account_id): two DIFFERENT source_account_id rows ' +
+      'can no longer hold a live connection to the SAME real Gmail address at once -- the UNIQUE ' +
+      'index on gmail_connections(LOWER(gmail_email)) (migration 0005) refuses the second connect',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-1',
+        codeVerifier: 'verifier-1',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const secondAccountId = 'acc-gmail-second';
+      await db
+        .prepare(
+          'INSERT INTO source_accounts (source_account_id, user_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        )
+        .bind(secondAccountId, accounts.userId, 'gmail', FIXTURE_NOW, FIXTURE_NOW)
+        .run();
+
+      await expect(
+        connectGmailAccount(db, kek, fakeGoogleClient(), {
+          sourceAccountId: secondAccountId,
+          code: 'auth-code-2',
+          codeVerifier: 'verifier-2',
+          collectionMode: 'PUSH',
+          kekVersion: KEK_VERSION,
+          now: FIXTURE_NOW,
+        }),
+      ).rejects.toThrow();
+
+      const secondRow = await db
+        .prepare('SELECT 1 FROM gmail_connections WHERE source_account_id = ?')
+        .bind(secondAccountId)
+        .first();
+      expect(secondRow).toBeNull();
+    },
+  );
+
+  it(
+    'architect MAJOR (reconciliation primitives): listWedgedGmailDisconnectLocks finds an ' +
+      'ambiguous-failure-wedged account, and reconcileWedgedGmailDisconnectLock with ' +
+      'REVOKE_CONFIRMED clears the lock AND records revoke_settled_at -- following this primitive ' +
+      'cannot silently omit revoke_settled_at the way the old hand-written-SQL prose could',
+    async () => {
+      const { db, accounts, kek } = await setup();
+      await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code',
+        codeVerifier: 'verifier',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: FIXTURE_NOW,
+      });
+
+      const revokeFails = new Error('google unavailable');
+      await expect(
+        disconnectGmailAccount(
+          db,
+          kek,
+          fakeGoogleClient({
+            revokeToken: async () => {
+              throw revokeFails;
+            },
+          }),
+          { sourceAccountId: accounts.gmailAccountId, now: FIXTURE_NOW },
+        ),
+      ).rejects.toThrow(DisconnectAmbiguousExternalCallError);
+
+      const wedged = await listWedgedGmailDisconnectLocks(db);
+      expect(wedged).toHaveLength(1);
+      expect(wedged[0]?.sourceAccountId).toBe(accounts.gmailAccountId);
+
+      const lockRow = await db
+        .prepare('SELECT lock_token FROM gmail_oauth_lifecycle WHERE source_account_id = ?')
+        .bind(accounts.gmailAccountId)
+        .first<{ lock_token: string }>();
+
+      const confirmedAt = new Date(Date.parse(FIXTURE_NOW) + 3600_000).toISOString();
+      await reconcileWedgedGmailDisconnectLock(db, {
+        sourceAccountId: accounts.gmailAccountId,
+        lockToken: lockRow!.lock_token,
+        now: confirmedAt,
+        googleConfirmedOutcome: 'REVOKE_CONFIRMED',
+      });
+
+      // The lock is clear...
+      const afterReconcile = await disconnectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        now: confirmedAt,
+      });
+      expect(afterReconcile).toEqual({ outcome: 'DISCONNECTED' });
+
+      // ...but revoke_settled_at WAS recorded at the confirmation time, so an immediate reconnect
+      // still respects the propagation buffer instead of the reconciliation silently bypassing it.
+      const immediateReconnect = await connectGmailAccount(db, kek, fakeGoogleClient(), {
+        sourceAccountId: accounts.gmailAccountId,
+        code: 'auth-code-2',
+        codeVerifier: 'verifier-2',
+        collectionMode: 'PUSH',
+        kekVersion: KEK_VERSION,
+        now: confirmedAt,
+      });
+      expect(immediateReconnect).toEqual({ outcome: 'DISCONNECT_IN_PROGRESS' });
     },
   );
 });

@@ -16,9 +16,10 @@ export function loadG2Schema(): string {
 
 /**
  * G3's schema builds on G2's unchanged -- concatenates migration 0001 (accounts/policy/cursor/
- * ingest/outbox/DLQ) with 0002 (Gmail connector) and 0003 (OAuth disconnect lock, checkpoint 4
- * round-3) so a G3 test gets every table G3's own tables reference via FK (source_accounts,
- * ingest_events) without re-declaring them.
+ * ingest/outbox/DLQ) with 0002 (Gmail connector), 0003 (OAuth disconnect lock, checkpoint 4
+ * round-3), 0004 (OAuth lifecycle lock, checkpoint 4 round-8) and 0005 (unique Gmail email,
+ * checkpoint 4 round-9) so a G3 test gets every table G3's own tables reference via FK
+ * (source_accounts, ingest_events) without re-declaring them.
  */
 export function loadG3Schema(): string {
   const path0002 = fileURLToPath(
@@ -27,5 +28,14 @@ export function loadG3Schema(): string {
   const path0003 = fileURLToPath(
     new URL('../../../infra/migrations/0003_gmail_oauth_disconnect_lock.sql', import.meta.url),
   );
-  return `${loadG2Schema()}\n${readFileSync(path0002, 'utf8')}\n${readFileSync(path0003, 'utf8')}`;
+  const path0004 = fileURLToPath(
+    new URL('../../../infra/migrations/0004_gmail_oauth_lifecycle_lock.sql', import.meta.url),
+  );
+  const path0005 = fileURLToPath(
+    new URL('../../../infra/migrations/0005_gmail_connections_unique_email.sql', import.meta.url),
+  );
+  return (
+    `${loadG2Schema()}\n${readFileSync(path0002, 'utf8')}\n${readFileSync(path0003, 'utf8')}\n` +
+    `${readFileSync(path0004, 'utf8')}\n${readFileSync(path0005, 'utf8')}`
+  );
 }

@@ -93,7 +93,10 @@ export {
   consumeOAuthFlow,
   connectGmailAccount,
   disconnectGmailAccount,
-  DisconnectAmbiguousRevokeError,
+  DisconnectAmbiguousExternalCallError,
+  ConnectLockLostBeforeWriteError,
+  listWedgedGmailDisconnectLocks,
+  reconcileWedgedGmailDisconnectLock,
 } from './gmail/oauth.js';
 export type {
   CreateOAuthFlowOptions,
@@ -106,4 +109,6 @@ export type {
   ConnectGmailAccountResult,
   DisconnectGmailAccountOptions,
   DisconnectGmailAccountResult,
+  WedgedGmailDisconnectLock,
+  ReconcileWedgedGmailDisconnectLockOptions,
 } from './gmail/oauth.js';
