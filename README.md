@@ -44,6 +44,6 @@ infra/           cloudflare, connector-host, migrations (empty — G1+)
 tests/           unit, contract, integration, e2e, policy, security, resilience, quota, fixtures
 governance/      plans, reviews, gate-manifests (operator-owned), operator-approvals (operator-owned)
 scripts/         verify, quota, probes, backup, restore, ops
-.claude/agents/  the thirteen review roles (arch-01 .. red-01, code-01, silent-bugs-01, python-01)
+.claude/agents/  the fourteen review roles (arch-01 .. red-01, code-01, silent-bugs-01, python-01, design-01)
 .claude/skills/  project-local gate workflow skill
 ```

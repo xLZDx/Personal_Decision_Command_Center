@@ -69,9 +69,9 @@ each test would actually fail if the guarded behavior were removed.
 
 ## Review roles
 
-Ten specialist review roles are defined in `docs/architecture/TDD.md` §59 and implemented as
+Fourteen specialist review roles are defined in `docs/architecture/TDD.md` §59 and implemented as
 Claude-Code subagents in `.claude/agents/` (`arch-01`, `sec-01`, `priv-01`, `data-01`, `rel-01`,
-`ai-01`, `qa-01`, `ux-01`, `gov-01`, `red-01`, `code-01`, `silent-bugs-01`, `python-01`). A non-Claude-Code agent fulfilling one of these
+`ai-01`, `qa-01`, `ux-01`, `gov-01`, `red-01`, `code-01`, `silent-bugs-01`, `python-01`, `design-01`). A non-Claude-Code agent fulfilling one of these
 roles should read the matching `.claude/agents/<role>.md` file for its actual checklist — the
 role definitions are tool-agnostic even though the invocation mechanism is Claude-Code-specific.
 

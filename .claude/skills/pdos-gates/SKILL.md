@@ -40,9 +40,9 @@ kickoff prompt.
 
 ## 4. Review roles
 
-Thirteen roles exist as project-local subagents in `.claude/agents/`: `arch-01`, `sec-01`, `priv-01`,
+Fourteen roles exist as project-local subagents in `.claude/agents/`: `arch-01`, `sec-01`, `priv-01`,
 `data-01`, `rel-01`, `ai-01`, `qa-01`, `ux-01`, `gov-01`, `red-01`, `code-01`, `silent-bugs-01`,
-`python-01`. Select the minimal relevant
+`python-01`, `design-01`. Select the minimal relevant
 set for the gate's actual surface (global CLAUDE.md §6 still governs selection) — a Gmail-connector
 gate needs `sec-01`/`priv-01`/`rel-01`/`data-01` at minimum, not necessarily `ux-01`. `gov-01` runs
 at every gate's close. `red-01` runs only after every other selected role has already returned

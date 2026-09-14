@@ -39,6 +39,13 @@ const IdentityInput = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    if (value.state === 'REJECTED' && value.personId !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['personId'],
+        message: 'REJECTED mappings must not retain a personId',
+      });
+    }
     if (value.state !== 'REJECTED' && value.personId === null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -63,7 +70,8 @@ export async function persistIdentityMapping(
          SELECT ?, source, source_identity, person_id, ?, state, ?, ?, ?, ?
          FROM source_identities WHERE source = ? AND source_identity = ?
          UNION ALL SELECT ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?
-         WHERE NOT EXISTS (SELECT 1 FROM source_identities WHERE source = ? AND source_identity = ?)`,
+         WHERE NOT EXISTS (SELECT 1 FROM source_identities WHERE source = ? AND source_identity = ?)
+         ON CONFLICT(audit_id) DO NOTHING`,
       )
       .bind(
         value.auditId,
@@ -128,7 +136,7 @@ export async function persistTopicAssignment(
         value.resolution,
         value.score,
         value.resolverVersion,
-        value.assignedBy,
+        value.actor,
         value.now,
         value.now,
       ),
@@ -143,7 +151,7 @@ export async function persistTopicAssignment(
       .bind(
         value.auditId,
         value.operation,
-        value.assignedBy,
+        value.actor,
         value.reason,
         value.score,
         value.resolverVersion,

@@ -69,5 +69,29 @@ describe('resolver durable store', () => {
         actor: 'operator-1',
       }),
     ).resolves.toMatchObject({ status: 'PERSISTED', source: 'telegram' });
+    await expect(
+      persistIdentityMapping(db, {
+        source: 'telegram',
+        sourceIdentity: 'tg:42',
+        personId: null,
+        state: 'REJECTED',
+        evidenceIds: ['event-9'],
+        now: '2026-09-14T10:00:00.000Z',
+        auditId: 'identity-audit-1',
+        actor: 'operator-1',
+      }),
+    ).resolves.toMatchObject({ status: 'PERSISTED' });
+    await expect(
+      persistIdentityMapping(db, {
+        source: 'telegram',
+        sourceIdentity: 'tg:43',
+        personId: 'person-1',
+        state: 'REJECTED',
+        evidenceIds: ['event-9'],
+        now: '2026-09-14T10:00:00.000Z',
+        auditId: 'identity-audit-2',
+        actor: 'operator-1',
+      }),
+    ).rejects.toThrow();
   });
 });

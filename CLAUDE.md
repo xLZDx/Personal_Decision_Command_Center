@@ -77,7 +77,7 @@ not the source of truth, and is the kind of line that goes stale; check the tabl
 
 Ten specialist review roles are defined for this project — see `.claude/agents/`:
 `arch-01`, `sec-01`, `priv-01`, `data-01`, `rel-01`, `ai-01`, `qa-01`, `ux-01`, `gov-01`, `red-01`,
-`code-01`, `silent-bugs-01`, `python-01`.
+`code-01`, `silent-bugs-01`, `python-01`, `design-01`.
 A role may be fulfilled by a fresh Claude subagent, GPT-PM, or another model — never by the same
 context that implemented the gate. Route selection still follows the global §6 (minimal relevant
 set for the gate's actual surface); this project simply names the ten roles so gates share a
