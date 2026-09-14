@@ -1,0 +1,13 @@
+# G3 Gmail content gateway. OAuth/history/watch handlers are added only after their owner-auth
+# and Pub/Sub controls are closed; this Worker currently exposes the internal signed-content path.
+name = "pdos-gmail-connector"
+main = "src/index.ts"
+compatibility_date = "2026-09-10"
+
+[[services]]
+binding = "GMAIL_API"
+service = "pdos-gmail-api-adapter"
+
+# Provision as a Worker Secret; never put the private JWK in vars or repository files.
+# [vars]
+# GMAIL_CONTENT_SIGNING_PRIVATE_JWK = "<secret binding, provision out-of-band>"

@@ -69,3 +69,16 @@ export async function signEcdsaP256Signature(
   );
   return bytesToBase64(signature);
 }
+
+/** Import connector-only private signing material from a Worker Secret JSON JWK. */
+export async function importEcdsaP256PrivateJwk(
+  privateJwk: Record<string, unknown>,
+): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'jwk',
+    privateJwk as never,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign'],
+  );
+}

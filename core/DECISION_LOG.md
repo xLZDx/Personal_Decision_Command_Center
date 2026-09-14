@@ -3,6 +3,15 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 15: signed Gmail content gateway
+
+Added the dedicated `services/gmail-connector` content-gateway Worker. It accepts only an opaque
+`eventId`/account/message pointer, fetches normalized fields through a Gmail API service binding,
+and signs the exact returned envelope with a private ECDSA P-256 JWK held in a Worker Secret. The
+processor receives only the corresponding public JWK. Malformed pointers are rejected before any
+Gmail call; raw content is not logged or persisted. OAuth/history/watch orchestration remains
+separately gated and is not silently enabled by this endpoint.
+
 ## 2026-09-14 — G3 checkpoint 14: explicit legacy schema mode
 
 The prior compatibility fallback is now gated by `PROCESSOR_G2_COMPAT_MODE=true`, intended only
