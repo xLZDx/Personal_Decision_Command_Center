@@ -97,6 +97,8 @@ export type {
   TelegramParserInput,
   TelegramSignalKind,
 } from './telegram/parser.js';
+export { classifyTelegramIntent, TELEGRAM_INTENT_CLASSES } from './telegram/intent.js';
+export type { TelegramIntentClass, TelegramIntentResult } from './telegram/intent.js';
 export { resolveTopicDeterministically } from './resolver/topic.js';
 export type { TopicCandidate, TopicResolution, TopicResolutionResult } from './resolver/topic.js';
 
