@@ -76,10 +76,10 @@ function loader(content: MessageContent = MESSAGE) {
     get calls() {
       return calls;
     },
-    loadMessage: async (opts: { sourceAccountId: string; messageId: string }) => {
+    loadMessage: async (opts: { eventId: string; sourceAccountId: string; messageId: string }) => {
       calls += 1;
       const attestation = {
-        eventId: opts.messageId === 'ref-event-1' ? 'event-1' : opts.messageId.replace('ref-', ''),
+        eventId: opts.eventId,
         sourceAccountId: opts.sourceAccountId,
         messageId: opts.messageId,
         content,
@@ -243,9 +243,13 @@ describe('GmailAIEngine authoritative boundary', () => {
       new GmailAIEngine({
         db,
         messageLoader: {
-          loadMessage: async (opts: { sourceAccountId: string; messageId: string }) => {
+          loadMessage: async (opts: {
+            eventId: string;
+            sourceAccountId: string;
+            messageId: string;
+          }) => {
             const attestation = {
-              eventId: 'event-attestation',
+              eventId: opts.eventId,
               sourceAccountId: opts.sourceAccountId,
               messageId: opts.messageId,
               content: { ...MESSAGE, plainText: 'Telegram/shared-topic text' },
@@ -271,8 +275,12 @@ describe('GmailAIEngine authoritative boundary', () => {
     const { db } = await setup('event-untrusted-loader');
     const capture = provider();
     const maliciousLoader = {
-      loadMessage: async (opts: { sourceAccountId: string; messageId: string }) => ({
-        eventId: 'event-untrusted-loader',
+      loadMessage: async (opts: {
+        eventId: string;
+        sourceAccountId: string;
+        messageId: string;
+      }) => ({
+        eventId: opts.eventId,
         sourceAccountId: opts.sourceAccountId,
         messageId: opts.messageId,
         content: { ...MESSAGE, plainText: 'Telegram/shared-topic text' },
@@ -289,6 +297,49 @@ describe('GmailAIEngine authoritative boundary', () => {
       }).enrich('event-untrusted-loader'),
     ).rejects.toThrow(/attestation failed/);
     expect(capture.calls).toBe(0);
+  });
+
+  it('passes opaque authoritative event IDs to the connector signer', async () => {
+    const { db } = await setup('event-opaque-id');
+    await db
+      .prepare('UPDATE ingest_events SET content_locator_ref = ? WHERE event_id = ?')
+      .bind('gmail-message-opaque-7f3a', 'event-opaque-id')
+      .run();
+    const capture = provider();
+    const observed: { eventId?: string; messageId?: string } = {};
+    const result = await new GmailAIEngine({
+      db,
+      messageLoader: {
+        loadMessage: async (opts: {
+          eventId: string;
+          sourceAccountId: string;
+          messageId: string;
+        }) => {
+          observed.eventId = opts.eventId;
+          observed.messageId = opts.messageId;
+          const attestation = {
+            eventId: opts.eventId,
+            sourceAccountId: opts.sourceAccountId,
+            messageId: opts.messageId,
+            content: MESSAGE,
+          };
+          return {
+            ...attestation,
+            signature: await signEcdsaP256Signature(
+              TEST_ATTESTATION_PRIVATE_KEY,
+              canonical(attestation),
+            ),
+          };
+        },
+      },
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
+      ai: capture.binding,
+    }).enrich('event-opaque-id');
+    expect(result.outcome).toBe('COMPLETE');
+    expect(observed).toEqual({
+      eventId: 'event-opaque-id',
+      messageId: 'gmail-message-opaque-7f3a',
+    });
   });
 
   it('rejects a real Telegram event before content loading or inference', async () => {
@@ -431,10 +482,14 @@ describe('GmailAIEngine authoritative boundary', () => {
       new GmailAIEngine({
         db: after.db,
         messageLoader: {
-          loadMessage: async (opts: { sourceAccountId: string; messageId: string }) => {
+          loadMessage: async (opts: {
+            eventId: string;
+            sourceAccountId: string;
+            messageId: string;
+          }) => {
             abortDuringLoad.abort();
             const attestation = {
-              eventId: 'event-aborted-after',
+              eventId: opts.eventId,
               sourceAccountId: opts.sourceAccountId,
               messageId: opts.messageId,
               content: MESSAGE,

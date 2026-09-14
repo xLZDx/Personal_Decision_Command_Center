@@ -192,6 +192,7 @@ interface GmailMessageContent {
 
 interface GmailMessageLoader {
   loadMessage(opts: {
+    eventId: string;
     sourceAccountId: string;
     messageId: string;
     signal?: AbortSignal;
@@ -607,6 +608,7 @@ export class GmailAIEngine {
 
     const now = this.#now();
     const attestation = await this.#messageLoader.loadMessage({
+      eventId: event.eventId,
       sourceAccountId: event.sourceAccountId,
       messageId: event.contentLocatorRef,
       ...(leaseLost === undefined ? {} : { signal: leaseLost }),

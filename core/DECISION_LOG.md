@@ -3,17 +3,26 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
-## 2026-09-14 — G3 checkpoint 7 round 1: AI boundary BLOCKER remediation implemented
+## 2026-09-14 — G3 checkpoint 9: authoritative event ID passed to signer
+
+Checkpoint 8 review found that `GmailMessageLoader` did not receive the authoritative PDOS event ID,
+making a legitimate signature impossible when Gmail's provider message ID is opaque. The loader
+contract now receives `eventId` explicitly from the D1-resolved event, and a regression uses unrelated
+opaque event/message identifiers. This preserves independent signer verification without deriving
+PDOS identity from provider IDs.
 
 ## 2026-09-14 — G3 checkpoint 8: separate Gmail content signing from AI verification
 
 The final checkpoint-7 review found that an HMAC secret supplied alongside an arbitrary loader let
 that same composition self-attest any bytes. The attestation boundary now uses ECDSA P-256: the
 connector/content gateway retains the private signing key, while `GmailAIEngine` accepts only a
-verification public JWK and verifies the canonical event/account/message/content payload. A
-malicious loader without the private key is covered by a regression test and cannot reach Workers
-AI. The existing ingest HMAC remains the connector-to-ingest request-authentication mechanism;
-content attestation is a separate key pair and capability.
+verification public JWK and verifies the canonical event/account/message/content payload. The
+engine passes the authoritative D1 event ID explicitly to that gateway. A malicious loader without
+the private key is covered by a regression test and cannot reach Workers AI. The existing ingest
+HMAC remains the connector-to-ingest request-authentication mechanism; content attestation is a
+separate key pair and capability.
+
+## 2026-09-14 — G3 checkpoint 7 round 1: AI boundary BLOCKER remediation implemented
 
 **External GPT-PM round 1:** `VERDICT: BLOCKER`, 1 BLOCKER / 1 MAJOR / 1 MINOR, correlated review
 of `8013585...49dc735` (`reviewInputHash
