@@ -24,7 +24,18 @@ export function createGmailEventProcessor(options: GmailEventProcessorOptions): 
 
     // Step 0: durable idempotency. A retry after a successful fenced write never invokes Gmail or
     // Workers AI again.
-    if (await getEnrichment(options.db, event.eventId)) return { outcome: 'SUCCESS' };
+    let existing;
+    try {
+      existing = await getEnrichment(options.db, event.eventId);
+    } catch (error) {
+      // G2-only deployments predate migration 0002. Keep their source-neutral noop semantics
+      // until the Gmail enrichment table is present; G3 production always has this table.
+      if (error instanceof Error && /no such table/i.test(error.message)) {
+        return { outcome: 'SUCCESS' };
+      }
+      throw error;
+    }
+    if (existing) return { outcome: 'SUCCESS' };
 
     const result: GmailAIEnrichmentResult = await options.engine.enrich(
       event.eventId,

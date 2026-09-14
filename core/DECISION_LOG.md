@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 13: preserve G2-only processor compatibility
+
+The processor's new step-0 enrichment lookup now recognizes a pre-G3 database that lacks
+`gmail_source_enrichments` and preserves the existing source-neutral success path. Full G3 schema
+deployments retain idempotent enrichment and deleted markers; this fallback is only for staged
+G2-only environments/tests during migration rollout.
+
 ## 2026-09-14 — G3 checkpoint 12: routing and cancellation regressions closed
 
 Added the two required behavioral proofs from checkpoint 11 review: with all Gmail AI bindings
