@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 12: routing and cancellation regressions closed
+
+Added the two required behavioral proofs from checkpoint 11 review: with all Gmail AI bindings
+configured, a Telegram queue pointer is source-routed to the neutral processor with zero gateway or
+Workers AI calls; and a pending content fetch observes lease-loss abort, with zero provider call or
+Neuron reservation. The fresh-clock and AI-off deletion tests remain green.
+
 ## 2026-09-14 — G3 checkpoint 11: production-safe routing, clocks, and cancellation
 
 Remediated the checkpoint-10 review findings. Workers AI admission now takes a fresh UTC timestamp

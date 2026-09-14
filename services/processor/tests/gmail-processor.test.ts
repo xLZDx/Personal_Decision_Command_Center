@@ -1,3 +1,4 @@
+/* global Response */
 import { describe, expect, it, vi } from 'vitest';
 import {
   FIXTURE_NOW,
@@ -167,6 +168,46 @@ describe('GmailEventProcessor', () => {
     );
     expect(ack).toHaveBeenCalledOnce();
     expect(await getEnrichment(db, eventId)).toMatchObject({ status: 'NO_CONTENT_DELETED' });
+    expect(
+      await db.prepare('SELECT state FROM ingest_events WHERE event_id = ?').bind(eventId).first(),
+    ).toEqual({ state: 'PROCESSED' });
+  });
+
+  it('configured Gmail AI never routes a Telegram pointer to Gmail gateway or Workers AI', async () => {
+    const db = createTestD1(loadG3Schema());
+    const accounts = await seedBaselineAccounts(db);
+    const eventId = '00000000-0000-4000-8000-000000000011';
+    await seedEvent(db, accounts, { eventId, source: 'telegram' });
+    await seedOutbox(db, eventId, { state: 'DISPATCHED', dispatchedAt: FIXTURE_NOW });
+    const gatewayFetch = vi.fn(async () => new Response('{}', { status: 500 }));
+    const aiRun = vi.fn(async () => ({ response: '{}' }));
+    const ack = vi.fn();
+    await queue(
+      {
+        messages: [
+          {
+            id: 'queue-telegram',
+            body: { event_id: eventId, operation: 'PROCESS_EVENT', schema_version: 4 },
+            ack,
+          },
+        ],
+      } as never,
+      {
+        DB: db,
+        GMAIL_CONTENT_GATEWAY: { fetch: gatewayFetch } as never,
+        WORKERS_AI: { run: aiRun } as never,
+        GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK: JSON.stringify({
+          kty: 'EC',
+          crv: 'P-256',
+          x: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          y: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        }),
+      },
+    );
+    expect(ack).toHaveBeenCalledOnce();
+    expect(gatewayFetch).not.toHaveBeenCalled();
+    expect(aiRun).not.toHaveBeenCalled();
+    expect(await getEnrichment(db, eventId)).toBeNull();
     expect(
       await db.prepare('SELECT state FROM ingest_events WHERE event_id = ?').bind(eventId).first(),
     ).toEqual({ state: 'PROCESSED' });

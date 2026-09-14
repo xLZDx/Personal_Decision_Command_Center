@@ -1,4 +1,4 @@
-/* global AbortController, TextEncoder, crypto */
+/* global AbortController, AbortSignal, TextEncoder, crypto, setTimeout */
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { webcrypto } from 'node:crypto';
 import {
@@ -524,6 +524,43 @@ describe('GmailAIEngine authoritative boundary', () => {
       }).enrich('event-aborted-after', abortDuringLoad.signal),
     ).rejects.toThrow(/lost before AI/);
     expect(capture.calls).toBe(0);
+  });
+
+  it('cancels a pending content fetch when the processing lease is lost', async () => {
+    const { db } = await setup('event-aborted-pending');
+    const capture = provider();
+    const controller = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    const pendingLoader = {
+      loadMessage: async (opts: {
+        eventId: string;
+        sourceAccountId: string;
+        messageId: string;
+        signal?: AbortSignal;
+      }) => {
+        observedSignal = opts.signal;
+        await new Promise<never>((_, reject) => {
+          opts.signal?.addEventListener('abort', () => reject(new Error('gateway aborted')), {
+            once: true,
+          });
+        });
+        throw new Error('unreachable');
+      },
+    };
+    const work = new GmailAIEngine({
+      db,
+      messageLoader: pendingLoader,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
+      ai: capture.binding,
+      now: () => FIXTURE_NOW,
+    }).enrich('event-aborted-pending', controller.signal);
+    while (!observedSignal) await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    await expect(work).rejects.toThrow(/gateway aborted/);
+    expect(capture.calls).toBe(0);
+    expect(await db.prepare('SELECT * FROM gmail_ai_neuron_reservations').all()).toMatchObject({
+      results: [],
+    });
   });
 
   it('bounds the complete JSON-escaped provider request', async () => {
