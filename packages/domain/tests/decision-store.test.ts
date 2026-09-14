@@ -9,8 +9,11 @@ describe('G6 durable decision store', () => {
     const schema = readFileSync(
       new URL('../../../infra/migrations/0012_g6_state_and_telegram_replay.sql', import.meta.url),
       'utf8',
-    );
+    ) + readFileSync(new URL('../../../infra/migrations/0013_g5_core_entities.sql', import.meta.url), 'utf8') +
+      readFileSync(new URL('../../../infra/migrations/0015_g6_integrity_triggers.sql', import.meta.url), 'utf8');
     const db = createTestD1(schema);
+    await db.prepare("INSERT INTO projects VALUES ('p', 'one', 'One', '2026-09-14T10:00:00.000Z', '2026-09-14T10:00:00.000Z')").run();
+    await db.prepare("INSERT INTO topics VALUES ('t1', 'p', NULL, 'ONE::1', 'ACTIVE', '2026-09-14T10:00:00.000Z', '2026-09-14T10:00:00.000Z')").run();
     const input = {
       decisionId: 'd1',
       topicId: 't1',

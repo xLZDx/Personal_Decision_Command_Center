@@ -2,7 +2,7 @@
 
 Date: 2026-09-14  
 Branch: `gate/g3-implementation`  
-Evidence head: `c7eb662`
+Evidence head: current branch tip (latest remediation includes migration `0015_g6_integrity_triggers.sql`)
 
 ## Result
 

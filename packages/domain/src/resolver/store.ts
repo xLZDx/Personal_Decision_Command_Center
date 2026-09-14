@@ -160,6 +160,8 @@ export async function splitTopicEvent(db: D1Database, input: SplitTopicEventInpu
     db.prepare(`UPDATE topic_events SET topic_id = ?, attached_at = ?, attached_by = ?
       WHERE topic_id = ? AND event_id = ?`)
       .bind(value.targetTopicId, value.now, value.actor, value.sourceTopicId, value.eventId),
+    db.prepare('UPDATE topic_assignments SET topic_id = ? WHERE topic_id = ? AND event_id = ?')
+      .bind(value.targetTopicId, value.sourceTopicId, value.eventId),
   ]);
   return Number(results[1]?.meta.changes ?? 0) === 1;
 }
@@ -312,6 +314,12 @@ export async function persistTopicAssignment(
     .first<{ assignment_id: string; event_id: string; operation: string; actor: string; reason: string; score: number; resolver_version: string; evidence_json: string }>();
   if (existingAudit && (existingAudit.assignment_id !== value.assignmentId || existingAudit.event_id !== value.eventId || existingAudit.operation !== value.operation || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || Number(existingAudit.score) !== value.score || existingAudit.resolver_version !== value.resolverVersion || existingAudit.evidence_json !== evidenceJson)) {
     throw new Error('audit id already used for a different topic assignment');
+  }
+  const existingAssignment = await db.prepare(`SELECT event_id, topic_id, resolution, score, resolver_version, assigned_by
+      FROM topic_assignments WHERE assignment_id = ?`).bind(value.assignmentId)
+    .first<{ event_id: string; topic_id: string; resolution: string; score: number; resolver_version: string; assigned_by: string }>();
+  if (existingAssignment && (existingAssignment.event_id !== value.eventId || existingAssignment.topic_id !== value.topicId || existingAssignment.resolution !== value.resolution || Number(existingAssignment.score) !== value.score || existingAssignment.resolver_version !== value.resolverVersion || existingAssignment.assigned_by !== value.assignedBy)) {
+    throw new Error('assignment id already used for a different assignment');
   }
   const statements = [
     db

@@ -6,7 +6,7 @@ Telegram login codes, OAuth refresh tokens, or private keys in chat/logs.
 
 ## Preconditions
 
-1. Deploy the current branch to an isolated staging project with D1 migrations through `0014` (including G5 integrity, unique event attachment, and append-only audit triggers).
+1. Deploy the current branch to an isolated staging project with D1 migrations through `0015` (including G5 integrity, unique event attachment, G6 referential and append-only audit triggers).
 2. Provision secrets directly in the platform secret manager; record only secret version IDs.
 3. Configure a test Telegram personal account and a test Gmail mailbox containing labeled,
    non-sensitive messages. Enable audit logging and a disposable notification subscription.
