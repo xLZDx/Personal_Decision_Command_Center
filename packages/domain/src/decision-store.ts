@@ -26,6 +26,25 @@ export async function persistDecision(
   input: PersistDecisionInput,
 ): Promise<boolean> {
   const value = DecisionInput.parse(input);
+  const evidenceJson = JSON.stringify(value.evidenceIds);
+  const existingAudit = await db.prepare(`SELECT entity_id, from_state, to_state, actor, evidence_json
+      FROM decision_state_audit WHERE audit_id = ?`).bind(value.auditId)
+    .first<{ entity_id: string; from_state: string | null; to_state: string; actor: string; evidence_json: string }>();
+  if (existingAudit && (existingAudit.entity_id !== value.decisionId || existingAudit.to_state !== value.state || existingAudit.actor !== value.actor || existingAudit.evidence_json !== evidenceJson)) {
+    throw new Error('audit id already used for a different decision transition');
+  }
+  const existing = await db.prepare('SELECT state FROM decisions WHERE decision_id = ?').bind(value.decisionId)
+    .first<{ state: string }>();
+  if (existing && existing.state !== value.state) {
+    const allowed: Record<string, readonly string[]> = {
+      OPEN: ['NEEDS_REVIEW', 'SNOOZED', 'CANCELLED'],
+      NEEDS_REVIEW: ['OPEN', 'SNOOZED', 'RESOLVED', 'CANCELLED'],
+      SNOOZED: ['OPEN', 'NEEDS_REVIEW', 'RESOLVED', 'CANCELLED'],
+      RESOLVED: [],
+      CANCELLED: [],
+    };
+    if (!allowed[existing.state]?.includes(value.state)) throw new Error(`invalid decision transition ${existing.state} -> ${value.state}`);
+  }
   const results = await db.batch([
     db
       .prepare(
@@ -40,14 +59,14 @@ export async function persistDecision(
         value.auditId,
         value.state,
         value.actor,
-        JSON.stringify(value.evidenceIds),
+        evidenceJson,
         value.now,
         value.decisionId,
         value.auditId,
         value.decisionId,
         value.state,
         value.actor,
-        JSON.stringify(value.evidenceIds),
+        evidenceJson,
         value.now,
         value.decisionId,
       ),

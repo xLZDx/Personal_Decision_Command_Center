@@ -169,6 +169,7 @@ describe('resolver durable store', () => {
         evidenceIds: ['e1'],
       }),
     ).toBe(true);
+    await db.prepare("INSERT INTO topic_assignments (assignment_id, event_id, topic_id, resolution, score, resolver_version, assigned_by, created_at, updated_at) VALUES ('as1', 'e1', 't1', 'AUTO_ATTACH', 0.9, 'v1', 'op', '2026-09-14T10:00:00.000Z', '2026-09-14T10:00:00.000Z')").run();
     expect(
       await mergeTopics(db, {
         sourceTopicId: 't1',
@@ -187,6 +188,8 @@ describe('resolver durable store', () => {
           .first<{ n: number }>()
       )?.n,
     ).toBe(1);
+    const assignment = await db.prepare("SELECT topic_id FROM topic_assignments WHERE assignment_id = 'as1'").first<{ topic_id: string }>();
+    expect(assignment?.topic_id).toBe('t2');
     expect(
       await detachTopicEvent(db, {
         topicId: 't2',
@@ -231,5 +234,6 @@ describe('resolver durable store', () => {
     expect(row?.topic_id).toBe('t2');
     const audit = await db.prepare("SELECT operation FROM topic_mutation_audit WHERE audit_id = 'a2'").first<{ operation: string }>();
     expect(audit?.operation).toBe('SPLIT');
+    await expect(splitTopicEvent(db, { sourceTopicId: 't1', targetTopicId: 't2', eventId: 'missing', actor: 'op', now: '2026-09-14T10:00:00.000Z', auditId: 'a3', reason: 'missing source', evidenceIds: [] })).resolves.toBe(false);
   });
 });

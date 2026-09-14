@@ -144,8 +144,11 @@ export async function splitTopicEvent(db: D1Database, input: SplitTopicEventInpu
   const evidenceJson = JSON.stringify(value.evidenceIds);
   const existingAudit = await db.prepare('SELECT operation, source_topic_id, target_topic_id, event_id, actor, reason, evidence_json FROM topic_mutation_audit WHERE audit_id = ?')
     .bind(value.auditId).first<Record<string, string>>();
-  if (existingAudit && (existingAudit.operation !== 'SPLIT' || existingAudit.source_topic_id !== value.sourceTopicId || existingAudit.target_topic_id !== value.targetTopicId || existingAudit.event_id !== value.eventId || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || existingAudit.evidence_json !== evidenceJson)) {
-    throw new Error('audit id already used for a different mutation');
+  if (existingAudit) {
+    if (existingAudit.operation !== 'SPLIT' || existingAudit.source_topic_id !== value.sourceTopicId || existingAudit.target_topic_id !== value.targetTopicId || existingAudit.event_id !== value.eventId || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || existingAudit.evidence_json !== evidenceJson) {
+      throw new Error('audit id already used for a different mutation');
+    }
+    return false;
   }
   const results = await db.batch([
     db.prepare(`INSERT INTO topic_mutation_audit
@@ -154,13 +157,11 @@ export async function splitTopicEvent(db: D1Database, input: SplitTopicEventInpu
       WHERE EXISTS (SELECT 1 FROM topic_events WHERE topic_id = ? AND event_id = ?)
       ON CONFLICT(audit_id) DO NOTHING`)
       .bind(value.auditId, value.eventId, value.sourceTopicId, value.targetTopicId, value.actor, value.reason, evidenceJson, value.now, value.sourceTopicId, value.eventId),
-    db.prepare('DELETE FROM topic_events WHERE topic_id = ? AND event_id = ?')
-      .bind(value.sourceTopicId, value.eventId),
-    db.prepare(`INSERT INTO topic_events (topic_id, event_id, attached_at, attached_by)
-      VALUES (?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`)
-      .bind(value.targetTopicId, value.eventId, value.now, value.actor),
+    db.prepare(`UPDATE topic_events SET topic_id = ?, attached_at = ?, attached_by = ?
+      WHERE topic_id = ? AND event_id = ?`)
+      .bind(value.targetTopicId, value.now, value.actor, value.sourceTopicId, value.eventId),
   ]);
-  return Number(results[2]?.meta.changes ?? 0) === 1;
+  return Number(results[1]?.meta.changes ?? 0) === 1;
 }
 
 /** Atomic merge state transition: move event edges then mark the source topic MERGED. */
@@ -181,6 +182,15 @@ export async function mergeTopics(
     .strict()
     .parse(input);
   if (value.sourceTopicId === value.targetTopicId) throw new Error('source and target topics must differ');
+  const evidenceJson = JSON.stringify(value.evidenceIds);
+  const existingAudit = await db.prepare('SELECT operation, source_topic_id, target_topic_id, actor, reason, evidence_json FROM topic_mutation_audit WHERE audit_id = ?')
+    .bind(value.auditId).first<Record<string, string>>();
+  if (existingAudit) {
+    if (existingAudit.operation !== 'MERGE' || existingAudit.source_topic_id !== value.sourceTopicId || existingAudit.target_topic_id !== value.targetTopicId || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || existingAudit.evidence_json !== evidenceJson) {
+      throw new Error('audit id already used for a different mutation');
+    }
+    return false;
+  }
   const topics = await db.prepare(`SELECT topic_id, project_id, state FROM topics WHERE topic_id IN (?, ?)`)
     .bind(value.sourceTopicId, value.targetTopicId).all<{ topic_id: string; project_id: string; state: string }>();
   if (topics.results.length !== 2) throw new Error('source and target topics must exist');
@@ -188,11 +198,6 @@ export async function mergeTopics(
   const target = topics.results.find((row) => row.topic_id === value.targetTopicId);
   if (!source || !target || source.project_id !== target.project_id || source.state !== 'ACTIVE' || target.state !== 'ACTIVE') {
     throw new Error('topics must be ACTIVE and belong to the same project');
-  }
-  const existingAudit = await db.prepare('SELECT operation, source_topic_id, target_topic_id, actor, reason, evidence_json FROM topic_mutation_audit WHERE audit_id = ?')
-    .bind(value.auditId).first<Record<string, string>>();
-  if (existingAudit && (existingAudit.operation !== 'MERGE' || existingAudit.source_topic_id !== value.sourceTopicId || existingAudit.target_topic_id !== value.targetTopicId || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || existingAudit.evidence_json !== JSON.stringify(value.evidenceIds))) {
-    throw new Error('audit id already used for a different mutation');
   }
   const result = await db.batch([
     db
@@ -218,13 +223,15 @@ export async function mergeTopics(
         `UPDATE topic_events SET topic_id = ? WHERE topic_id = ?`,
       )
       .bind(value.targetTopicId, value.sourceTopicId),
+    db.prepare(`UPDATE topic_assignments SET topic_id = ? WHERE topic_id = ?`)
+      .bind(value.targetTopicId, value.sourceTopicId),
     db.prepare(`UPDATE topics SET state = 'MERGED', updated_at = ?
       WHERE topic_id = ? AND topic_id <> ? AND state = 'ACTIVE'
       AND EXISTS (SELECT 1 FROM topics target WHERE target.topic_id = ?
         AND target.project_id = topics.project_id AND target.state = 'ACTIVE')`)
       .bind(value.now, value.sourceTopicId, value.targetTopicId, value.targetTopicId),
   ]);
-  return Number(result[3]?.meta.changes ?? 0) === 1;
+  return Number(result[4]?.meta.changes ?? 0) === 1;
 }
 
 /** Idempotently persists an exact source identity mapping; REJECTED mappings retain no person id. */

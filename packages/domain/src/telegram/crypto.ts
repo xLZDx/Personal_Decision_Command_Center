@@ -73,7 +73,12 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function base64ToBytes(value: string): Uint8Array {
+function base64ToBytes(value: string, maxBytes: number, label: string): Uint8Array {
+  // Reject oversized encoded input before atob allocates/decodes attacker-controlled data.
+  const maxEncodedChars = Math.ceil(maxBytes * 4 / 3) + 4;
+  if (typeof value !== 'string' || value.length === 0 || value.length > maxEncodedChars) {
+    throw new Error(`Telegram ${label} exceeds limit`);
+  }
   let binary: string;
   try {
     binary = atob(value);
@@ -246,11 +251,11 @@ export async function decryptTelegramContent(
   if (options.envelope.keyId !== options.expectedKeyId) {
     throw new Error('Telegram content keyId mismatch');
   }
-  const nonce = base64ToBytes(options.envelope.nonce);
+  const nonce = base64ToBytes(options.envelope.nonce, NONCE_BYTES, 'nonce');
   if (nonce.length !== NONCE_BYTES) throw new Error('Invalid Telegram content nonce');
-  const iv = base64ToBytes(options.envelope.iv);
+  const iv = base64ToBytes(options.envelope.iv, IV_BYTES, 'IV');
   if (iv.length !== IV_BYTES) throw new Error('Invalid Telegram content IV');
-  const ciphertext = base64ToBytes(options.envelope.ciphertext);
+  const ciphertext = base64ToBytes(options.envelope.ciphertext, MAX_TELEGRAM_CIPHERTEXT_BYTES, 'ciphertext');
   if (ciphertext.length > MAX_TELEGRAM_CIPHERTEXT_BYTES) {
     throw new Error('Telegram ciphertext exceeds limit');
   }

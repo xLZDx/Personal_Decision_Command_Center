@@ -210,6 +210,7 @@ describe('TelegramTdlibAdapter', () => {
     authorize('READY');
     message({ event, initialCache: false });
     message({ event: { ...event, event_id: '00000000-0000-4000-8000-000000000052', source_event_id: 'tg-message-52' }, initialCache: false });
+    message({ event: { ...event, event_id: '00000000-0000-4000-8000-000000000053', source_event_id: 'tg-message-53' }, initialCache: true });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(overflow).toHaveLength(1);
     adapter.stop();

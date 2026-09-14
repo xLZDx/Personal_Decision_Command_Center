@@ -2,7 +2,7 @@
 
 Date: 2026-09-14  
 Branch: `gate/g3-implementation`  
-Evidence head: current branch tip; verification code commit: `fb4c747` (later commits are docs-only)
+Evidence head: `c7eb662`
 
 ## Result
 
@@ -12,12 +12,14 @@ operator/governance evidence that cannot be honestly manufactured by the coding 
 
 ## Local evidence complete
 
-- Full Vitest suite passes with the conservative 15-second test timeout: 55 files / 589 tests.
+- Full Vitest suite passes with the conservative 15-second test timeout: 57 files / 596 tests.
 - TypeScript typecheck and ESLint pass.
 - Secret scan reports no candidate secrets; production dependency audit reports zero vulnerabilities.
-- G4 Telegram session/spool/crypto/parser seams and G5 resolver metadata/audit store are covered by
-  unit tests and migrations `0011_resolver_state.sql`.
-- G6 decision/state validation and G7 contract-aligned opaque push payload are implemented.
+- G4 Telegram session/spool/crypto/parser seams and G5 resolver metadata/entity graph, unique event
+  attachment, transactional merge/split and append-only mutation audit are covered by unit tests and
+  migrations `0011_resolver_state.sql` through `0014_g5_integrity_triggers.sql`.
+- G6 decision/state validation and durable decision persistence, plus G7 contract-aligned opaque push
+  payload, are implemented; commitment/milestone persistence remains open.
 - G8 operational snapshot, retention predicate and encrypted checksum manifest primitives are tested.
 - G9 metadata-only shadow evaluation and threshold calibration are tested.
 
@@ -25,8 +27,8 @@ operator/governance evidence that cannot be honestly manufactured by the coding 
 
 1. Production TDLib login/session wiring, durable overflow recovery, Tunnel Content Gateway and
    complete ADR-007 Access→Worker→Tunnel→Gateway authentication are not deployed/tested.
-2. Full G5/G6 durable runtime (people/projects/streams/topics, transactional merge/split/history,
-   decision/commitment/milestone persistence and audit) is not complete.
+2. Full G5/G6 production runtime is not complete: source/event foreign keys and authoritative
+   provenance are still deployment concerns, and commitment/milestone persistence is not implemented.
 3. Provenance ancestry is not authoritative at every decision boundary; caller-supplied evidence IDs
    remain insufficient for a formal AI-safety claim.
 4. Android and target-iPhone PWA/Web Push, standalone Access re-login, and sync-on-open require
@@ -40,9 +42,10 @@ coding-agent boundary.
 
 ## Final local verification
 
-The final verification command is `npx vitest run --testTimeout=15000`, followed by
-`npm run verify:secrets` and `npm audit --omit=dev`. Its exact result is retained in the terminal
-run at `fb4c747`; no physical-device or production-identity claims are inferred.
+The final verification commands are `npx vitest run --testTimeout=15000`, `npm run typecheck`,
+`npm run lint`, `npm run verify:secrets`, and `npm audit --omit=dev`. Their results are retained for
+`c7eb662`; ADB smoke confirms a Samsung SM-G950F (Android 8.0) is attached, but no PWA install,
+interactive login, production Telegram/Gmail account, or iPhone test was executed.
 
 ## Governance disposition
 

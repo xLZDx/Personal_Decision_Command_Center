@@ -53,16 +53,18 @@ export class TelegramSession {
   }
 
   async onMessage(update: TelegramSessionEvent): Promise<boolean> {
-    if (this.#health.state !== 'READY' || this.#health.connectedAt === null) return false;
-    // Keep the public host seam closed even when TypeScript callers are bypassed at runtime.
     const normalized = NormalizedEventSchema.parse(update.event);
-    const connectedAt = this.#health.connectedAt;
-    if (update.initialCache || Date.parse(normalized.occurred_at) < Date.parse(connectedAt)) {
-      return false;
-    }
+    if (!this.isEligible({ ...update, event: normalized })) return false;
     this.#health = { ...this.#health, lastUpdateAt: this.#now() };
     await this.#emit(normalized);
     return true;
+  }
+
+  /** Eligibility check used by durable overflow sinks before bypassing normal emission. */
+  isEligible(update: TelegramSessionEvent): boolean {
+    if (this.#health.state !== 'READY' || this.#health.connectedAt === null) return false;
+    const normalized = NormalizedEventSchema.parse(update.event);
+    return !update.initialCache && Date.parse(normalized.occurred_at) >= Date.parse(this.#health.connectedAt);
   }
 
   health(): TelegramSessionHealth {

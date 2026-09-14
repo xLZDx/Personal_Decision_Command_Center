@@ -58,6 +58,7 @@ export class TelegramTdlibAdapter {
       if (this.#pendingUpdates >= this.#maxPendingUpdates) {
         try {
           const normalized = this.#normalizeMessage(update);
+          if (!this.#session.isEligible(normalized)) return;
           void Promise.resolve(this.#onOverflow(normalized)).catch((error: unknown) => {
             try {
               this.#onError(error);

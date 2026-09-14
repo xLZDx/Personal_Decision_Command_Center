@@ -30,5 +30,7 @@ describe('G6 durable decision store', () => {
       (await db.prepare('SELECT count(*) AS n FROM decision_state_audit').first<{ n: number }>())
         ?.n,
     ).toBe(1);
+    await expect(persistDecision(db, { ...input, state: 'RESOLVED', auditId: 'da2' })).rejects.toThrow(/invalid decision transition/);
+    await expect(persistDecision(db, { ...input, evidenceIds: ['tampered'] })).rejects.toThrow(/audit id/);
   });
 });
