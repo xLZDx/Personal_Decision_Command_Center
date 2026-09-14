@@ -17,6 +17,7 @@ const AssignmentInput = z
     evidenceIds: z.array(MetadataText).max(32),
     now: z.string().datetime({ offset: true }),
     auditId: MetadataText,
+    actor: MetadataText,
   })
   .strict();
 
@@ -33,6 +34,8 @@ const IdentityInput = z
     state: z.enum(['CONFIRMED', 'SUGGESTED', 'REJECTED']),
     evidenceIds: z.array(MetadataText).max(32),
     now: z.string().datetime({ offset: true }),
+    auditId: MetadataText,
+    actor: MetadataText,
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -52,25 +55,55 @@ export async function persistIdentityMapping(
   input: PersistIdentityMappingInput,
 ): Promise<{ status: 'PERSISTED'; source: Source; sourceIdentity: string }> {
   const value = IdentityInput.parse(input);
-  await db
-    .prepare(
-      `INSERT INTO source_identities
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO source_identity_audit
+          (audit_id, source, source_identity, previous_person_id, next_person_id, previous_state, next_state, actor, evidence_json, created_at)
+         SELECT ?, source, source_identity, person_id, ?, state, ?, ?, ?, ?
+         FROM source_identities WHERE source = ? AND source_identity = ?
+         UNION ALL SELECT ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?
+         WHERE NOT EXISTS (SELECT 1 FROM source_identities WHERE source = ? AND source_identity = ?)`,
+      )
+      .bind(
+        value.auditId,
+        value.personId,
+        value.state,
+        value.actor,
+        JSON.stringify(value.evidenceIds),
+        value.now,
+        value.source,
+        value.sourceIdentity,
+        value.auditId,
+        value.source,
+        value.sourceIdentity,
+        value.personId,
+        value.state,
+        value.actor,
+        JSON.stringify(value.evidenceIds),
+        value.now,
+        value.source,
+        value.sourceIdentity,
+      ),
+    db
+      .prepare(
+        `INSERT INTO source_identities
         (source, source_identity, person_id, state, evidence_json, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(source, source_identity) DO UPDATE SET
          person_id = excluded.person_id, state = excluded.state,
          evidence_json = excluded.evidence_json, updated_at = excluded.updated_at`,
-    )
-    .bind(
-      value.source,
-      value.sourceIdentity,
-      value.personId,
-      value.state,
-      JSON.stringify(value.evidenceIds),
-      value.now,
-      value.now,
-    )
-    .run();
+      )
+      .bind(
+        value.source,
+        value.sourceIdentity,
+        value.personId,
+        value.state,
+        JSON.stringify(value.evidenceIds),
+        value.now,
+        value.now,
+      ),
+  ]);
   return { status: 'PERSISTED', source: value.source, sourceIdentity: value.sourceIdentity };
 }
 

@@ -7,10 +7,15 @@ import { createTestD1 } from '../../../testkit/src/index.js';
 
 describe('resolver durable store', () => {
   it('persists assignment metadata and an audit row idempotently', async () => {
-    const schema = readFileSync(
-      new URL('../../../../infra/migrations/0011_resolver_state.sql', import.meta.url),
-      'utf8',
-    );
+    const schema =
+      readFileSync(
+        new URL('../../../../infra/migrations/0011_resolver_state.sql', import.meta.url),
+        'utf8',
+      ) +
+      readFileSync(
+        new URL('../../../../infra/migrations/0013_g5_core_entities.sql', import.meta.url),
+        'utf8',
+      );
     const db = createTestD1(schema);
     const input = {
       assignmentId: 'assignment-1',
@@ -25,6 +30,7 @@ describe('resolver durable store', () => {
       evidenceIds: ['event-1', 'event-2'],
       now: '2026-09-14T10:00:00.000Z',
       auditId: 'audit-1',
+      actor: 'operator-1',
     };
     await expect(persistTopicAssignment(db, input)).resolves.toEqual({
       status: 'PERSISTED',
@@ -41,10 +47,15 @@ describe('resolver durable store', () => {
   });
 
   it('persists rejected identity mappings without a person id', async () => {
-    const schema = readFileSync(
-      new URL('../../../../infra/migrations/0011_resolver_state.sql', import.meta.url),
-      'utf8',
-    );
+    const schema =
+      readFileSync(
+        new URL('../../../../infra/migrations/0011_resolver_state.sql', import.meta.url),
+        'utf8',
+      ) +
+      readFileSync(
+        new URL('../../../../infra/migrations/0013_g5_core_entities.sql', import.meta.url),
+        'utf8',
+      );
     const db = createTestD1(schema);
     await expect(
       persistIdentityMapping(db, {
@@ -54,6 +65,8 @@ describe('resolver durable store', () => {
         state: 'REJECTED',
         evidenceIds: ['event-9'],
         now: '2026-09-14T10:00:00.000Z',
+        auditId: 'identity-audit-1',
+        actor: 'operator-1',
       }),
     ).resolves.toMatchObject({ status: 'PERSISTED', source: 'telegram' });
   });
