@@ -9,6 +9,7 @@ export interface TelegramConnectorRuntimeOptions {
   deliver: (event: NormalizedEvent) => Promise<void>;
   now?: () => string;
   isPermanentError?: (error: unknown) => boolean;
+  drainIntervalMs?: number;
 }
 
 export type TelegramDrainOutcome =
@@ -30,12 +31,18 @@ export class TelegramConnectorRuntime {
   readonly #isPermanentError: (error: unknown) => boolean;
   readonly #session: TelegramSession;
   #drainTail: Promise<void> = Promise.resolve();
+  #drainTimer: ReturnType<typeof setInterval> | null = null;
+  readonly #drainIntervalMs: number;
 
   constructor(options: TelegramConnectorRuntimeOptions) {
     this.#spool = options.spool;
     this.#deliver = options.deliver;
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#isPermanentError = options.isPermanentError ?? (() => false);
+    this.#drainIntervalMs = options.drainIntervalMs ?? 1000;
+    if (!Number.isInteger(this.#drainIntervalMs) || this.#drainIntervalMs < 100) {
+      throw new Error('drainIntervalMs must be an integer >= 100');
+    }
     this.#session = new TelegramSession({
       now: this.#now,
       emit: async (event) => {
@@ -50,6 +57,20 @@ export class TelegramConnectorRuntime {
 
   async onMessage(update: TelegramSessionEvent): Promise<boolean> {
     return this.#session.onMessage(update);
+  }
+
+  start(): void {
+    if (this.#drainTimer !== null) return;
+    this.#drainTimer = setInterval(() => {
+      void this.drainOnce().catch(() => undefined);
+    }, this.#drainIntervalMs);
+  }
+
+  stop(): void {
+    if (this.#drainTimer !== null) {
+      clearInterval(this.#drainTimer);
+      this.#drainTimer = null;
+    }
   }
 
   async drainOnce(): Promise<TelegramDrainOutcome> {

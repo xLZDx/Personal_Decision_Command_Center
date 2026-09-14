@@ -1,5 +1,6 @@
 /* global crypto, TextEncoder, TextDecoder, btoa, atob */
 import type { webcrypto } from 'node:crypto';
+import type { D1Database } from '@cloudflare/workers-types';
 
 type CryptoKey = webcrypto.CryptoKey;
 type CryptoKeyPair = webcrypto.CryptoKeyPair;
@@ -59,7 +60,11 @@ export interface DecryptTelegramContentOptions {
   expectedKeyId: string;
   envelope: TelegramContentEnvelope;
   now?: string;
-  replayGuard: TelegramContentReplayGuard;
+  replayGuard: TelegramReplayGuard;
+}
+
+export interface TelegramReplayGuard {
+  accept(nonce: string, expiresAt: string, now: string): boolean | Promise<boolean>;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -210,6 +215,26 @@ export class TelegramContentReplayGuard {
   }
 }
 
+/** Durable D1 nonce reservation for cross-restart replay protection. */
+export class TelegramD1ReplayGuard implements TelegramReplayGuard {
+  constructor(readonly db: D1Database) {}
+
+  async accept(nonce: string, expiresAt: string, now: string): Promise<boolean> {
+    await this.db
+      .prepare('DELETE FROM telegram_content_nonces WHERE expires_at <= ?')
+      .bind(now)
+      .run();
+    const result = await this.db
+      .prepare(
+        `INSERT INTO telegram_content_nonces (nonce, expires_at, accepted_at)
+         VALUES (?, ?, ?) ON CONFLICT(nonce) DO NOTHING`,
+      )
+      .bind(nonce, expiresAt, now)
+      .run();
+    return result.meta.changes === 1;
+  }
+}
+
 export async function decryptTelegramContent(
   options: DecryptTelegramContentOptions,
 ): Promise<string> {
@@ -250,7 +275,9 @@ export async function decryptTelegramContent(
   if (plaintext.byteLength > MAX_TELEGRAM_PLAINTEXT_BYTES) {
     throw new Error('Telegram plaintext exceeds limit');
   }
-  if (!options.replayGuard.accept(options.envelope.nonce, options.envelope.expiresAt, now)) {
+  if (
+    !(await options.replayGuard.accept(options.envelope.nonce, options.envelope.expiresAt, now))
+  ) {
     throw new Error('Telegram content request replayed');
   }
   return new TextDecoder().decode(plaintext);

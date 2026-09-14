@@ -165,6 +165,7 @@ export {
   encryptTelegramContent,
   decryptTelegramContent,
   TelegramContentReplayGuard,
+  TelegramD1ReplayGuard,
 } from './telegram/crypto.js';
 export {
   MAX_TELEGRAM_CIPHERTEXT_BYTES,
@@ -179,6 +180,7 @@ export type {
   TelegramContentEnvelope,
   EncryptTelegramContentOptions,
   DecryptTelegramContentOptions,
+  TelegramReplayGuard,
 } from './telegram/crypto.js';
 
 export {
