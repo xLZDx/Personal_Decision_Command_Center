@@ -56,14 +56,40 @@ export interface G9DatasetCounts {
   crossProjectCollisions: number;
 }
 
+const DatasetCountsSchema = z
+  .object({
+    total: z.number().int().nonnegative().max(MAX_SHADOW_ROWS),
+    crossSource: z.number().int().nonnegative(),
+    decisionOrAction: z.number().int().nonnegative(),
+    ambiguous: z.number().int().nonnegative(),
+    crossProjectCollisions: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    for (const key of [
+      'crossSource',
+      'decisionOrAction',
+      'ambiguous',
+      'crossProjectCollisions',
+    ] as const) {
+      if (value[key] > value.total)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: 'count cannot exceed total',
+        });
+    }
+  });
+
 /** Enforces the minimum labeled corpus shape required before claiming a G9 exit metric. */
 export function assertG9DatasetAdequacy(counts: G9DatasetCounts): void {
+  const value = DatasetCountsSchema.parse(counts);
   if (
-    counts.total < 200 ||
-    counts.crossSource < 30 ||
-    counts.decisionOrAction < 30 ||
-    counts.ambiguous < 20 ||
-    counts.crossProjectCollisions < 10
+    value.total < 200 ||
+    value.crossSource < 30 ||
+    value.decisionOrAction < 30 ||
+    value.ambiguous < 20 ||
+    value.crossProjectCollisions < 10
   ) {
     throw new Error('G9 dataset does not meet minimum labeled coverage');
   }

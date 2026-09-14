@@ -47,7 +47,7 @@ export const PUSH_SCHEMA_VERSION = 1;
 export const PushPayloadSchema = z
   .object({
     type: PushTypeSchema,
-    notification_id: z.string().min(1),
+    notification_id: z.string().uuid(),
     schema_version: z.literal(PUSH_SCHEMA_VERSION),
   })
   .strict();

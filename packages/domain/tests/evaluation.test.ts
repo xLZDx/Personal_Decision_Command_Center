@@ -59,5 +59,23 @@ describe('G9 shadow evaluation', () => {
         crossProjectCollisions: 10,
       }),
     ).not.toThrow();
+    expect(() =>
+      assertG9DatasetAdequacy({
+        total: 200,
+        crossSource: 201,
+        decisionOrAction: 30,
+        ambiguous: 20,
+        crossProjectCollisions: 10,
+      }),
+    ).toThrow();
+    expect(() =>
+      assertG9DatasetAdequacy({
+        total: Number.NaN,
+        crossSource: 30,
+        decisionOrAction: 30,
+        ambiguous: 20,
+        crossProjectCollisions: 10,
+      }),
+    ).toThrow();
   });
 });

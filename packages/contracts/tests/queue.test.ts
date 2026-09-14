@@ -14,7 +14,7 @@ const validQueuePayload = {
 
 const validPushPayload = {
   type: 'STATE_CHANGED',
-  notification_id: 'n-123',
+  notification_id: '00000000-0000-4000-8000-000000000123',
   schema_version: PUSH_SCHEMA_VERSION,
 };
 

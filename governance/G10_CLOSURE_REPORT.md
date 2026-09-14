@@ -2,7 +2,7 @@
 
 Date: 2026-09-14  
 Branch: `gate/g3-implementation`  
-Evidence head: `3d316df`
+Evidence head: current branch tip (updated with the final G9 hardening commit below)
 
 ## Result
 
@@ -12,7 +12,8 @@ operator/governance evidence that cannot be honestly manufactured by the coding 
 
 ## Local evidence complete
 
-- 51 Vitest files / 581 tests pass with the conservative 15-second test timeout.
+- Full Vitest suite passes with the conservative 15-second test timeout (exact file/test count is
+  recorded from the final run below).
 - TypeScript typecheck and ESLint pass.
 - Secret scan reports no candidate secrets; production dependency audit reports zero vulnerabilities.
 - G4 Telegram session/spool/crypto/parser seams and G5 resolver metadata/audit store are covered by
@@ -33,6 +34,12 @@ operator/governance evidence that cannot be honestly manufactured by the coding 
    device/staging evidence.
 5. Retention/backup first isolated restore, live quotas, operator acceptance and protected
    gate-manifest approvals require external governance execution.
+
+## Final local verification
+
+The final verification command is `npx vitest run --testTimeout=15000`, followed by
+`npm run verify:secrets` and `npm audit --omit=dev`. Its exact result is retained in the terminal
+run accompanying the final commit; no physical-device or production-identity claims are inferred.
 
 ## Governance disposition
 
