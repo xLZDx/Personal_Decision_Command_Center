@@ -228,9 +228,9 @@ interface GmailAIContextBuilderOptions {
 
 export interface GmailAIEngineOptions extends GmailAIContextBuilderOptions {
   db: D1Database;
-  messageLoader: GmailMessageLoader;
+  messageLoader?: GmailMessageLoader;
   /** Verification-only connector key. The private signing key never enters this package. */
-  contentAttestationPublicKey: EcdsaP256PublicJwk;
+  contentAttestationPublicKey?: EcdsaP256PublicJwk;
   ai?: WorkersAiBinding;
   now?: () => string;
 }
@@ -581,10 +581,10 @@ function stampOutput(
 /** Sole provider execution gateway: authoritative policy, fetch, build, reserve, run, validate. */
 export class GmailAIEngine {
   readonly #db: D1Database;
-  readonly #messageLoader: GmailMessageLoader;
+  readonly #messageLoader: GmailMessageLoader | undefined;
   readonly #ai: WorkersAiBinding | undefined;
   readonly #now: () => string;
-  readonly #contentAttestationPublicKey: EcdsaP256PublicJwk;
+  readonly #contentAttestationPublicKey: EcdsaP256PublicJwk | undefined;
   readonly #builder: GmailAIContextBuilder;
 
   constructor(options: GmailAIEngineOptions) {
@@ -603,10 +603,13 @@ export class GmailAIEngine {
     if (event.eventType === 'MESSAGE_DELETED') return { outcome: 'NO_CONTENT_DELETED' };
     if (!this.#ai) return { outcome: 'DISABLED' };
     if (event.sourcePolicy.ai_policy !== 'ALLOW') return { outcome: 'POLICY_DENIED' };
+    if (!this.#messageLoader || !this.#contentAttestationPublicKey) {
+      throw new AIContextPolicyError('Gmail AI content gateway is not configured');
+    }
     if (leaseLost?.aborted)
       throw new AIContextPolicyError('Processing lease was lost before fetch');
 
-    const now = this.#now();
+    const fetchedAt = this.#now();
     const attestation = await this.#messageLoader.loadMessage({
       eventId: event.eventId,
       sourceAccountId: event.sourceAccountId,
@@ -626,11 +629,18 @@ export class GmailAIEngine {
     ) {
       throw new AIContextPolicyError('Gmail content attestation failed');
     }
-    const bundle = createTrustedBundle(event, attestation.content, now);
+    const bundle = createTrustedBundle(event, attestation.content, fetchedAt);
     const request = this.#builder.build(bundle);
     const requestBytes = new TextEncoder().encode(JSON.stringify(request)).byteLength;
     const estimate = estimateWorkersAiNeurons(requestBytes);
-    const reservation = await reserveGmailAiNeurons(this.#db, { now, neurons: estimate });
+    // Acquire the UTC partition timestamp immediately before admission. Content fetch/build can
+    // cross midnight; charging the provider call to an earlier day would fragment the HARD_ZERO
+    // daily cap and permit an accidental overage on the new day.
+    const reservationNow = this.#now();
+    const reservation = await reserveGmailAiNeurons(this.#db, {
+      now: reservationNow,
+      neurons: estimate,
+    });
     if (!reservation.reserved || !reservation.reservationId) return { outcome: 'QUOTA_EXHAUSTED' };
     if (leaseLost?.aborted) throw new AIContextPolicyError('Processing lease was lost before AI');
 

@@ -436,6 +436,22 @@ describe('GmailAIEngine authoritative boundary', () => {
     expect(retained).toEqual({ reconciled: 0, actual_neurons: null });
   });
 
+  it('charges admission to the fresh provider UTC day after a midnight-crossing fetch', async () => {
+    const { db } = await setup('event-midnight');
+    const clock = [FIXTURE_NOW, '2026-09-14T00:00:00.200Z'];
+    let reads = 0;
+    await new GmailAIEngine({
+      db,
+      messageLoader: loader(),
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
+      ai: provider().binding,
+      now: () => clock[Math.min(reads++, clock.length - 1)]!,
+    }).enrich('event-midnight');
+    expect(await db.prepare('SELECT day FROM gmail_ai_neuron_reservations').first()).toEqual({
+      day: '2026-09-14',
+    });
+  });
+
   it('fails closed on malformed schema, executable text, and fabricated evidence quotes', async () => {
     const cases = [
       { ...VALID_OUTPUT, extra: 'not allowed' },

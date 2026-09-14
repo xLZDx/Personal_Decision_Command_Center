@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   FIXTURE_NOW,
   createTestD1,
@@ -10,7 +10,7 @@ import {
 import { getEnrichment } from '@pdos/domain';
 import type { GmailAIEnrichmentResult } from '@pdos/policy';
 
-import { createGmailEventProcessor } from '../src/index.js';
+import { createGmailEventProcessor, queue } from '../src/index.js';
 import { processMessage } from '../src/handler.js';
 
 const COMPLETE: GmailAIEnrichmentResult = {
@@ -144,5 +144,31 @@ describe('GmailEventProcessor', () => {
       }),
     ).toMatchObject({ transitioned: true });
     expect(await getEnrichment(db, 'event-disabled')).toBeNull();
+  });
+
+  it('queue production composition keeps Gmail deletion semantics when AI is absent', async () => {
+    const db = createTestD1(loadG3Schema());
+    const accounts = await seedBaselineAccounts(db);
+    const eventId = '00000000-0000-4000-8000-000000000010';
+    await seedEvent(db, accounts, { eventId, eventType: 'MESSAGE_DELETED' });
+    await seedOutbox(db, eventId, { state: 'DISPATCHED', dispatchedAt: FIXTURE_NOW });
+    const ack = vi.fn();
+    await queue(
+      {
+        messages: [
+          {
+            id: 'queue-1',
+            body: { event_id: eventId, operation: 'PROCESS_EVENT', schema_version: 4 },
+            ack,
+          },
+        ],
+      } as never,
+      { DB: db },
+    );
+    expect(ack).toHaveBeenCalledOnce();
+    expect(await getEnrichment(db, eventId)).toMatchObject({ status: 'NO_CONTENT_DELETED' });
+    expect(
+      await db.prepare('SELECT state FROM ingest_events WHERE event_id = ?').bind(eventId).first(),
+    ).toEqual({ state: 'PROCESSED' });
   });
 });

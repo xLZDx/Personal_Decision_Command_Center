@@ -3,6 +3,16 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 11: production-safe routing, clocks, and cancellation
+
+Remediated the checkpoint-10 review findings. Workers AI admission now takes a fresh UTC timestamp
+immediately before Neuron reservation, preventing a fetch that crosses midnight from charging the
+wrong daily bucket. Queue processing re-reads event source from D1 and routes only Gmail events to
+the Gmail processor; Telegram pointers retain a successful source-neutral path. The gateway loader
+forwards the lease-loss abort signal. AI-off production composition still instantiates
+`NoAIProvider`/`GmailEventProcessor`, so deleted Gmail events receive their explicit marker rather
+than silently passing through noop. Partial AI bindings fail closed as configuration errors.
+
 ## 2026-09-14 — G3 checkpoint 10: lease-fenced Gmail enrichment processor wiring
 
 The Gmail AI boundary is now connected to the actual Queue processor lifecycle through

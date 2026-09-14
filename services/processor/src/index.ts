@@ -1,12 +1,13 @@
 /* global crypto, AbortSignal */
-import type { ExportedHandler, MessageBatch } from '@cloudflare/workers-types';
+import type { ExportedHandler, Fetcher, MessageBatch } from '@cloudflare/workers-types';
 import { QueuePayloadSchema, type QueuePayload } from '@pdos/contracts';
 import type { EcdsaP256PublicJwk } from '@pdos/domain';
 
 import { processMessage } from './handler.js';
-import { GmailAIEngine } from '@pdos/policy';
+import { GmailAIEngine, NoAIProvider } from '@pdos/policy';
 import { createGmailEventProcessor } from './gmail-processor.js';
 import type { ProcessorEnv } from './env.js';
+import type { ClaimedEvent } from './processor.js';
 
 export { processMessage } from './handler.js';
 export type { ProcessMessageOptions, ProcessMessageResult } from './handler.js';
@@ -34,9 +35,9 @@ export type { ProcessorEnv } from './env.js';
  * truth for what still needs processing -- see the schema's own doc comment -- so there is nothing
  * a Queue-level retry of a message that never matched the contract could accomplish).
  */
-async function queue(batch: MessageBatch<QueuePayload>, env: ProcessorEnv): Promise<void> {
+export async function queue(batch: MessageBatch<QueuePayload>, env: ProcessorEnv): Promise<void> {
   const now = new Date().toISOString();
-  const process = makeConfiguredGmailProcessor(env, now);
+  const process = makeConfiguredProcessor(env);
   for (const message of batch.messages) {
     const parsed = QueuePayloadSchema.safeParse(message.body);
     if (!parsed.success) {
@@ -55,20 +56,47 @@ async function queue(batch: MessageBatch<QueuePayload>, env: ProcessorEnv): Prom
         ? { maxAttempts: Number(env.MAX_PROCESSING_ATTEMPTS) }
         : {}),
       ...(env.PROCESSOR_VERSION !== undefined ? { processorVersion: env.PROCESSOR_VERSION } : {}),
-      ...(process === undefined ? {} : { process }),
+      process,
     });
     message.ack();
   }
 }
 
-function makeConfiguredGmailProcessor(env: ProcessorEnv, now: string) {
-  if (!env.GMAIL_CONTENT_GATEWAY || !env.WORKERS_AI || !env.GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK) {
-    return undefined;
+function makeConfiguredProcessor(env: ProcessorEnv) {
+  const aiConfigured = Boolean(
+    env.GMAIL_CONTENT_GATEWAY && env.WORKERS_AI && env.GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK,
+  );
+  const partialAiConfig = Boolean(
+    env.GMAIL_CONTENT_GATEWAY || env.WORKERS_AI || env.GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK,
+  );
+  if (partialAiConfig && !aiConfigured) {
+    throw new Error('Gmail AI requires gateway, Workers AI, and public attestation JWK together');
   }
-  const gateway = env.GMAIL_CONTENT_GATEWAY;
+
+  const gmailProcessor = aiConfigured
+    ? createConfiguredGmailProcessor(env)
+    : createGmailEventProcessor({ db: env.DB, engine: new NoAIProvider({ db: env.DB }) });
+
+  // QueuePayload intentionally carries only an event pointer. Re-read source from D1 before
+  // dispatch so enabling Gmail AI cannot accidentally route Telegram events into Gmail policy.
+  return async (event: ClaimedEvent) => {
+    const row = await env.DB.prepare('SELECT source FROM ingest_events WHERE event_id = ?')
+      .bind(event.eventId)
+      .first<{ source: 'gmail' | 'telegram' }>();
+    return row?.source === 'gmail'
+      ? gmailProcessor(event)
+      : Promise.resolve({ outcome: 'SUCCESS' as const });
+  };
+}
+
+function createConfiguredGmailProcessor(env: ProcessorEnv) {
+  const gateway = env.GMAIL_CONTENT_GATEWAY as Fetcher;
+  const ai = env.WORKERS_AI;
+  const publicJwkText = env.GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK;
+  if (!ai || !publicJwkText) throw new Error('Gmail AI configuration unexpectedly incomplete');
   let publicKey: EcdsaP256PublicJwk;
   try {
-    publicKey = JSON.parse(env.GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK) as EcdsaP256PublicJwk;
+    publicKey = JSON.parse(publicJwkText) as EcdsaP256PublicJwk;
   } catch {
     throw new Error('GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK must be valid JSON');
   }
@@ -87,6 +115,14 @@ function makeConfiguredGmailProcessor(env: ProcessorEnv, now: string) {
           sourceAccountId: opts.sourceAccountId,
           messageId: opts.messageId,
         }),
+        ...(opts.signal === undefined
+          ? {}
+          : {
+              signal: opts.signal as unknown as Exclude<
+                NonNullable<Parameters<Fetcher['fetch']>[1]>['signal'],
+                undefined
+              >,
+            }),
       });
       if (!response.ok) throw new Error(`Gmail content gateway returned HTTP ${response.status}`);
       return (await response.json()) as {
@@ -105,11 +141,10 @@ function makeConfiguredGmailProcessor(env: ProcessorEnv, now: string) {
     db: env.DB,
     messageLoader,
     contentAttestationPublicKey: publicKey,
-    ai: env.WORKERS_AI,
-    now: () => now,
+    ai,
     ...(secrets === undefined ? {} : { secrets }),
   });
-  return createGmailEventProcessor({ db: env.DB, engine, now: () => now });
+  return createGmailEventProcessor({ db: env.DB, engine });
 }
 
 export default {
