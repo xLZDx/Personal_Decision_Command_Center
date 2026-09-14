@@ -170,7 +170,7 @@ describe('TelegramTdlibAdapter', () => {
     adapter.start();
     authorize('READY');
     message({ event, initialCache: false });
-    await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     message({
       event: {
         ...event,
