@@ -34,6 +34,10 @@ operator/governance evidence that cannot be honestly manufactured by the coding 
 5. Retention/backup first isolated restore, live quotas, operator acceptance and protected
    gate-manifest approvals require external governance execution.
 
+The operator-executable procedure for the remaining device/account evidence is
+`docs/runbooks/MVP1_REAL_DEVICE_ACCOUNT_TEST.md`; it deliberately excludes credentials from the
+coding-agent boundary.
+
 ## Final local verification
 
 The final verification command is `npx vitest run --testTimeout=15000`, followed by
