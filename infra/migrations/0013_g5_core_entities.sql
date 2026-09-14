@@ -18,16 +18,18 @@ CREATE TABLE streams (
   display_label TEXT NOT NULL CHECK (length(trim(display_label)) BETWEEN 1 AND 256),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  UNIQUE(project_id, display_label)
+  UNIQUE(project_id, display_label),
+  UNIQUE(project_id, stream_id)
 );
 CREATE TABLE topics (
   topic_id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(project_id),
-  stream_id TEXT REFERENCES streams(stream_id),
+  stream_id TEXT,
   business_identifier TEXT CHECK (business_identifier IS NULL OR business_identifier GLOB '*::*'),
   state TEXT NOT NULL CHECK (state IN ('ACTIVE', 'SEPARATE', 'MERGED', 'ARCHIVED')),
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id, stream_id) REFERENCES streams(project_id, stream_id)
 );
 CREATE TABLE topic_events (
   topic_id TEXT NOT NULL REFERENCES topics(topic_id),
