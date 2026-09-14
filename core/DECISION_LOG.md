@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G6 preparation: Telegram deterministic enrichment boundary
+
+Added a source-local composition of the deterministic parser and intent classifier. The result
+contains only bounded signals/evidence, event provenance, and a fixed `AI_DENY` policy marker; the
+input Telegram body is not returned or serialized. Unmatched prose remains explicit FYI with no
+fabricated evidence.
+
 ## 2026-09-14 — G5 preparation: auditable topic-assignment boundary
 
 Added a runtime-checked assignment wrapper around the deterministic topic resolver. It accepts
