@@ -3,6 +3,20 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: Telegram host SQLite WAL spool
+
+Added `host/telegram-connector`'s transactional local spool. It validates and stores only the
+normalized Telegram envelope, uses WAL + `synchronous=FULL`, deduplicates by event ID, survives
+restart, and tracks retryable/permanent/acked states with bounded retry timing. Raw message content
+cannot enter the spool schema.
+
+## 2026-09-14 — G6 preparation: deterministic Telegram intent classifier
+
+Added priority-ordered Telegram intent classification for the frozen MVP1 classes. It is
+rule-based only, emits bounded evidence with `RULE`/`DENY` Telegram provenance, and returns a
+non-fabricating FYI result when no phrase matches. No AI, embeddings, or cross-channel state is
+accepted.
+
 ## 2026-09-14 — G5 preparation: deterministic topic resolver primitive
 
 Added a metadata-only resolver implementing the frozen MVP1 scoring order: confirmed project/stream,
