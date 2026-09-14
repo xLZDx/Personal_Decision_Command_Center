@@ -22,20 +22,29 @@ async function fetch(request: Request, env: Env): Promise<Response> {
   if (request.method !== 'POST' || new URL(request.url).pathname !== '/telegram/content') {
     return new Response('not found', { status: 404 });
   }
+  if (new URL(request.url).protocol !== 'https:') return new Response('https required', { status: 400 });
   const clientId = request.headers.get('CF-Access-Client-Id') ?? '';
   const clientSecret = request.headers.get('CF-Access-Client-Secret') ?? '';
-  if (!constantTimeEqual(clientId, env.ACCESS_CLIENT_ID) || !constantTimeEqual(clientSecret, env.ACCESS_CLIENT_SECRET)) {
+  if (typeof env.ACCESS_CLIENT_ID !== 'string' || env.ACCESS_CLIENT_ID.length === 0 || typeof env.ACCESS_CLIENT_SECRET !== 'string' || env.ACCESS_CLIENT_SECRET.length === 0 || !constantTimeEqual(clientId, env.ACCESS_CLIENT_ID) || !constantTimeEqual(clientSecret, env.ACCESS_CLIENT_SECRET)) {
     return new Response('unauthorized', { status: 401 });
   }
   const declaredLength = Number(request.headers.get('content-length') ?? '0');
   if (declaredLength > MAX_BODY_BYTES) return new Response('payload too large', { status: 413 });
   const body = await request.arrayBuffer();
   if (body.byteLength > MAX_BODY_BYTES) return new Response('payload too large', { status: 413 });
-  return (await env.CONTENT_GATEWAY.fetch('https://internal.gateway/message', {
+  const upstream = await env.CONTENT_GATEWAY.fetch('https://internal.gateway/message', {
     method: 'POST',
     headers: { 'content-type': request.headers.get('content-type') ?? 'application/json' },
     body,
-  })) as unknown as Response;
+  });
+  const responseBody = await upstream.arrayBuffer();
+  return new Response(responseBody, {
+    status: upstream.status,
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': upstream.headers.get('content-type') ?? 'application/json',
+    },
+  });
 }
 
 export default {

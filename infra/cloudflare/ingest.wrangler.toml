@@ -16,6 +16,7 @@ compatibility_date = "2026-09-10"
 binding = "DB"
 database_name = "pdos-g2"
 database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
+migrations_dir = "../migrations"
 
 # Producer binding: the scheduled handler enqueues exactly the event_ids `reconcileDispatch`
 # (packages/domain/src/reconciler.ts) already marked DISPATCHED -- budget reserved and the outbox

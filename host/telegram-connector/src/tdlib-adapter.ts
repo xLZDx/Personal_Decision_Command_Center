@@ -3,6 +3,10 @@ import type { NormalizedEvent } from '@pdos/contracts';
 import { TelegramSession, type TelegramSessionEvent } from './session.js';
 
 export interface TelegramTdlibUpdateSource {
+  /** Starts the concrete provider process/client, if the source owns its lifecycle. */
+  start?: () => void;
+  /** Stops the concrete provider process/client, if the source owns its lifecycle. */
+  stop?: () => void;
   onAuthorizationState(
     listener: (state: 'WAITING' | 'READY' | 'OFFLINE' | 'CLOSED') => void,
   ): () => void;
@@ -105,7 +109,9 @@ export class TelegramTdlibAdapter {
       stopAuthorization();
       stopMessages();
       this.#unsubscribe = null;
+      this.#source.stop?.();
     };
+    this.#source.start?.();
   }
 
   stop(): void {

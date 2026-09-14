@@ -18,6 +18,7 @@ compatibility_date = "2026-09-10"
 binding = "DB"
 database_name = "pdos-g2"
 database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
+migrations_dir = "../migrations"
 
 # Optional owner-enabled AI composition. Keep these absent until the connector and public-key
 # material are provisioned and the G3/G10 operator gates are explicitly closed.
