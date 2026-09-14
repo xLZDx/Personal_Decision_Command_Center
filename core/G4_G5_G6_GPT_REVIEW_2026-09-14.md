@@ -94,3 +94,16 @@ deployment, commitment/milestone persistence, PWA/Web Push, real-account/device/
 G9 corpus metrics, and operator-approved governance manifests are external requirements. Reviewers
 also retain concurrency-hardening and authoritative provenance as follow-up risks; they are not
 silently downgraded by the green local suite.
+
+## Concrete runtime follow-up — HEAD `549e0fe`
+
+QA re-ran the expanded suite: 59 files / 600 tests, typecheck/lint/secret scan green, and zero
+production dependency vulnerabilities. The process TDLib bridge, HMAC ingest delivery, runtime
+wiring, canonical migration loader, migration script, Tunnel Gateway scaffold, and operator
+manifest template are now present and covered by synthetic tests.
+
+The verdict remains **NEEDS_REVISION / REJECT**: the bridge still needs a provisioned pinned TDLib
+binary and interactive account session; cursor/reconnect recovery and bounded durable overflow need
+production wiring; the Tunnel Gateway is scaffolding and requires a real Telegram Content Gateway,
+Cloudflare Access/Tunnel route and application-level envelope authorization. PWA/device, restore,
+G9 corpus, commitment/milestone, provenance and operator approval evidence remain external gates.

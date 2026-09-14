@@ -12,9 +12,9 @@ operator/governance evidence that cannot be honestly manufactured by the coding 
 
 ## Local evidence complete
 
-- Full Vitest suite passes with the conservative 15-second test timeout: 57 files / 596 tests.
+- Full Vitest suite passes with the conservative 15-second test timeout: 59 files / 600 tests.
 - TypeScript typecheck and ESLint pass.
-- Secret scan reports no candidate secrets; production dependency audit reports zero vulnerabilities.
+- Secret scan reports no candidate secrets (284 tracked files); production dependency audit reports zero vulnerabilities.
 - G4 Telegram session/spool/crypto/parser seams and G5 resolver metadata/entity graph, unique event
   attachment, transactional merge/split and append-only mutation audit are covered by unit tests and
   migrations `0011_resolver_state.sql` through `0014_g5_integrity_triggers.sql`.
@@ -44,7 +44,7 @@ they deliberately exclude credentials from the coding-agent boundary.
 
 The final verification commands are `npx vitest run --testTimeout=15000`, `npm run typecheck`,
 `npm run lint`, `npm run verify:secrets`, and `npm audit --omit=dev`. Their results are retained for
-`c7eb662`; ADB smoke confirms a Samsung SM-G950F (Android 8.0) is attached, but no PWA install,
+`549e0fe`; ADB smoke confirms a Samsung SM-G950F (Android 8.0) is attached, but no PWA install,
 interactive login, production Telegram/Gmail account, or iPhone test was executed.
 
 ## Governance disposition
