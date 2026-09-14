@@ -55,3 +55,26 @@ merge/split rollback, and full ADR-007 authentication-chain evidence.
 Continue implementation against the confirmed risks. Do not represent this slice as formal gate
 closure or production-ready Telegram drill-down until the runtime/persistence and security-chain
 items above have fresh evidence.
+
+## Final follow-up review — HEAD `7139a7b` (adapter shutdown test commit `ccee733`)
+
+Three independent GPT reviewers re-checked the remediation. Local implementation is materially
+stronger and the targeted suite, typecheck, and lint pass, but consensus remains **NEEDS_REVISION /
+REJECT for formal G4–G6 closure**.
+
+Resolved in the follow-up: D1 resolver metadata tables and idempotent store are present; Telegram
+lease renewal and stale-ACK fencing are covered; session READY boundaries are stable; the TDLib
+adapter now has an epoch fence so queued updates do not cross `stop()`; host session validates
+`NormalizedEventSchema` at its runtime seam.
+
+Remaining blockers/majors: TDLib burst overflow still drops updates instead of providing durable
+backpressure/recovery; production TDLib login/session and long-lived drain wiring are absent; G5
+still lacks full people/projects/streams/topics runtime and transactional merge/split state
+transitions; identity persistence is an overwrite without append-only history; confirmation flags
+and audit evidence are caller-provided rather than cryptographically/trusted operator-bound; the
+replay guard is process-local and the complete ADR-007 Access→Worker→Tunnel→Gateway chain is not
+implemented. A lease renewal failure can still permit duplicate delivery unless the central ingest
+idempotency contract is exercised end-to-end.
+
+**Evidence:** reviewer outputs from `g5_arch_review`, `g5_sec_review`, `g5_qa_review`; exact current
+branch `gate/g3-implementation` at `ccee733`.

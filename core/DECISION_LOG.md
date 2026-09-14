@@ -14,6 +14,16 @@ closure remains operator/GPT-PM governed; this entry records implementation evid
 **Evidence:** `infra/migrations/0011_resolver_state.sql`, `packages/domain/src/resolver/store.ts`,
 `host/telegram-connector/src/{runtime,session,spool,tdlib-adapter}.ts`, and passing tests.
 
+## 2026-09-14 — G4/G5/G6 follow-up GPT consensus remains NEEDS REVISION
+
+The three-role follow-up review (architecture, security/privacy, QA) accepted the local hardening
+and shutdown epoch fence, but did not approve formal gates. Event-loss-free burst recovery,
+production TDLib/runtime wiring, complete transactional G5 merge/split/history state, trusted
+operator confirmation, durable replay protection, and the full ADR-007 chain remain open.
+
+**Evidence:** `core/G4_G5_G6_GPT_REVIEW_2026-09-14.md` final follow-up section; branch HEAD
+`ccee733`.
+
 ## 2026-09-14 — G4/G5/G6 GPT reviewer consensus: NEEDS REVISION
 
 Three independent GPT reviewers (architecture, security/privacy, and QA) reviewed exact head
