@@ -3,6 +3,12 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 16: gateway exposure, cancellation, and workspace lock hardening
+
+The content gateway is now explicitly service-binding-only (`workers_dev = false`), forwards inbound
+abort cancellation to the downstream Gmail adapter, and has a pending-request cancellation test.
+The new workspace is included in `package-lock.json`; clean dependency resolution is reproducible.
+
 ## 2026-09-14 — G3 checkpoint 15: signed Gmail content gateway
 
 Added the dedicated `services/gmail-connector` content-gateway Worker. It accepts only an opaque

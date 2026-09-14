@@ -1,5 +1,6 @@
 /* global Request, Response, URL */
 import { importEcdsaP256PrivateJwk, signEcdsaP256Signature } from '@pdos/domain';
+import type { Fetcher } from '@cloudflare/workers-types';
 import type { GmailConnectorEnv } from './env.js';
 
 interface ContentRequest {
@@ -71,7 +72,13 @@ export async function handleContentGatewayRequest(
     const input = parseRequest(await request.json());
     const upstream = await env.GMAIL_API.fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(input.messageId)}`,
-      { method: 'GET' },
+      {
+        method: 'GET',
+        signal: request.signal as unknown as Exclude<
+          NonNullable<Parameters<Fetcher['fetch']>[1]>['signal'],
+          undefined
+        >,
+      },
     );
     if (!upstream.ok) return new Response('Gmail fetch failed', { status: 502 });
     const content = parseGmailContent(await upstream.json());

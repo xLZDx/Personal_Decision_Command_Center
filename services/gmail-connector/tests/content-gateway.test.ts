@@ -1,4 +1,4 @@
-/* global crypto, Request, Response */
+/* global crypto, Request, Response, AbortSignal, AbortController, setTimeout */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { verifyEcdsaP256Signature } from '@pdos/domain';
 
@@ -77,5 +77,34 @@ describe('Gmail content gateway', () => {
     );
     expect(response.status).toBe(400);
     expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('propagates caller cancellation to the downstream Gmail adapter', async () => {
+    const controller = new AbortController();
+    let downstreamSignal: AbortSignal | undefined;
+    const upstream = vi.fn(async (_input: unknown, init?: { signal?: AbortSignal }) => {
+      downstreamSignal = init?.signal;
+      await new Promise<never>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('downstream aborted')), {
+          once: true,
+        });
+      });
+      throw new Error('unreachable');
+    });
+    const responsePromise = handleContentGatewayRequest(
+      new Request('https://gateway.internal/message', {
+        method: 'POST',
+        body: JSON.stringify({ eventId: 'e', sourceAccountId: 'a', messageId: 'm' }),
+        signal: controller.signal,
+      }),
+      {
+        GMAIL_API: { fetch: upstream } as never,
+        GMAIL_CONTENT_SIGNING_PRIVATE_JWK: JSON.stringify(privateJwk),
+      },
+    );
+    while (!downstreamSignal) await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    expect((await responsePromise).status).toBe(400);
+    expect(downstreamSignal?.aborted).toBe(true);
   });
 });
