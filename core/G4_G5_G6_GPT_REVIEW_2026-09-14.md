@@ -78,3 +78,19 @@ idempotency contract is exercised end-to-end.
 
 **Evidence:** reviewer outputs from `g5_arch_review`, `g5_sec_review`, `g5_qa_review`; exact current
 branch `gate/g3-implementation` at `ccee733`.
+
+## Follow-up consensus — HEAD `3ac1fb3`
+
+The permanent code, silent-bugs, Python and design reviewer roles remain registered in
+`core/REVIEW_PROTOCOL.md`. Independent architecture/security/QA follow-up confirmed the local
+remediations: session eligibility filters overflow cache events, G5 split updates assignments,
+G6 decision audit/state guards are present, and migration `0015_g6_integrity_triggers.sql` adds
+referential and append-only protections. Local verification is 57 files / 596 tests, typecheck,
+lint, secret scan and dependency audit green.
+
+Consensus remains **NEEDS_REVISION / REJECT for formal G4–G10 closure** because production TDLib
+login/source-cursor recovery, confirmed durable overflow delivery, full Access→Worker→Tunnel→Gateway
+deployment, commitment/milestone persistence, PWA/Web Push, real-account/device/restore evidence,
+G9 corpus metrics, and operator-approved governance manifests are external requirements. Reviewers
+also retain concurrency-hardening and authoritative provenance as follow-up risks; they are not
+silently downgraded by the green local suite.
