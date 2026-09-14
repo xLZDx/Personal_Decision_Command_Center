@@ -12,9 +12,10 @@ describe('buildTelegramDeterministicEnrichment', () => {
     expect(result).toMatchObject({
       source: 'telegram',
       eventId: 'telegram-event-1',
-      intent: 'BLOCKER',
       aiPolicy: 'DENY',
     });
+    expect(result.intent.value).toBe('BLOCKER');
+    expect(result.intent.provenance).toEqual(['telegram-event-1']);
     expect(result.signals.map((signal) => signal.kind)).toEqual([
       'APPROVAL_REQUEST',
       'BLOCKER_EXPLICIT',
@@ -22,7 +23,6 @@ describe('buildTelegramDeterministicEnrichment', () => {
       'BUSINESS_IDENTIFIER',
     ]);
     expect(JSON.stringify(result)).not.toContain('Blocked: please approve');
-    expect(result.intentEvidence[0]?.provenance).toEqual(['telegram-event-1']);
   });
 
   it('returns an explicit FYI with empty evidence for unmatched prose', () => {
@@ -32,6 +32,13 @@ describe('buildTelegramDeterministicEnrichment', () => {
         text: 'hello from the source',
         now: '2026-09-14T00:00:00.000Z',
       }),
-    ).toMatchObject({ intent: 'FYI', intentEvidence: [], signals: [], aiPolicy: 'DENY' });
+    ).toMatchObject({ signals: [], aiPolicy: 'DENY' });
+    expect(
+      buildTelegramDeterministicEnrichment({
+        eventId: 'telegram-event-2',
+        text: 'hello from the source',
+        now: '2026-09-14T00:00:00.000Z',
+      }).intent,
+    ).toMatchObject({ value: 'FYI', provenance: ['telegram-event-2'], ai_policy: 'DENY' });
   });
 });

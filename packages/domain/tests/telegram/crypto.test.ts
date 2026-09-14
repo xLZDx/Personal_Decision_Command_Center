@@ -33,6 +33,7 @@ describe('Telegram content ECDH/HKDF/AES-GCM envelope', () => {
       decryptTelegramContent({
         clientPrivateKey: client.privateKey,
         gatewayPublicJwk,
+        expectedKeyId: 'gateway-k1',
         envelope,
         now: NOW,
         replayGuard: guard,
@@ -42,8 +43,10 @@ describe('Telegram content ECDH/HKDF/AES-GCM envelope', () => {
       decryptTelegramContent({
         clientPrivateKey: client.privateKey,
         gatewayPublicJwk,
+        expectedKeyId: 'gateway-k1',
         envelope: { ...envelope, sourceRef: 'telegram-message-2' },
         now: NOW,
+        replayGuard: new TelegramContentReplayGuard(),
       }),
     ).rejects.toThrow();
   });
@@ -68,6 +71,7 @@ describe('Telegram content ECDH/HKDF/AES-GCM envelope', () => {
     await decryptTelegramContent({
       clientPrivateKey: client.privateKey,
       gatewayPublicJwk,
+      expectedKeyId: 'gateway-k1',
       envelope,
       now: NOW,
       replayGuard: guard,
@@ -76,6 +80,7 @@ describe('Telegram content ECDH/HKDF/AES-GCM envelope', () => {
       decryptTelegramContent({
         clientPrivateKey: client.privateKey,
         gatewayPublicJwk,
+        expectedKeyId: 'gateway-k1',
         envelope,
         now: NOW,
         replayGuard: guard,
@@ -85,8 +90,10 @@ describe('Telegram content ECDH/HKDF/AES-GCM envelope', () => {
       decryptTelegramContent({
         clientPrivateKey: client.privateKey,
         gatewayPublicJwk,
+        expectedKeyId: 'gateway-k1',
         envelope,
         now: '2026-09-14T10:00:31.000Z',
+        replayGuard: new TelegramContentReplayGuard(),
       }),
     ).rejects.toThrow(/expired/);
     await expect(
@@ -102,5 +109,25 @@ describe('Telegram content ECDH/HKDF/AES-GCM envelope', () => {
         now: NOW,
       }),
     ).rejects.toThrow(/60 seconds/);
+    await expect(
+      decryptTelegramContent({
+        clientPrivateKey: client.privateKey,
+        gatewayPublicJwk,
+        expectedKeyId: 'gateway-k2',
+        envelope,
+        now: NOW,
+        replayGuard: new TelegramContentReplayGuard(),
+      }),
+    ).rejects.toThrow(/keyId mismatch/);
+    await expect(
+      decryptTelegramContent({
+        clientPrivateKey: client.privateKey,
+        gatewayPublicJwk,
+        expectedKeyId: 'gateway-k2',
+        envelope: { ...envelope, keyId: 'gateway-k2' },
+        now: NOW,
+        replayGuard: new TelegramContentReplayGuard(),
+      }),
+    ).rejects.toThrow(/operation|decrypt|auth/i);
   });
 });

@@ -24,6 +24,7 @@ export function resolveTopicDeterministically(
   right: TopicCandidate,
 ): TopicResolutionResult {
   if (
+    (left.projectId && right.projectId && left.projectId !== right.projectId) ||
     left.keepSeparate ||
     right.keepSeparate ||
     left.confirmedProjectConflict ||

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Source } from '@pdos/contracts';
+import { SourceSchema, type Source } from '@pdos/contracts';
 
 import {
   resolveTopicDeterministically,
@@ -7,11 +7,17 @@ import {
   type TopicResolutionResult,
 } from './topic.js';
 
+const NamespacedIdentifierSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .regex(/^[^:\s]+::[^:\s].*$/, 'businessIdentifier must be namespaced as namespace::value');
+
 const TopicCandidateSchema = z
   .object({
     projectId: z.string().min(1).max(256).optional(),
     streamId: z.string().min(1).max(256).optional(),
-    businessIdentifier: z.string().min(1).max(256).optional(),
+    businessIdentifier: NamespacedIdentifierSchema.optional(),
     confirmedParticipant: z.string().min(1).max(256).optional(),
     intentClass: z.string().min(1).max(128).optional(),
     occurredAt: z.string().datetime({ offset: true }).optional(),
@@ -34,6 +40,16 @@ export interface TopicAssignmentAudit {
   crossChannel: boolean;
 }
 
+const EventIdSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine(
+    (value) =>
+      Array.from(value).every((char) => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127),
+    { message: 'eventId must not contain control characters' },
+  );
+
 /**
  * Runtime-checked cross-channel assignment boundary. Only bounded resolver metadata is accepted;
  * extra fields (including body/text/title) fail before assignment. The audit keeps source/event
@@ -45,8 +61,8 @@ export function assignTopicDeterministically(
 ): TopicAssignmentAudit {
   const leftCandidate = TopicCandidateSchema.parse(left.candidate) as TopicCandidate;
   const rightCandidate = TopicCandidateSchema.parse(right.candidate) as TopicCandidate;
-  const evidenceIds = [...new Set([left.eventId, right.eventId])];
-  const sources = [...new Set([left.source, right.source])];
+  const evidenceIds = [EventIdSchema.parse(left.eventId), EventIdSchema.parse(right.eventId)];
+  const sources = [SourceSchema.parse(left.source), SourceSchema.parse(right.source)];
   return {
     resolution: resolveTopicDeterministically(leftCandidate, rightCandidate),
     evidenceIds,

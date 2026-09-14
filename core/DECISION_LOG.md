@@ -3,6 +3,15 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4/G5/G6 remediation before external review
+
+Addressed the first independent review findings: differing project IDs now hard-stop topic
+resolution before explicit merge; assignment/identity boundaries validate runtime source/IDs and
+namespaced identifiers; rejected identities return no person; Telegram parser input/signals are
+bounded; content envelopes bind and verify `keyId` and require replay guards; spool claims use
+SQLite lease tokens with CAS-fenced ACK/FAIL; TDLib adapter errors route to a controlled sink;
+Telegram intent is provenance-bearing in the composed enrichment result.
+
 ## 2026-09-14 — G6 preparation: Telegram deterministic enrichment boundary
 
 Added a source-local composition of the deterministic parser and intent classifier. The result

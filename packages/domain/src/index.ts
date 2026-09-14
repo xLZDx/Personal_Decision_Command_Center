@@ -97,6 +97,7 @@ export type {
   TelegramParserInput,
   TelegramSignalKind,
 } from './telegram/parser.js';
+export { MAX_TELEGRAM_INPUT_CHARS, MAX_TELEGRAM_SIGNALS } from './telegram/parser.js';
 export { classifyTelegramIntent, TELEGRAM_INTENT_CLASSES } from './telegram/intent.js';
 export type { TelegramIntentClass, TelegramIntentResult } from './telegram/intent.js';
 export { buildTelegramDeterministicEnrichment } from './telegram/enrichment.js';

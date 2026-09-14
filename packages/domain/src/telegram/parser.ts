@@ -19,6 +19,9 @@ export interface TelegramParserInput {
   now: string;
 }
 
+export const MAX_TELEGRAM_INPUT_CHARS = 4_000;
+export const MAX_TELEGRAM_SIGNALS = 16;
+
 const RULES: readonly [TelegramSignalKind, RegExp][] = [
   ['APPROVAL_REQUEST', /\b(?:please\s+)?approve\b/i],
   ['BLOCKER_EXPLICIT', /\b(?:blocked|blocker|blocking)\b/i],
@@ -34,10 +37,14 @@ const RULES: readonly [TelegramSignalKind, RegExp][] = [
 export function parseTelegramDeterministically(
   input: TelegramParserInput,
 ): TelegramDeterministicSignal[] {
+  if (Array.from(input.text).length > MAX_TELEGRAM_INPUT_CHARS) {
+    throw new Error(`Telegram input exceeds ${MAX_TELEGRAM_INPUT_CHARS} characters`);
+  }
   const signals: TelegramDeterministicSignal[] = [];
   for (const [kind, rule] of RULES) {
     const match = input.text.match(rule);
     if (!match) continue;
+    if (signals.length >= MAX_TELEGRAM_SIGNALS) break;
     signals.push({
       kind,
       value: {
@@ -52,6 +59,7 @@ export function parseTelegramDeterministically(
     });
   }
   for (const match of input.text.matchAll(/\b[A-Z]{2,}[A-Z0-9]*(?:[-_]\d+)+\b/g)) {
+    if (signals.length >= MAX_TELEGRAM_SIGNALS) break;
     signals.push({
       kind: 'BUSINESS_IDENTIFIER',
       value: {

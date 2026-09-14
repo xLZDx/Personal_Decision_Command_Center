@@ -47,5 +47,30 @@ describe('resolveIdentityDeterministically', () => {
         },
       ]),
     ).toEqual({ state: 'UNKNOWN', personId: null, evidenceIds: [] });
+    expect(
+      resolveIdentityDeterministically({ source: 'telegram', sourceIdentity: 'tg:blocked' }, [
+        {
+          source: 'telegram',
+          sourceIdentity: 'tg:blocked',
+          personId: 'person-1',
+          state: 'REJECTED',
+          evidenceIds: ['reject-1'],
+        },
+      ]),
+    ).toEqual({ state: 'REJECTED', personId: null, evidenceIds: ['reject-1'] });
+  });
+
+  it('rejects runtime-invalid candidate and mapping fields', () => {
+    expect(() =>
+      resolveIdentityDeterministically({ source: 'telegram', sourceIdentity: 'tg:1' }, [
+        {
+          source: 'signal' as never,
+          sourceIdentity: 'tg:1',
+          personId: 'person-1',
+          state: 'CONFIRMED',
+          evidenceIds: ['e1'],
+        },
+      ]),
+    ).toThrow();
   });
 });

@@ -41,5 +41,11 @@ describe('assignTopicDeterministically', () => {
         { eventId: 'gmail-event-2', source: 'gmail', candidate: {} },
       ),
     ).toThrow();
+    expect(() =>
+      assignTopicDeterministically(
+        { eventId: 'event-3', source: 'telegram', candidate: { businessIdentifier: 'Gate-4.2' } },
+        { eventId: 'event-4', source: 'gmail', candidate: {} },
+      ),
+    ).toThrow(/namespaced/);
   });
 });

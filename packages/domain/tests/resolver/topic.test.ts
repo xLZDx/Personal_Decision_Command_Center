@@ -35,4 +35,22 @@ describe('resolveTopicDeterministically', () => {
     ).toBe('SEPARATE');
     expect(resolveTopicDeterministically({}, {}).resolution).toBe('UNKNOWN');
   });
+
+  it('treats differing project IDs as a hard barrier even when all other signals match', () => {
+    expect(
+      resolveTopicDeterministically(
+        {
+          projectId: 'project-a',
+          streamId: 'release',
+          businessIdentifier: 'ERP::Gate-4.2',
+          explicitMerge: true,
+        },
+        {
+          projectId: 'project-b',
+          streamId: 'release',
+          businessIdentifier: 'ERP::Gate-4.2',
+        },
+      ).resolution,
+    ).toBe('SEPARATE');
+  });
 });

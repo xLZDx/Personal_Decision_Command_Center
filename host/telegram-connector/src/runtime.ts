@@ -64,11 +64,11 @@ export class TelegramConnectorRuntime {
     if (item === null) return { outcome: 'EMPTY' };
     try {
       await this.#deliver(item.event);
-      this.#spool.ack(item.id);
+      this.#spool.ack(item.id, item.leaseToken);
       return { outcome: 'ACKED', item };
     } catch (error) {
       const permanent = this.#isPermanentError(error);
-      this.#spool.fail(item.id, this.#now(), permanent);
+      this.#spool.fail(item.id, this.#now(), permanent, item.leaseToken);
       return {
         outcome: permanent ? 'FAILED_PERMANENT' : 'FAILED_RETRYABLE',
         item,

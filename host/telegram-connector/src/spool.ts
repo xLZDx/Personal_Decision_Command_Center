@@ -1,4 +1,5 @@
 /* global process */
+import { randomUUID } from 'node:crypto';
 import { NormalizedEventSchema, type NormalizedEvent } from '@pdos/contracts';
 
 interface SqliteDatabase {
@@ -24,6 +25,7 @@ export interface SpoolItem {
   state: TelegramSpoolState;
   attempts: number;
   nextAttemptAt: string;
+  leaseToken: string;
 }
 
 export interface TelegramSpoolOptions {
@@ -58,11 +60,23 @@ export class TelegramSpool {
         event_json TEXT NOT NULL,
         state TEXT NOT NULL CHECK (state IN ('PENDING','ACKED','FAILED_RETRYABLE','FAILED_PERMANENT')),
         attempts INTEGER NOT NULL DEFAULT 0,
-        next_attempt_at TEXT NOT NULL
+        next_attempt_at TEXT NOT NULL,
+        lease_token TEXT,
+        lease_until TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_telegram_spool_ready
         ON telegram_spool (state, next_attempt_at, id);
     `);
+    try {
+      this.#db.exec('ALTER TABLE telegram_spool ADD COLUMN lease_token TEXT');
+    } catch {
+      // Existing databases created by this module already have the lease columns.
+    }
+    try {
+      this.#db.exec('ALTER TABLE telegram_spool ADD COLUMN lease_until TEXT');
+    } catch {
+      // Existing databases created by this module already have the lease columns.
+    }
   }
 
   enqueue(event: NormalizedEvent, now: string): boolean {
@@ -78,20 +92,29 @@ export class TelegramSpool {
   }
 
   claimReady(now: string): SpoolItem | null {
+    const leaseToken = randomUUID();
+    const leaseUntil = new Date(Date.parse(now) + 30_000).toISOString();
     const row = this.#db
       .prepare(
-        `SELECT id, event_json, state, attempts, next_attempt_at
-         FROM telegram_spool
-         WHERE state IN ('PENDING','FAILED_RETRYABLE') AND next_attempt_at <= ?
-         ORDER BY id LIMIT 1`,
+        `UPDATE telegram_spool
+         SET lease_token = ?, lease_until = ?
+         WHERE id = (
+           SELECT id FROM telegram_spool
+           WHERE state IN ('PENDING','FAILED_RETRYABLE')
+             AND next_attempt_at <= ?
+             AND (lease_token IS NULL OR lease_until <= ?)
+           ORDER BY id LIMIT 1
+         )
+         RETURNING id, event_json, state, attempts, next_attempt_at, lease_token`,
       )
-      .get(now) as
+      .get(leaseToken, leaseUntil, now, now) as
       | {
           id: number;
           event_json: string;
           state: TelegramSpoolState;
           attempts: number;
           next_attempt_at: string;
+          lease_token: string;
         }
       | undefined;
     if (!row) return null;
@@ -101,17 +124,23 @@ export class TelegramSpool {
       state: row.state,
       attempts: row.attempts,
       nextAttemptAt: row.next_attempt_at,
+      leaseToken: row.lease_token,
     };
   }
 
-  ack(id: number): void {
-    this.#db.prepare("UPDATE telegram_spool SET state = 'ACKED' WHERE id = ?").run(id);
+  ack(id: number, leaseToken: string): void {
+    this.#db
+      .prepare(
+        "UPDATE telegram_spool SET state = 'ACKED', lease_token = NULL, lease_until = NULL WHERE id = ? AND lease_token = ?",
+      )
+      .run(id, leaseToken);
   }
 
-  fail(id: number, now: string, permanent = false): void {
+  fail(id: number, now: string, permanent: boolean, leaseToken: string): void {
     const nextAttempt = this.#db
-      .prepare('SELECT attempts FROM telegram_spool WHERE id = ?')
-      .get(id) as { attempts: number } | undefined;
+      .prepare('SELECT attempts FROM telegram_spool WHERE id = ? AND lease_token = ?')
+      .get(id, leaseToken) as { attempts: number } | undefined;
+    if (!nextAttempt) return;
     const attempt = Number(nextAttempt?.attempts ?? 0) + 1;
     const exponential = Math.min(this.#retryBaseMs * 2 ** (attempt - 1), this.#retryCapMs);
     const jitter = Math.floor(exponential * 0.2 * Math.min(1, Math.max(0, this.#random())));
@@ -122,9 +151,10 @@ export class TelegramSpool {
       .prepare(
         `UPDATE telegram_spool
          SET state = ?, attempts = attempts + 1, next_attempt_at = ?
-         WHERE id = ?`,
+           , lease_token = NULL, lease_until = NULL
+         WHERE id = ? AND lease_token = ?`,
       )
-      .run(permanent ? 'FAILED_PERMANENT' : 'FAILED_RETRYABLE', next, id);
+      .run(permanent ? 'FAILED_PERMANENT' : 'FAILED_RETRYABLE', next, id, leaseToken);
   }
 
   close(): void {

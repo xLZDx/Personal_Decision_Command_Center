@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseTelegramDeterministically } from '../../src/index.js';
+import { MAX_TELEGRAM_INPUT_CHARS, parseTelegramDeterministically } from '../../src/index.js';
 
 describe('parseTelegramDeterministically', () => {
   it('extracts fixed rules and identifiers with DENY Telegram provenance', () => {
@@ -27,5 +27,15 @@ describe('parseTelegramDeterministically', () => {
         now: '2026-09-14T00:00:00.000Z',
       }),
     ).toEqual([]);
+  });
+
+  it('bounds source-local parser input before regex work', () => {
+    expect(() =>
+      parseTelegramDeterministically({
+        eventId: 'telegram-event-3',
+        text: 'x'.repeat(MAX_TELEGRAM_INPUT_CHARS + 1),
+        now: '2026-09-14T00:00:00.000Z',
+      }),
+    ).toThrow(/exceeds/);
   });
 });

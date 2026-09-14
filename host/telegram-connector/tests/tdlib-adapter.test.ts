@@ -1,3 +1,4 @@
+/* global setTimeout */
 import { describe, expect, it } from 'vitest';
 import type { NormalizedEvent } from '@pdos/contracts';
 
@@ -50,11 +51,12 @@ describe('TelegramTdlibAdapter', () => {
       },
       session,
       normalizeMessage: (update) => update,
+      onError: () => undefined,
     });
     adapter.start();
     authorization?.('READY');
     message?.({ event, initialCache: false });
-    await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(emitted).toHaveLength(1);
     expect(adapter.health().state).toBe('READY');
     adapter.stop();
@@ -78,10 +80,61 @@ describe('TelegramTdlibAdapter', () => {
       },
       session,
       normalizeMessage: (update) => update,
+      onError: () => undefined,
     });
     adapter.start();
     adapter.start();
     expect(subscriptions).toBe(2);
     adapter.stop();
+  });
+
+  it('routes normalize/session failures to the controlled error sink', async () => {
+    const errors: unknown[] = [];
+    let message: ((update: { event: NormalizedEvent; initialCache: boolean }) => void) | undefined;
+    const session = new TelegramSession({
+      emit: async () => {
+        throw new Error('spool unavailable');
+      },
+    });
+    const adapter = new TelegramTdlibAdapter({
+      source: {
+        onAuthorizationState: () => () => undefined,
+        onMessage(listener) {
+          message = listener;
+          return () => undefined;
+        },
+      },
+      session,
+      normalizeMessage: (update) => update,
+      onError: (error) => errors.push(error),
+    });
+    adapter.start();
+    // The session must be READY before it attempts to emit.
+    // Authorization callback is intentionally not retained by this fake source, so use a second
+    // adapter source below to exercise the same error path without exposing TDLib internals.
+    adapter.stop();
+
+    let authorize!: (state: 'WAITING' | 'READY' | 'OFFLINE' | 'CLOSED') => void;
+    const retryAdapter = new TelegramTdlibAdapter({
+      source: {
+        onAuthorizationState(listener) {
+          authorize = listener;
+          return () => undefined;
+        },
+        onMessage(listener) {
+          message = listener;
+          return () => undefined;
+        },
+      },
+      session,
+      normalizeMessage: (update) => update,
+      onError: (error) => errors.push(error),
+    });
+    retryAdapter.start();
+    authorize('READY');
+    message?.({ event, initialCache: false });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(errors).toHaveLength(1);
+    retryAdapter.stop();
   });
 });

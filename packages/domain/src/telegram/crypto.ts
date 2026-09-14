@@ -17,6 +17,7 @@ export interface TelegramEcdhPublicJwk {
 }
 
 export interface TelegramContentAad {
+  keyId: string;
   requestId: string;
   sourceRef: string;
   schemaVersion: number;
@@ -50,9 +51,10 @@ export interface EncryptTelegramContentOptions {
 export interface DecryptTelegramContentOptions {
   clientPrivateKey: CryptoKey;
   gatewayPublicJwk: TelegramEcdhPublicJwk;
+  expectedKeyId: string;
   envelope: TelegramContentEnvelope;
   now?: string;
-  replayGuard?: TelegramContentReplayGuard;
+  replayGuard: TelegramContentReplayGuard;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -75,7 +77,7 @@ function base64ToBytes(value: string): Uint8Array {
 
 function aadBytes(aad: TelegramContentAad): Uint8Array {
   return encoder.encode(
-    [aad.requestId, aad.sourceRef, String(aad.schemaVersion), aad.expiresAt, aad.nonce]
+    [aad.keyId, aad.requestId, aad.sourceRef, String(aad.schemaVersion), aad.expiresAt, aad.nonce]
       .map((part) => `${part.length}:${part}`)
       .join(''),
   );
@@ -139,12 +141,14 @@ export async function encryptTelegramContent(
   options: EncryptTelegramContentOptions,
 ): Promise<TelegramContentEnvelope> {
   const now = options.now ?? new Date().toISOString();
+  if (options.keyId.length === 0) throw new Error('Telegram content keyId is required');
   validateExpiry(options.expiresAt, now);
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
   const nonceBase64 = bytesToBase64(nonce);
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const aad = {
     requestId: options.requestId,
+    keyId: options.keyId,
     sourceRef: options.sourceRef,
     schemaVersion: options.schemaVersion,
     expiresAt: options.expiresAt,
@@ -187,9 +191,13 @@ export async function decryptTelegramContent(
 ): Promise<string> {
   const now = options.now ?? new Date().toISOString();
   validateExpiry(options.envelope.expiresAt, now);
+  if (options.envelope.keyId !== options.expectedKeyId) {
+    throw new Error('Telegram content keyId mismatch');
+  }
   const nonce = base64ToBytes(options.envelope.nonce);
   if (nonce.length !== NONCE_BYTES) throw new Error('Invalid Telegram content nonce');
   const aad: TelegramContentAad = {
+    keyId: options.envelope.keyId,
     requestId: options.envelope.requestId,
     sourceRef: options.envelope.sourceRef,
     schemaVersion: options.envelope.schemaVersion,
@@ -206,10 +214,7 @@ export async function decryptTelegramContent(
     key,
     base64ToBytes(options.envelope.ciphertext),
   );
-  if (
-    options.replayGuard &&
-    !options.replayGuard.accept(options.envelope.nonce, options.envelope.expiresAt, now)
-  ) {
+  if (!options.replayGuard.accept(options.envelope.nonce, options.envelope.expiresAt, now)) {
     throw new Error('Telegram content request replayed');
   }
   return new TextDecoder().decode(plaintext);

@@ -13,6 +13,7 @@ export interface TelegramTdlibAdapterOptions {
   source: TelegramTdlibUpdateSource;
   session: TelegramSession;
   normalizeMessage: (update: TelegramSessionEvent) => TelegramSessionEvent;
+  onError: (error: unknown) => void;
 }
 
 /**
@@ -23,12 +24,14 @@ export class TelegramTdlibAdapter {
   readonly #source: TelegramTdlibUpdateSource;
   readonly #session: TelegramSession;
   readonly #normalizeMessage: (update: TelegramSessionEvent) => TelegramSessionEvent;
+  readonly #onError: (error: unknown) => void;
   #unsubscribe: (() => void) | null = null;
 
   constructor(options: TelegramTdlibAdapterOptions) {
     this.#source = options.source;
     this.#session = options.session;
     this.#normalizeMessage = options.normalizeMessage;
+    this.#onError = options.onError;
   }
 
   start(): void {
@@ -37,8 +40,10 @@ export class TelegramTdlibAdapter {
       this.#session.onAuthorizationState(state);
     });
     const stopMessages = this.#source.onMessage((update) => {
-      const normalized = this.#normalizeMessage(update);
-      void this.#session.onMessage(normalized);
+      void Promise.resolve()
+        .then(() => this.#normalizeMessage(update))
+        .then((normalized) => this.#session.onMessage(normalized))
+        .catch((error: unknown) => this.#onError(error));
     });
     this.#unsubscribe = () => {
       stopAuthorization();

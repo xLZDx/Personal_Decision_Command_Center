@@ -43,12 +43,13 @@ describe('TelegramSpool', () => {
   it('tracks retryable/permanent outcomes without changing the event envelope', () => {
     const path = join(tmpdir(), `pdos-tg-${randomUUID()}.sqlite`);
     const now = '2026-09-14T00:00:00.000Z';
-    const spool = new TelegramSpool(path);
+    const spool = new TelegramSpool(path, { random: () => 0 });
     spool.enqueue(event('00000000-0000-4000-8000-000000000022'), now);
     const item = spool.claimReady(now)!;
-    spool.fail(item.id, now);
+    spool.fail(item.id, now, false, item.leaseToken);
     expect(spool.claimReady(now)).toBeNull();
-    spool.fail(item.id, '2026-09-14T00:00:02.000Z', true);
+    const retry = spool.claimReady('2026-09-14T00:00:02.000Z')!;
+    spool.fail(retry.id, '2026-09-14T00:00:02.000Z', true, retry.leaseToken);
     expect(spool.claimReady('2026-09-14T00:00:03.000Z')).toBeNull();
     spool.close();
   });
@@ -63,13 +64,30 @@ describe('TelegramSpool', () => {
     const now = '2026-09-14T00:00:00.000Z';
     spool.enqueue(event('00000000-0000-4000-8000-000000000023'), now);
     const item = spool.claimReady(now)!;
-    spool.fail(item.id, now);
+    spool.fail(item.id, now, false, item.leaseToken);
     expect(spool.claimReady('2026-09-14T00:00:01.199Z')).toBeNull();
-    expect(spool.claimReady('2026-09-14T00:00:01.200Z')).not.toBeNull();
     const retry = spool.claimReady('2026-09-14T00:00:01.200Z')!;
-    spool.fail(retry.id, '2026-09-14T00:00:01.200Z');
+    expect(retry).not.toBeNull();
+    spool.fail(retry.id, '2026-09-14T00:00:01.200Z', false, retry.leaseToken);
     expect(spool.claimReady('2026-09-14T00:00:03.599Z')).toBeNull();
     expect(spool.claimReady('2026-09-14T00:00:03.700Z')).not.toBeNull();
     spool.close();
+  });
+
+  it('atomically leases a row across two spool processes and fences stale ACKs', () => {
+    const path = join(tmpdir(), `pdos-tg-${randomUUID()}.sqlite`);
+    const now = '2026-09-14T00:00:00.000Z';
+    const first = new TelegramSpool(path, { random: () => 0 });
+    const second = new TelegramSpool(path, { random: () => 0 });
+    first.enqueue(event('00000000-0000-4000-8000-000000000024'), now);
+    const firstClaim = first.claimReady(now)!;
+    expect(second.claimReady(now)).toBeNull();
+    const secondClaim = second.claimReady('2026-09-14T00:00:31.000Z')!;
+    expect(secondClaim.leaseToken).not.toBe(firstClaim.leaseToken);
+    first.ack(firstClaim.id, firstClaim.leaseToken);
+    expect(second.claimReady('2026-09-14T00:00:31.000Z')).toBeNull();
+    second.ack(secondClaim.id, secondClaim.leaseToken);
+    first.close();
+    second.close();
   });
 });
