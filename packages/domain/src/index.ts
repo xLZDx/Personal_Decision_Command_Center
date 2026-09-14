@@ -141,8 +141,17 @@ export {
 export type { OperationalSnapshot } from './ops.js';
 export { BackupManifestSchema, validateBackupManifest, assertBackupIntegrity } from './backup.js';
 export type { BackupManifest } from './backup.js';
-export { evaluateShadow, calibrateAutoAttachThreshold } from './evaluation.js';
-export type { ShadowPrediction, ShadowEvaluation, CalibrationPoint } from './evaluation.js';
+export {
+  evaluateShadow,
+  calibrateAutoAttachThreshold,
+  assertG9DatasetAdequacy,
+} from './evaluation.js';
+export type {
+  ShadowPrediction,
+  ShadowEvaluation,
+  CalibrationPoint,
+  G9DatasetCounts,
+} from './evaluation.js';
 export { resolveIdentityDeterministically, IDENTITY_STATES } from './resolver/identity.js';
 export type {
   IdentityCandidate,

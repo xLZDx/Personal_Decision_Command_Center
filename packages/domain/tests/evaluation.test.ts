@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { calibrateAutoAttachThreshold, evaluateShadow } from '../src/index.js';
+import {
+  assertG9DatasetAdequacy,
+  calibrateAutoAttachThreshold,
+  evaluateShadow,
+} from '../src/index.js';
 
 describe('G9 shadow evaluation', () => {
   it('exposes accuracy, confusion and false-merge count', () => {
@@ -22,5 +26,38 @@ describe('G9 shadow evaluation', () => {
     expect(points).toHaveLength(4);
     expect(points.find((point) => point.threshold === 0.95)?.falseMergeRate).toBe(0);
     expect(() => calibrateAutoAttachThreshold([{ score: 2, shouldAttach: true }])).toThrow();
+    expect(() =>
+      calibrateAutoAttachThreshold([{ score: 0.9, shouldAttach: 'yes' as never }]),
+    ).toThrow();
+    expect(() =>
+      evaluateShadow([{ id: 'raw text!', expected: 'UNKNOWN', actual: 'UNKNOWN' }]),
+    ).toThrow();
+    expect(() =>
+      evaluateShadow([
+        { id: 'dup', expected: 'UNKNOWN', actual: 'UNKNOWN' },
+        { id: 'dup', expected: 'UNKNOWN', actual: 'UNKNOWN' },
+      ]),
+    ).toThrow();
+  });
+
+  it('refuses to claim G9 coverage for an undersized or unbalanced corpus', () => {
+    expect(() =>
+      assertG9DatasetAdequacy({
+        total: 3,
+        crossSource: 0,
+        decisionOrAction: 0,
+        ambiguous: 0,
+        crossProjectCollisions: 0,
+      }),
+    ).toThrow();
+    expect(() =>
+      assertG9DatasetAdequacy({
+        total: 200,
+        crossSource: 30,
+        decisionOrAction: 30,
+        ambiguous: 20,
+        crossProjectCollisions: 10,
+      }),
+    ).not.toThrow();
   });
 });
