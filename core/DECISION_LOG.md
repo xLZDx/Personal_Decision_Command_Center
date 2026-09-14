@@ -3,6 +3,14 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: Telegram TDLib session boundary
+
+Added a TDLib-independent session boundary that records `READY`/`OFFLINE` health, establishes a
+`connected_at` timestamp, suppresses first-login cache and pre-connect updates, and emits only
+post-connect normalized events. Offline/disconnected updates are fail-closed; reconnect state is
+observable through the health snapshot. Adapter and six-hour reconnect soak remain subsequent
+slices.
+
 ## 2026-09-14 — G4 preparation: Telegram host SQLite WAL spool
 
 Added `host/telegram-connector`'s transactional local spool. It validates and stores only the
