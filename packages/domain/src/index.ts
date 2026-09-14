@@ -128,6 +128,8 @@ export {
   MILESTONE_STATES,
 } from './decision.js';
 export type { Decision, CommitmentState, MilestoneState } from './decision.js';
+export { persistDecision } from './decision-store.js';
+export type { PersistDecisionInput } from './decision-store.js';
 export {
   createOpaquePushPayload,
   decodeOpaquePushPayload,
