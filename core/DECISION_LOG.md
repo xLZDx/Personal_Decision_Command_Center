@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: TDLib adapter seam
+
+Added a narrow TDLib update-source adapter that forwards authorization state and normalized message
+updates through `TelegramSession`, with idempotent start/stop subscription lifecycle. TDLib
+objects must be decoded by an injected mapper before crossing the seam; no raw object is persisted
+or sent to central ingest.
+
 ## 2026-09-14 — G4 preparation: serialize host spool drains
 
 Serialized concurrent runtime drain calls so a single connector process cannot deliver the same

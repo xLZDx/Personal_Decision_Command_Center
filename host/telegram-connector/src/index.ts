@@ -9,3 +9,9 @@ export type {
 } from './session.js';
 export { TelegramConnectorRuntime } from './runtime.js';
 export type { TelegramConnectorRuntimeOptions, TelegramDrainOutcome } from './runtime.js';
+export { TelegramTdlibAdapter } from './tdlib-adapter.js';
+export type {
+  TelegramNormalizedMessage,
+  TelegramTdlibAdapterOptions,
+  TelegramTdlibUpdateSource,
+} from './tdlib-adapter.js';
