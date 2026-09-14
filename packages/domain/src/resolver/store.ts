@@ -62,9 +62,23 @@ const TopicMutation = z
     eventId: MetadataText,
     actor: MetadataText,
     now: z.string().datetime({ offset: true }),
+    auditId: MetadataText,
+    reason: z.string().min(1).max(1024),
+    evidenceIds: z.array(MetadataText).max(32),
   })
   .strict();
 export type TopicMutationInput = z.infer<typeof TopicMutation>;
+const SplitMutation = z.object({
+  sourceTopicId: MetadataText,
+  targetTopicId: MetadataText,
+  eventId: MetadataText,
+  actor: MetadataText,
+  now: z.string().datetime({ offset: true }),
+  auditId: MetadataText,
+  reason: z.string().min(1).max(1024),
+  evidenceIds: z.array(MetadataText).max(32),
+}).strict();
+export type SplitTopicEventInput = z.infer<typeof SplitMutation>;
 
 /** Idempotent event attachment; the topic row must exist (migration trigger enforces this). */
 export async function attachTopicEvent(
@@ -72,14 +86,24 @@ export async function attachTopicEvent(
   input: TopicMutationInput,
 ): Promise<boolean> {
   const value = TopicMutation.parse(input);
-  const result = await db
-    .prepare(
-      `INSERT INTO topic_events (topic_id, event_id, attached_at, attached_by)
-     VALUES (?, ?, ?, ?) ON CONFLICT(topic_id, event_id) DO NOTHING`,
-    )
-    .bind(value.topicId, value.eventId, value.now, value.actor)
-    .run();
-  return result.meta.changes === 1;
+  const existingAudit = await db.prepare('SELECT operation, topic_id, event_id, actor, reason, evidence_json FROM topic_mutation_audit WHERE audit_id = ?')
+    .bind(value.auditId).first<Record<string, string>>();
+  if (existingAudit && (existingAudit.operation !== 'ATTACH' || existingAudit.topic_id !== value.topicId || existingAudit.event_id !== value.eventId || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || existingAudit.evidence_json !== JSON.stringify(value.evidenceIds))) {
+    throw new Error('audit id already used for a different mutation');
+  }
+  const results = await db.batch([
+    db.prepare(`INSERT INTO topic_events (topic_id, event_id, attached_at, attached_by)
+      VALUES (?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`)
+      .bind(value.topicId, value.eventId, value.now, value.actor),
+    db.prepare(`INSERT INTO topic_mutation_audit
+      (audit_id, operation, topic_id, event_id, source_topic_id, target_topic_id, actor, reason, evidence_json, created_at)
+      SELECT ?, 'ATTACH', ?, ?, NULL, NULL, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM topic_events WHERE topic_id = ? AND event_id = ?)
+      ON CONFLICT(audit_id) DO NOTHING`)
+      .bind(value.auditId, value.topicId, value.eventId, value.actor, value.reason,
+        JSON.stringify(value.evidenceIds), value.now, value.topicId, value.eventId),
+  ]);
+  return Number(results[0]?.meta.changes ?? 0) === 1;
 }
 
 export async function detachTopicEvent(
@@ -87,17 +111,62 @@ export async function detachTopicEvent(
   input: TopicMutationInput,
 ): Promise<boolean> {
   const value = TopicMutation.parse(input);
-  const result = await db
-    .prepare('DELETE FROM topic_events WHERE topic_id = ? AND event_id = ?')
-    .bind(value.topicId, value.eventId)
-    .run();
-  return result.meta.changes === 1;
+  const existingAudit = await db.prepare('SELECT operation, topic_id, event_id, actor, reason, evidence_json FROM topic_mutation_audit WHERE audit_id = ?')
+    .bind(value.auditId).first<Record<string, string>>();
+  if (existingAudit && (existingAudit.operation !== 'DETACH' || existingAudit.topic_id !== value.topicId || existingAudit.event_id !== value.eventId || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || existingAudit.evidence_json !== JSON.stringify(value.evidenceIds))) {
+    throw new Error('audit id already used for a different mutation');
+  }
+  const results = await db.batch([
+    db.prepare(`INSERT INTO topic_mutation_audit
+      (audit_id, operation, topic_id, event_id, source_topic_id, target_topic_id, actor, reason, evidence_json, created_at)
+      SELECT ?, 'DETACH', ?, ?, NULL, NULL, ?, ?, ?, ?
+      FROM topic_events WHERE topic_id = ? AND event_id = ?
+      ON CONFLICT(audit_id) DO NOTHING`)
+      .bind(value.auditId, value.topicId, value.eventId, value.actor, value.reason,
+        JSON.stringify(value.evidenceIds), value.now, value.topicId, value.eventId),
+    db.prepare('DELETE FROM topic_events WHERE topic_id = ? AND event_id = ?')
+      .bind(value.topicId, value.eventId),
+  ]);
+  return Number(results[1]?.meta.changes ?? 0) === 1;
+}
+
+/** Atomically moves one event to another topic and records a reversible SPLIT. */
+export async function splitTopicEvent(db: D1Database, input: SplitTopicEventInput): Promise<boolean> {
+  const value = SplitMutation.parse(input);
+  if (value.sourceTopicId === value.targetTopicId) throw new Error('source and target topics must differ');
+  const topics = await db.prepare(`SELECT topic_id, project_id, state FROM topics WHERE topic_id IN (?, ?)`)
+    .bind(value.sourceTopicId, value.targetTopicId).all<{ topic_id: string; project_id: string; state: string }>();
+  const source = topics.results.find((row) => row.topic_id === value.sourceTopicId);
+  const target = topics.results.find((row) => row.topic_id === value.targetTopicId);
+  if (!source || !target || source.project_id !== target.project_id || source.state !== 'ACTIVE' || target.state !== 'ACTIVE') {
+    throw new Error('topics must be ACTIVE and belong to the same project');
+  }
+  const evidenceJson = JSON.stringify(value.evidenceIds);
+  const existingAudit = await db.prepare('SELECT operation, source_topic_id, target_topic_id, event_id, actor, reason, evidence_json FROM topic_mutation_audit WHERE audit_id = ?')
+    .bind(value.auditId).first<Record<string, string>>();
+  if (existingAudit && (existingAudit.operation !== 'SPLIT' || existingAudit.source_topic_id !== value.sourceTopicId || existingAudit.target_topic_id !== value.targetTopicId || existingAudit.event_id !== value.eventId || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || existingAudit.evidence_json !== evidenceJson)) {
+    throw new Error('audit id already used for a different mutation');
+  }
+  const results = await db.batch([
+    db.prepare(`INSERT INTO topic_mutation_audit
+      (audit_id, operation, topic_id, event_id, source_topic_id, target_topic_id, actor, reason, evidence_json, created_at)
+      SELECT ?, 'SPLIT', NULL, ?, ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM topic_events WHERE topic_id = ? AND event_id = ?)
+      ON CONFLICT(audit_id) DO NOTHING`)
+      .bind(value.auditId, value.eventId, value.sourceTopicId, value.targetTopicId, value.actor, value.reason, evidenceJson, value.now, value.sourceTopicId, value.eventId),
+    db.prepare('DELETE FROM topic_events WHERE topic_id = ? AND event_id = ?')
+      .bind(value.sourceTopicId, value.eventId),
+    db.prepare(`INSERT INTO topic_events (topic_id, event_id, attached_at, attached_by)
+      VALUES (?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`)
+      .bind(value.targetTopicId, value.eventId, value.now, value.actor),
+  ]);
+  return Number(results[2]?.meta.changes ?? 0) === 1;
 }
 
 /** Atomic merge state transition: move event edges then mark the source topic MERGED. */
 export async function mergeTopics(
   db: D1Database,
-  input: { sourceTopicId: string; targetTopicId: string; actor: string; now: string },
+  input: { sourceTopicId: string; targetTopicId: string; actor: string; now: string; auditId: string; reason: string; evidenceIds: string[] },
 ): Promise<boolean> {
   const value = z
     .object({
@@ -105,23 +174,57 @@ export async function mergeTopics(
       targetTopicId: MetadataText,
       actor: MetadataText,
       now: z.string().datetime({ offset: true }),
+      auditId: MetadataText,
+      reason: z.string().min(1).max(1024),
+      evidenceIds: z.array(MetadataText).max(32),
     })
     .strict()
     .parse(input);
+  if (value.sourceTopicId === value.targetTopicId) throw new Error('source and target topics must differ');
+  const topics = await db.prepare(`SELECT topic_id, project_id, state FROM topics WHERE topic_id IN (?, ?)`)
+    .bind(value.sourceTopicId, value.targetTopicId).all<{ topic_id: string; project_id: string; state: string }>();
+  if (topics.results.length !== 2) throw new Error('source and target topics must exist');
+  const source = topics.results.find((row) => row.topic_id === value.sourceTopicId);
+  const target = topics.results.find((row) => row.topic_id === value.targetTopicId);
+  if (!source || !target || source.project_id !== target.project_id || source.state !== 'ACTIVE' || target.state !== 'ACTIVE') {
+    throw new Error('topics must be ACTIVE and belong to the same project');
+  }
+  const existingAudit = await db.prepare('SELECT operation, source_topic_id, target_topic_id, actor, reason, evidence_json FROM topic_mutation_audit WHERE audit_id = ?')
+    .bind(value.auditId).first<Record<string, string>>();
+  if (existingAudit && (existingAudit.operation !== 'MERGE' || existingAudit.source_topic_id !== value.sourceTopicId || existingAudit.target_topic_id !== value.targetTopicId || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || existingAudit.evidence_json !== JSON.stringify(value.evidenceIds))) {
+    throw new Error('audit id already used for a different mutation');
+  }
   const result = await db.batch([
     db
       .prepare(
-        `INSERT OR IGNORE INTO topic_events (topic_id, event_id, attached_at, attached_by)
-      SELECT ?, event_id, ?, ? FROM topic_events WHERE topic_id = ?`,
+        `INSERT INTO topic_mutation_audit
+          (audit_id, operation, topic_id, event_id, source_topic_id, target_topic_id, actor, reason, evidence_json, created_at)
+         SELECT ?, 'MERGE', NULL, NULL, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM topics source JOIN topics target ON target.topic_id = ?
+           WHERE source.topic_id = ? AND source.project_id = target.project_id
+             AND source.state = 'ACTIVE' AND target.state = 'ACTIVE')
+         ON CONFLICT(audit_id) DO NOTHING`,
       )
-      .bind(value.targetTopicId, value.now, value.actor, value.sourceTopicId),
+      .bind(value.auditId, value.sourceTopicId, value.targetTopicId, value.actor, value.reason,
+        JSON.stringify(value.evidenceIds), value.now, value.targetTopicId, value.sourceTopicId),
     db
       .prepare(
-        `UPDATE topics SET state = 'MERGED', updated_at = ? WHERE topic_id = ? AND topic_id <> ? AND state = 'ACTIVE'`,
+        `DELETE FROM topic_events WHERE topic_id = ? AND event_id IN
+          (SELECT event_id FROM topic_events WHERE topic_id = ?)`
       )
-      .bind(value.now, value.sourceTopicId, value.targetTopicId),
+      .bind(value.sourceTopicId, value.targetTopicId),
+    db
+      .prepare(
+        `UPDATE topic_events SET topic_id = ? WHERE topic_id = ?`,
+      )
+      .bind(value.targetTopicId, value.sourceTopicId),
+    db.prepare(`UPDATE topics SET state = 'MERGED', updated_at = ?
+      WHERE topic_id = ? AND topic_id <> ? AND state = 'ACTIVE'
+      AND EXISTS (SELECT 1 FROM topics target WHERE target.topic_id = ?
+        AND target.project_id = topics.project_id AND target.state = 'ACTIVE')`)
+      .bind(value.now, value.sourceTopicId, value.targetTopicId, value.targetTopicId),
   ]);
-  return Number(result[1]?.meta.changes ?? 0) === 1;
+  return Number(result[3]?.meta.changes ?? 0) === 1;
 }
 
 /** Idempotently persists an exact source identity mapping; REJECTED mappings retain no person id. */
@@ -130,6 +233,13 @@ export async function persistIdentityMapping(
   input: PersistIdentityMappingInput,
 ): Promise<{ status: 'PERSISTED'; source: Source; sourceIdentity: string }> {
   const value = IdentityInput.parse(input);
+  const evidenceJson = JSON.stringify(value.evidenceIds);
+  const existingAudit = await db.prepare(`SELECT source, source_identity, next_person_id, next_state, actor, evidence_json
+      FROM source_identity_audit WHERE audit_id = ?`).bind(value.auditId)
+    .first<{ source: string; source_identity: string; next_person_id: string | null; next_state: string; actor: string; evidence_json: string }>();
+  if (existingAudit && (existingAudit.source !== value.source || existingAudit.source_identity !== value.sourceIdentity || existingAudit.next_person_id !== value.personId || existingAudit.next_state !== value.state || existingAudit.actor !== value.actor || existingAudit.evidence_json !== evidenceJson)) {
+    throw new Error('audit id already used for a different identity mapping');
+  }
   await db.batch([
     db
       .prepare(
@@ -146,7 +256,7 @@ export async function persistIdentityMapping(
         value.personId,
         value.state,
         value.actor,
-        JSON.stringify(value.evidenceIds),
+        evidenceJson,
         value.now,
         value.source,
         value.sourceIdentity,
@@ -156,7 +266,7 @@ export async function persistIdentityMapping(
         value.personId,
         value.state,
         value.actor,
-        JSON.stringify(value.evidenceIds),
+        evidenceJson,
         value.now,
         value.source,
         value.sourceIdentity,
@@ -175,7 +285,7 @@ export async function persistIdentityMapping(
         value.sourceIdentity,
         value.personId,
         value.state,
-        JSON.stringify(value.evidenceIds),
+        evidenceJson,
         value.now,
         value.now,
       ),
@@ -189,6 +299,13 @@ export async function persistTopicAssignment(
   input: PersistTopicAssignmentInput,
 ): Promise<PersistTopicAssignmentResult> {
   const value = AssignmentInput.parse(input);
+  const evidenceJson = JSON.stringify(value.evidenceIds);
+  const existingAudit = await db.prepare(`SELECT assignment_id, event_id, operation, actor, reason, score, resolver_version, evidence_json
+      FROM topic_assignment_audit WHERE audit_id = ?`).bind(value.auditId)
+    .first<{ assignment_id: string; event_id: string; operation: string; actor: string; reason: string; score: number; resolver_version: string; evidence_json: string }>();
+  if (existingAudit && (existingAudit.assignment_id !== value.assignmentId || existingAudit.event_id !== value.eventId || existingAudit.operation !== value.operation || existingAudit.actor !== value.actor || existingAudit.reason !== value.reason || Number(existingAudit.score) !== value.score || existingAudit.resolver_version !== value.resolverVersion || existingAudit.evidence_json !== evidenceJson)) {
+    throw new Error('audit id already used for a different topic assignment');
+  }
   const statements = [
     db
       .prepare(
@@ -204,7 +321,7 @@ export async function persistTopicAssignment(
         value.resolution,
         value.score,
         value.resolverVersion,
-        value.actor,
+        value.assignedBy,
         value.now,
         value.now,
       ),
@@ -223,7 +340,7 @@ export async function persistTopicAssignment(
         value.reason,
         value.score,
         value.resolverVersion,
-        JSON.stringify(value.evidenceIds),
+        evidenceJson,
         value.now,
         value.assignmentId,
       ),

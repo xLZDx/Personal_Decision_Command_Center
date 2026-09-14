@@ -52,6 +52,7 @@ describe('TelegramTdlibAdapter', () => {
       session,
       normalizeMessage: (update) => update,
       onError: () => undefined,
+      onOverflow: () => undefined,
     });
     adapter.start();
     authorization?.('READY');
@@ -81,6 +82,7 @@ describe('TelegramTdlibAdapter', () => {
       session,
       normalizeMessage: (update) => update,
       onError: () => undefined,
+      onOverflow: () => undefined,
     });
     adapter.start();
     adapter.start();
@@ -107,6 +109,7 @@ describe('TelegramTdlibAdapter', () => {
       session,
       normalizeMessage: (update) => update,
       onError: (error) => errors.push(error),
+      onOverflow: () => undefined,
     });
     adapter.start();
     // The session must be READY before it attempts to emit.
@@ -129,6 +132,7 @@ describe('TelegramTdlibAdapter', () => {
       session,
       normalizeMessage: (update) => update,
       onError: (error) => errors.push(error),
+      onOverflow: () => undefined,
     });
     retryAdapter.start();
     authorize('READY');
@@ -166,6 +170,7 @@ describe('TelegramTdlibAdapter', () => {
       session,
       normalizeMessage: (update) => update,
       onError: () => undefined,
+      onOverflow: () => undefined,
     });
     adapter.start();
     authorize('READY');
@@ -183,5 +188,30 @@ describe('TelegramTdlibAdapter', () => {
     release();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(emitted).toHaveLength(1);
+  });
+
+  it('routes burst overflow through the mandatory durable callback', async () => {
+    let message!: (update: { event: NormalizedEvent; initialCache: boolean }) => void;
+    let authorize!: (state: 'WAITING' | 'READY' | 'OFFLINE' | 'CLOSED') => void;
+    const overflow: NormalizedEvent[] = [];
+    const session = new TelegramSession({ emit: async () => new Promise<void>(() => undefined) });
+    const adapter = new TelegramTdlibAdapter({
+      source: {
+        onAuthorizationState(listener) { authorize = listener; return () => undefined; },
+        onMessage(listener) { message = listener; return () => undefined; },
+      },
+      session,
+      normalizeMessage: (update) => update,
+      onError: () => undefined,
+      onOverflow: (update) => { overflow.push(update.event); },
+      maxPendingUpdates: 1,
+    });
+    adapter.start();
+    authorize('READY');
+    message({ event, initialCache: false });
+    message({ event: { ...event, event_id: '00000000-0000-4000-8000-000000000052', source_event_id: 'tg-message-52' }, initialCache: false });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(overflow).toHaveLength(1);
+    adapter.stop();
   });
 });

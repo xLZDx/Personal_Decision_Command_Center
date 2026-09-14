@@ -6,11 +6,15 @@ Telegram login codes, OAuth refresh tokens, or private keys in chat/logs.
 
 ## Preconditions
 
-1. Deploy the current branch to an isolated staging project with D1 migrations through `0012`.
+1. Deploy the current branch to an isolated staging project with D1 migrations through `0014` (including G5 integrity, unique event attachment, and append-only audit triggers).
 2. Provision secrets directly in the platform secret manager; record only secret version IDs.
 3. Configure a test Telegram personal account and a test Gmail mailbox containing labeled,
    non-sensitive messages. Enable audit logging and a disposable notification subscription.
 4. Install the staging PWA URL on one Android device and one target iPhone Home Screen.
+
+The currently attached Android test handset is Samsung SM-G950F (Android 8.0).
+Record only its serial and browser version in the operator manifest; never store
+account credentials or login codes in this repository.
 
 ## Execution evidence
 

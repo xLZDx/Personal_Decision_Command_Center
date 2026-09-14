@@ -15,7 +15,8 @@ export interface TelegramTdlibAdapterOptions {
   normalizeMessage: (update: TelegramSessionEvent) => TelegramSessionEvent;
   onError: (error: unknown) => void;
   /** Durable overflow path (normally TelegramSpool.enqueue + source cursor checkpoint). */
-  onOverflow?: (update: TelegramSessionEvent) => void | Promise<void>;
+  /** Required durable overflow path; implementations must persist the update and source cursor. */
+  onOverflow: (update: TelegramSessionEvent) => void | Promise<void>;
   maxPendingUpdates?: number;
 }
 
@@ -28,7 +29,7 @@ export class TelegramTdlibAdapter {
   readonly #session: TelegramSession;
   readonly #normalizeMessage: (update: TelegramSessionEvent) => TelegramSessionEvent;
   readonly #onError: (error: unknown) => void;
-  readonly #onOverflow: ((update: TelegramSessionEvent) => void | Promise<void>) | null;
+  readonly #onOverflow: (update: TelegramSessionEvent) => void | Promise<void>;
   readonly #maxPendingUpdates: number;
   #unsubscribe: (() => void) | null = null;
   #pendingUpdates = 0;
@@ -40,7 +41,7 @@ export class TelegramTdlibAdapter {
     this.#session = options.session;
     this.#normalizeMessage = options.normalizeMessage;
     this.#onError = options.onError;
-    this.#onOverflow = options.onOverflow ?? null;
+    this.#onOverflow = options.onOverflow;
     this.#maxPendingUpdates = options.maxPendingUpdates ?? 256;
     if (!Number.isInteger(this.#maxPendingUpdates) || this.#maxPendingUpdates < 1) {
       throw new Error('maxPendingUpdates must be a positive integer');
@@ -55,20 +56,21 @@ export class TelegramTdlibAdapter {
     });
     const stopMessages = this.#source.onMessage((update) => {
       if (this.#pendingUpdates >= this.#maxPendingUpdates) {
-        if (this.#onOverflow !== null) {
-          void Promise.resolve(this.#onOverflow(update)).catch((error: unknown) => {
+        try {
+          const normalized = this.#normalizeMessage(update);
+          void Promise.resolve(this.#onOverflow(normalized)).catch((error: unknown) => {
             try {
               this.#onError(error);
             } catch {
               // Error sinks must not escape the TDLib callback.
             }
           });
-          return;
-        }
-        try {
-          this.#onError(new Error('Telegram TDLib update backlog exceeded'));
         } catch {
-          // Error sinks are advisory and must not escape the TDLib callback.
+          try {
+            this.#onError(new Error('Telegram TDLib overflow normalization failed'));
+          } catch {
+            // Error sinks are advisory and must not escape the TDLib callback.
+          }
         }
         return;
       }
