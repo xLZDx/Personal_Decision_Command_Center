@@ -56,6 +56,74 @@ const IdentityInput = z
 
 export type PersistIdentityMappingInput = z.infer<typeof IdentityInput>;
 
+const TopicMutation = z
+  .object({
+    topicId: MetadataText,
+    eventId: MetadataText,
+    actor: MetadataText,
+    now: z.string().datetime({ offset: true }),
+  })
+  .strict();
+export type TopicMutationInput = z.infer<typeof TopicMutation>;
+
+/** Idempotent event attachment; the topic row must exist (migration trigger enforces this). */
+export async function attachTopicEvent(
+  db: D1Database,
+  input: TopicMutationInput,
+): Promise<boolean> {
+  const value = TopicMutation.parse(input);
+  const result = await db
+    .prepare(
+      `INSERT INTO topic_events (topic_id, event_id, attached_at, attached_by)
+     VALUES (?, ?, ?, ?) ON CONFLICT(topic_id, event_id) DO NOTHING`,
+    )
+    .bind(value.topicId, value.eventId, value.now, value.actor)
+    .run();
+  return result.meta.changes === 1;
+}
+
+export async function detachTopicEvent(
+  db: D1Database,
+  input: TopicMutationInput,
+): Promise<boolean> {
+  const value = TopicMutation.parse(input);
+  const result = await db
+    .prepare('DELETE FROM topic_events WHERE topic_id = ? AND event_id = ?')
+    .bind(value.topicId, value.eventId)
+    .run();
+  return result.meta.changes === 1;
+}
+
+/** Atomic merge state transition: move event edges then mark the source topic MERGED. */
+export async function mergeTopics(
+  db: D1Database,
+  input: { sourceTopicId: string; targetTopicId: string; actor: string; now: string },
+): Promise<boolean> {
+  const value = z
+    .object({
+      sourceTopicId: MetadataText,
+      targetTopicId: MetadataText,
+      actor: MetadataText,
+      now: z.string().datetime({ offset: true }),
+    })
+    .strict()
+    .parse(input);
+  const result = await db.batch([
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO topic_events (topic_id, event_id, attached_at, attached_by)
+      SELECT ?, event_id, ?, ? FROM topic_events WHERE topic_id = ?`,
+      )
+      .bind(value.targetTopicId, value.now, value.actor, value.sourceTopicId),
+    db
+      .prepare(
+        `UPDATE topics SET state = 'MERGED', updated_at = ? WHERE topic_id = ? AND topic_id <> ? AND state = 'ACTIVE'`,
+      )
+      .bind(value.now, value.sourceTopicId, value.targetTopicId),
+  ]);
+  return Number(result[1]?.meta.changes ?? 0) === 1;
+}
+
 /** Idempotently persists an exact source identity mapping; REJECTED mappings retain no person id. */
 export async function persistIdentityMapping(
   db: D1Database,
