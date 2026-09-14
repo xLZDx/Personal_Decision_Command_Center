@@ -115,7 +115,9 @@ export type {
   PersistTopicAssignmentInput,
   PersistTopicAssignmentResult,
   PersistIdentityMappingInput,
+  TopicMutationInput,
 } from './resolver/store.js';
+export { attachTopicEvent, detachTopicEvent, mergeTopics } from './resolver/store.js';
 export {
   DecisionSchema,
   validateDecision,
