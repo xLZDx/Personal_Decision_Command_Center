@@ -101,6 +101,20 @@ export { classifyTelegramIntent, TELEGRAM_INTENT_CLASSES } from './telegram/inte
 export type { TelegramIntentClass, TelegramIntentResult } from './telegram/intent.js';
 export { resolveTopicDeterministically } from './resolver/topic.js';
 export type { TopicCandidate, TopicResolution, TopicResolutionResult } from './resolver/topic.js';
+export {
+  generateTelegramEcdhKeyPair,
+  exportTelegramEcdhPublicJwk,
+  encryptTelegramContent,
+  decryptTelegramContent,
+  TelegramContentReplayGuard,
+} from './telegram/crypto.js';
+export type {
+  TelegramEcdhPublicJwk,
+  TelegramContentAad,
+  TelegramContentEnvelope,
+  EncryptTelegramContentOptions,
+  DecryptTelegramContentOptions,
+} from './telegram/crypto.js';
 
 export {
   generateRandomToken,

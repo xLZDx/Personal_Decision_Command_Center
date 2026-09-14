@@ -3,6 +3,14 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: Telegram ECDH content envelope
+
+Added the application-layer Telegram drill-down primitive: P-256 ECDH derives a shared secret,
+HKDF-SHA256 derives an AES-256-GCM key, and associated data binds request identity, source
+reference, schema version, expiry, and nonce. Envelopes reject expiry beyond 60 seconds and a
+replay guard rejects a consumed nonce; plaintext is returned only after authenticated decrypt.
+Broker/gateway authorization and production key rotation remain deployment slices.
+
 ## 2026-09-14 — G4 preparation: Telegram durable delivery runtime
 
 Connected the TDLib-independent session boundary to the SQLite WAL spool. Eligible updates are
