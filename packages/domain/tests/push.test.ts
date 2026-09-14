@@ -8,17 +8,17 @@ import {
 
 describe('G7 opaque push boundary', () => {
   it('contains only opaque identifiers and round-trips', () => {
-    const payload = createOpaquePushPayload('00000000-0000-4000-8000-000000000071', 'cursor-7');
+    const payload = createOpaquePushPayload('00000000-0000-4000-8000-000000000071');
     expect(payload).not.toContain('body');
-    expect(decodeOpaquePushPayload(payload)).toMatchObject({
-      version: 1,
-      notificationId: '00000000-0000-4000-8000-000000000071',
-      cursor: 'cursor-7',
+    expect(decodeOpaquePushPayload(payload)).toEqual({
+      type: 'STATE_CHANGED',
+      notification_id: '00000000-0000-4000-8000-000000000071',
+      schema_version: 1,
     });
   });
 
   it('rejects tampering and requires sync on a cursor gap', () => {
-    const payload = createOpaquePushPayload('00000000-0000-4000-8000-000000000072', 'cursor-8');
+    const payload = createOpaquePushPayload('00000000-0000-4000-8000-000000000072');
     expect(() => decodeOpaquePushPayload(`${payload}x`)).toThrow();
     expect(requiresResumeSync(null, 'cursor-8')).toBe(true);
     expect(requiresResumeSync('cursor-7', 'cursor-8')).toBe(true);
