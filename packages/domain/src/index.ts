@@ -116,6 +116,16 @@ export type {
   PersistTopicAssignmentResult,
   PersistIdentityMappingInput,
 } from './resolver/store.js';
+export {
+  DecisionSchema,
+  validateDecision,
+  transitionCommitment,
+  transitionMilestone,
+  explainPriority,
+  COMMITMENT_STATES,
+  MILESTONE_STATES,
+} from './decision.js';
+export type { Decision, CommitmentState, MilestoneState } from './decision.js';
 export { resolveIdentityDeterministically, IDENTITY_STATES } from './resolver/identity.js';
 export type {
   IdentityCandidate,
