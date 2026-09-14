@@ -2,7 +2,7 @@
 
 Date: 2026-09-14  
 Branch: `gate/g3-implementation`  
-Evidence head: `fb4c747`
+Evidence head: current branch tip; verification code commit: `fb4c747` (later commits are docs-only)
 
 ## Result
 
