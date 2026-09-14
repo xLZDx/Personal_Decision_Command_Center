@@ -27,6 +27,7 @@ export class TelegramConnectorRuntime {
   readonly #now: () => string;
   readonly #isPermanentError: (error: unknown) => boolean;
   readonly #session: TelegramSession;
+  #drainTail: Promise<void> = Promise.resolve();
 
   constructor(options: TelegramConnectorRuntimeOptions) {
     this.#spool = options.spool;
@@ -50,6 +51,15 @@ export class TelegramConnectorRuntime {
   }
 
   async drainOnce(): Promise<TelegramDrainOutcome> {
+    const result = this.#drainTail.then(() => this.#drainOnce());
+    this.#drainTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  async #drainOnce(): Promise<TelegramDrainOutcome> {
     const item = this.#spool.claimReady(this.#now());
     if (item === null) return { outcome: 'EMPTY' };
     try {

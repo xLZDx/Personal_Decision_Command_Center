@@ -3,6 +3,12 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: serialize host spool drains
+
+Serialized concurrent runtime drain calls so a single connector process cannot deliver the same
+spool row twice while the first network call is awaiting ACK. A regression test covers the race;
+central ingest remains idempotent for crash/restart and multi-process duplicates.
+
 ## 2026-09-14 — G4 preparation: connector operations runbooks
 
 Replaced placeholder Telegram outage, content-gateway key-rotation, and connector-compromise

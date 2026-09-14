@@ -75,4 +75,23 @@ describe('TelegramConnectorRuntime', () => {
     expect(await retryRuntime.drainOnce()).toEqual({ outcome: 'EMPTY' });
     spool.close();
   });
+
+  it('serializes concurrent drain calls so one host does not double-deliver an item', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const deliver = vi.fn(async () => gate);
+    const { runtime, spool } = makeRuntime(deliver);
+    runtime.session().onAuthorizationState('READY');
+    await runtime.onMessage({ event: event('2026-09-14T10:01:00.000Z'), initialCache: false });
+    const first = runtime.drainOnce();
+    const second = runtime.drainOnce();
+    await Promise.resolve();
+    expect(deliver).toHaveBeenCalledTimes(1);
+    release();
+    expect((await first).outcome).toBe('ACKED');
+    expect((await second).outcome).toBe('EMPTY');
+    spool.close();
+  });
 });
