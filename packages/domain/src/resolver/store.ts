@@ -119,14 +119,17 @@ export async function persistTopicAssignment(
         value.assignmentId,
       ),
   ];
-  await db.batch(statements);
+  const results = await db.batch(statements);
   const row = await db
     .prepare('SELECT assignment_id FROM topic_assignments WHERE event_id = ?')
     .bind(value.eventId)
     .first<{ assignment_id: string }>();
   if (!row) throw new Error('topic assignment was not persisted');
   return {
-    status: row.assignment_id === value.assignmentId ? 'PERSISTED' : 'ALREADY_PERSISTED',
+    status:
+      Number(results[0]?.meta.changes ?? 0) === 1 && row.assignment_id === value.assignmentId
+        ? 'PERSISTED'
+        : 'ALREADY_PERSISTED',
     assignmentId: row.assignment_id,
   };
 }

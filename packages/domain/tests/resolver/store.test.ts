@@ -31,7 +31,7 @@ describe('resolver durable store', () => {
       assignmentId: 'assignment-1',
     });
     await expect(persistTopicAssignment(db, input)).resolves.toEqual({
-      status: 'PERSISTED',
+      status: 'ALREADY_PERSISTED',
       assignmentId: 'assignment-1',
     });
     const audit = await db
