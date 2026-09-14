@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: bounded spool retry and reconnect soak
+
+Replaced fixed retry delay with bounded exponential backoff plus jitter (defaults 2 seconds to
+five minutes; test-injectable clock/randomness). Added a reconnect test beyond six hours proving a
+new `connected_at` boundary is established and only post-reconnect updates are emitted. The
+spool remains normalized-envelope-only and WAL-backed.
+
 ## 2026-09-14 — G4 preparation: Telegram ECDH content envelope
 
 Added the application-layer Telegram drill-down primitive: P-256 ECDH derives a shared secret,

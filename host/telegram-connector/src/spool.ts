@@ -26,12 +26,30 @@ export interface SpoolItem {
   nextAttemptAt: string;
 }
 
+export interface TelegramSpoolOptions {
+  retryBaseMs?: number;
+  retryCapMs?: number;
+  random?: () => number;
+}
+
 /** Crash-safe host spool. It stores the strict normalized envelope, never Telegram raw content. */
 export class TelegramSpool {
   readonly #db: SqliteDatabase;
+  readonly #retryBaseMs: number;
+  readonly #retryCapMs: number;
+  readonly #random: () => number;
 
-  constructor(path: string) {
+  constructor(path: string, options: TelegramSpoolOptions = {}) {
     this.#db = new DatabaseSync(path);
+    this.#retryBaseMs = options.retryBaseMs ?? 2_000;
+    this.#retryCapMs = options.retryCapMs ?? 5 * 60_000;
+    this.#random = options.random ?? Math.random;
+    if (!Number.isFinite(this.#retryBaseMs) || this.#retryBaseMs <= 0) {
+      throw new Error('retryBaseMs must be positive');
+    }
+    if (!Number.isFinite(this.#retryCapMs) || this.#retryCapMs < this.#retryBaseMs) {
+      throw new Error('retryCapMs must be >= retryBaseMs');
+    }
     this.#db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;');
     this.#db.exec(`
       CREATE TABLE IF NOT EXISTS telegram_spool (
@@ -91,7 +109,15 @@ export class TelegramSpool {
   }
 
   fail(id: number, now: string, permanent = false): void {
-    const next = permanent ? now : new Date(Date.parse(now) + 2_000).toISOString();
+    const nextAttempt = this.#db
+      .prepare('SELECT attempts FROM telegram_spool WHERE id = ?')
+      .get(id) as { attempts: number } | undefined;
+    const attempt = Number(nextAttempt?.attempts ?? 0) + 1;
+    const exponential = Math.min(this.#retryBaseMs * 2 ** (attempt - 1), this.#retryCapMs);
+    const jitter = Math.floor(exponential * 0.2 * Math.min(1, Math.max(0, this.#random())));
+    const next = permanent
+      ? now
+      : new Date(Date.parse(now) + Math.min(this.#retryCapMs, exponential + jitter)).toISOString();
     this.#db
       .prepare(
         `UPDATE telegram_spool

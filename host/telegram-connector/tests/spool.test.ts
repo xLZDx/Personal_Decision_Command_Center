@@ -52,4 +52,24 @@ describe('TelegramSpool', () => {
     expect(spool.claimReady('2026-09-14T00:00:03.000Z')).toBeNull();
     spool.close();
   });
+
+  it('uses bounded exponential retry with injected jitter', () => {
+    const path = join(tmpdir(), `pdos-tg-${randomUUID()}.sqlite`);
+    const spool = new TelegramSpool(path, {
+      retryBaseMs: 1_000,
+      retryCapMs: 2_500,
+      random: () => 1,
+    });
+    const now = '2026-09-14T00:00:00.000Z';
+    spool.enqueue(event('00000000-0000-4000-8000-000000000023'), now);
+    const item = spool.claimReady(now)!;
+    spool.fail(item.id, now);
+    expect(spool.claimReady('2026-09-14T00:00:01.199Z')).toBeNull();
+    expect(spool.claimReady('2026-09-14T00:00:01.200Z')).not.toBeNull();
+    const retry = spool.claimReady('2026-09-14T00:00:01.200Z')!;
+    spool.fail(retry.id, '2026-09-14T00:00:01.200Z');
+    expect(spool.claimReady('2026-09-14T00:00:03.599Z')).toBeNull();
+    expect(spool.claimReady('2026-09-14T00:00:03.700Z')).not.toBeNull();
+    spool.close();
+  });
 });

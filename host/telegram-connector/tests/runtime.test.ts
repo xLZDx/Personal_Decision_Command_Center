@@ -26,7 +26,9 @@ const event = (occurred_at: string): NormalizedEvent => ({
 });
 
 function makeRuntime(deliver: (value: NormalizedEvent) => Promise<void>) {
-  const spool = new TelegramSpool(join(tmpdir(), `pdos-tg-runtime-${randomUUID()}.sqlite`));
+  const spool = new TelegramSpool(join(tmpdir(), `pdos-tg-runtime-${randomUUID()}.sqlite`), {
+    random: () => 0,
+  });
   const runtime = new TelegramConnectorRuntime({
     spool,
     deliver,

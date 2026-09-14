@@ -57,4 +57,24 @@ describe('TelegramSession', () => {
     expect(emitted).toHaveLength(0);
     expect(session.health().state).toBe('OFFLINE');
   });
+
+  it('starts a fresh boundary after a reconnect beyond the six-hour soak window', async () => {
+    const emitted: NormalizedEvent[] = [];
+    let current = '2026-09-14T10:00:00.000Z';
+    const session = new TelegramSession({
+      now: () => current,
+      emit: async (value) => {
+        emitted.push(value);
+      },
+    });
+    session.onAuthorizationState('READY');
+    session.onAuthorizationState('OFFLINE');
+    current = '2026-09-14T16:01:00.000Z';
+    session.onAuthorizationState('READY');
+    expect(session.health().connectedAt).toBe(current);
+    expect(
+      await session.onMessage({ event: event('2026-09-14T16:02:00.000Z'), initialCache: false }),
+    ).toBe(true);
+    expect(emitted).toHaveLength(1);
+  });
 });
