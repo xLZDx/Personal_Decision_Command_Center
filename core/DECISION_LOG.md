@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: Telegram durable delivery runtime
+
+Connected the TDLib-independent session boundary to the SQLite WAL spool. Eligible updates are
+enqueued before delivery; ingest ACK is written only after the injected delivery resolves, while
+retryable and permanent errors remain explicit. Restart-safe drain behavior is covered by tests;
+the production TDLib adapter and network tunnel remain separate deployment slices.
+
 ## 2026-09-14 — G4 preparation: Telegram TDLib session boundary
 
 Added a TDLib-independent session boundary that records `READY`/`OFFLINE` health, establishes a

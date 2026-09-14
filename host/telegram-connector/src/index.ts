@@ -7,3 +7,5 @@ export type {
   TelegramSessionHealth,
   TelegramSessionOptions,
 } from './session.js';
+export { TelegramConnectorRuntime } from './runtime.js';
+export type { TelegramConnectorRuntimeOptions, TelegramDrainOutcome } from './runtime.js';
