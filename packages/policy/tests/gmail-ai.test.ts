@@ -7,18 +7,25 @@ import {
   seedBaselineAccounts,
   seedEvent,
 } from '@pdos/testkit';
+import { signHmac } from '@pdos/domain';
 
 import {
-  GmailAIContextBuilder,
   GmailAIEngine,
   GmailSourceEnrichmentSchema,
   NoAIProvider,
   WORKERS_AI_MAX_REQUEST_UTF8_BYTES,
   WORKERS_AI_MODEL_ID,
 } from '../src/index.js';
-import type { GmailEvidenceBundle, GmailMessageContent, WorkersAiBinding } from '../src/index.js';
+import type { WorkersAiBinding } from '../src/index.js';
 
-const MESSAGE: GmailMessageContent = {
+const TEST_ATTESTATION_SECRET = 'test-gmail-content-attestation-secret';
+interface MessageContent {
+  subject: string;
+  from: string;
+  sentAt: string;
+  plainText: string;
+}
+const MESSAGE: MessageContent = {
   subject: 'Please review project ALPHA-SECRET',
   from: 'sender@example.test',
   sentAt: '2026-09-14T08:00:00.000Z',
@@ -46,17 +53,42 @@ async function setup(eventId = 'event-1') {
   return { db, accounts };
 }
 
-function loader(content: GmailMessageContent = MESSAGE) {
+function loader(content: MessageContent = MESSAGE) {
   let calls = 0;
   return {
     get calls() {
       return calls;
     },
-    loadMessage: async () => {
+    loadMessage: async (opts: { sourceAccountId: string; messageId: string }) => {
       calls += 1;
-      return content;
+      const attestation = {
+        eventId: opts.messageId === 'ref-event-1' ? 'event-1' : opts.messageId.replace('ref-', ''),
+        sourceAccountId: opts.sourceAccountId,
+        messageId: opts.messageId,
+        content,
+      };
+      return {
+        ...attestation,
+        signature: await signHmac(TEST_ATTESTATION_SECRET, canonical(attestation)),
+      };
     },
   };
+}
+
+function canonical(attestation: {
+  eventId: string;
+  sourceAccountId: string;
+  messageId: string;
+  content: MessageContent;
+}): string {
+  return [
+    attestation.eventId,
+    attestation.sourceAccountId,
+    attestation.messageId,
+    JSON.stringify(attestation.content),
+  ]
+    .map((part) => `${part.length}:${part}`)
+    .join('');
 }
 
 function provider(output: unknown = VALID_OUTPUT, usage: unknown = undefined) {
@@ -106,6 +138,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     const engine = new GmailAIEngine({
       db,
       messageLoader,
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
       ai: binding,
       secrets: ['ALPHA-SECRET'],
       now: () => FIXTURE_NOW,
@@ -149,6 +182,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     await new GmailAIEngine({
       db,
       messageLoader,
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
       ai: capture.binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-injection');
@@ -173,11 +207,43 @@ describe('GmailAIEngine authoritative boundary', () => {
     const result = await new GmailAIEngine({
       db,
       messageLoader,
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
       ai: capture.binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-denied');
     expect(result).toEqual({ outcome: 'POLICY_DENIED' });
     expect(messageLoader.calls).toBe(0);
+    expect(capture.calls).toBe(0);
+  });
+
+  it('rejects caller-authored or Telegram-mixed content when the attestation does not bind', async () => {
+    const { db } = await setup('event-attestation');
+    const capture = provider();
+    await expect(
+      new GmailAIEngine({
+        db,
+        messageLoader: {
+          loadMessage: async (opts: { sourceAccountId: string; messageId: string }) => {
+            const attestation = {
+              eventId: 'event-attestation',
+              sourceAccountId: opts.sourceAccountId,
+              messageId: opts.messageId,
+              content: { ...MESSAGE, plainText: 'Telegram/shared-topic text' },
+            };
+            // Sign a different body: the engine must not relabel this content as Gmail evidence.
+            return {
+              ...attestation,
+              signature: await signHmac(
+                TEST_ATTESTATION_SECRET,
+                canonical({ ...attestation, content: MESSAGE }),
+              ),
+            };
+          },
+        },
+        contentAttestationSecret: TEST_ATTESTATION_SECRET,
+        ai: capture.binding,
+      }).enrich('event-attestation'),
+    ).rejects.toThrow(/attestation failed/);
     expect(capture.calls).toBe(0);
   });
 
@@ -187,7 +253,12 @@ describe('GmailAIEngine authoritative boundary', () => {
     const messageLoader = loader();
     const capture = provider();
     await expect(
-      new GmailAIEngine({ db, messageLoader, ai: capture.binding }).enrich('telegram-event'),
+      new GmailAIEngine({
+        db,
+        messageLoader,
+        contentAttestationSecret: TEST_ATTESTATION_SECRET,
+        ai: capture.binding,
+      }).enrich('telegram-event'),
     ).rejects.toThrow(/not an authoritative Gmail event/);
     expect(messageLoader.calls).toBe(0);
     expect(capture.calls).toBe(0);
@@ -198,9 +269,12 @@ describe('GmailAIEngine authoritative boundary', () => {
     await seedEvent(db, accounts, { eventId: 'deleted-event', eventType: 'MESSAGE_DELETED' });
     const messageLoader = loader();
     const capture = provider();
-    const result = await new GmailAIEngine({ db, messageLoader, ai: capture.binding }).enrich(
-      'deleted-event',
-    );
+    const result = await new GmailAIEngine({
+      db,
+      messageLoader,
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      ai: capture.binding,
+    }).enrich('deleted-event');
     expect(result).toEqual({ outcome: 'NO_CONTENT_DELETED' });
     expect(messageLoader.calls).toBe(0);
     expect(capture.calls).toBe(0);
@@ -212,7 +286,11 @@ describe('GmailAIEngine authoritative boundary', () => {
   it('NoAIProvider is a real no-fetch/no-inference path', async () => {
     const { db } = await setup('event-disabled');
     const messageLoader = loader();
-    const result = await new NoAIProvider({ db, messageLoader }).enrich('event-disabled');
+    const result = await new NoAIProvider({
+      db,
+      messageLoader,
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+    }).enrich('event-disabled');
     expect(result).toEqual({ outcome: 'DISABLED' });
     expect(messageLoader.calls).toBe(0);
   });
@@ -227,6 +305,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     const result = await new GmailAIEngine({
       db,
       messageLoader: loader(),
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
       ai: capture.binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-quota');
@@ -239,6 +318,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     await new GmailAIEngine({
       db: withUsage.db,
       messageLoader: loader(),
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
       ai: provider(VALID_OUTPUT, { prompt_tokens: 100, completion_tokens: 20 }).binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-usage');
@@ -251,6 +331,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     await new GmailAIEngine({
       db: withoutUsage.db,
       messageLoader: loader(),
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
       ai: provider().binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-no-usage');
@@ -276,6 +357,7 @@ describe('GmailAIEngine authoritative boundary', () => {
         new GmailAIEngine({
           db,
           messageLoader: loader(),
+          contentAttestationSecret: TEST_ATTESTATION_SECRET,
           ai: provider(output).binding,
           now: () => FIXTURE_NOW,
         }).enrich(`event-invalid-${index}`),
@@ -292,6 +374,7 @@ describe('GmailAIEngine authoritative boundary', () => {
       new GmailAIEngine({
         db: before.db,
         messageLoader: beforeLoader,
+        contentAttestationSecret: TEST_ATTESTATION_SECRET,
         ai: provider().binding,
       }).enrich('event-aborted-before', alreadyAborted.signal),
     ).rejects.toThrow(/lost before fetch/);
@@ -304,11 +387,21 @@ describe('GmailAIEngine authoritative boundary', () => {
       new GmailAIEngine({
         db: after.db,
         messageLoader: {
-          loadMessage: async () => {
+          loadMessage: async (opts: { sourceAccountId: string; messageId: string }) => {
             abortDuringLoad.abort();
-            return MESSAGE;
+            const attestation = {
+              eventId: 'event-aborted-after',
+              sourceAccountId: opts.sourceAccountId,
+              messageId: opts.messageId,
+              content: MESSAGE,
+            };
+            return {
+              ...attestation,
+              signature: await signHmac(TEST_ATTESTATION_SECRET, canonical(attestation)),
+            };
           },
         },
+        contentAttestationSecret: TEST_ATTESTATION_SECRET,
         ai: capture.binding,
       }).enrich('event-aborted-after', abortDuringLoad.signal),
     ).rejects.toThrow(/lost before AI/);
@@ -321,6 +414,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     await new GmailAIEngine({
       db,
       messageLoader: loader({ ...MESSAGE, plainText: String.fromCharCode(92, 34).repeat(40_000) }),
+      contentAttestationSecret: TEST_ATTESTATION_SECRET,
       ai: capture.binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-large');
@@ -330,33 +424,11 @@ describe('GmailAIEngine authoritative boundary', () => {
   });
 });
 
-describe('opaque GmailEvidenceBundle boundary', () => {
-  it('rejects arbitrary Topic-like objects at compile time', () => {
-    const builder = new GmailAIContextBuilder();
-    const buildFromTopic = () => {
-      // @ts-expect-error TDD §24: branded GmailEvidenceBundle is the only accepted input.
-      return builder.build({ kind: 'Topic', id: 'topic-1' });
-    };
-    expect(buildFromTopic).toThrow();
-  });
-
-  it('cannot be structurally constructed from caller-authored Gmail strings and a clean DAG', () => {
-    const fake = {
-      eventId: 'gmail-event',
-      source: 'gmail',
-      sourcePolicyId: 'claimed-allow',
-      provenanceRootId: 'gmail-event',
-      provenanceNodes: [],
-      message: { plainText: 'Telegram-derived text disguised as Gmail' },
-    };
-    // The assignment itself is the compile-time regression: the non-exported brand is missing.
-    // @ts-expect-error callers cannot mint trusted evidence by providing an assertion-shaped object.
-    const forged: GmailEvidenceBundle = fake;
-    expect(forged).toBe(fake);
-  });
-
-  it('does not export a public AIProvider or constructible AIRequest entry point', async () => {
+describe('closed Gmail AI package surface', () => {
+  it('does not export a public builder, bundle schema, provider, or constructible request entry point', async () => {
     const publicApi = await import('../src/index.js');
+    expect('GmailAIContextBuilder' in publicApi).toBe(false);
+    expect('GmailEvidenceBundleSchema' in publicApi).toBe(false);
     expect('AIProvider' in publicApi).toBe(false);
     expect('AIRequestSchema' in publicApi).toBe(false);
   });

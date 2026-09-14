@@ -6,7 +6,7 @@ import {
   enumProvenanceValueSchema,
   provenanceValueSchema,
 } from '@pdos/contracts';
-import { reconcileGmailAiNeurons, reserveGmailAiNeurons } from '@pdos/domain';
+import { reconcileGmailAiNeurons, reserveGmailAiNeurons, verifyHmacSignature } from '@pdos/domain';
 import {
   ProvenanceNodeSchema,
   SourcePolicyRecordSchema,
@@ -60,7 +60,7 @@ declare const gmailEvidenceBundleBrand: unique symbol;
  * Opaque by design: production callers cannot construct a bundle from arbitrary strings. The
  * authoritative D1 event/policy lookup and Gmail loader inside GmailAIEngine are the only factory.
  */
-export type GmailEvidenceBundle = z.infer<typeof GmailEvidenceBundleShapeSchema> & {
+type GmailEvidenceBundle = z.infer<typeof GmailEvidenceBundleShapeSchema> & {
   readonly [gmailEvidenceBundleBrand]: true;
 };
 
@@ -178,19 +178,27 @@ export interface WorkersAiBinding {
   run(model: typeof WORKERS_AI_MODEL_ID, request: AIRequest): Promise<unknown>;
 }
 
-export interface GmailMessageContent {
+interface GmailMessageContent {
   subject: string;
   from: string;
   sentAt: string;
   plainText: string;
 }
 
-export interface GmailMessageLoader {
+interface GmailMessageLoader {
   loadMessage(opts: {
     sourceAccountId: string;
     messageId: string;
     signal?: AbortSignal;
-  }): Promise<GmailMessageContent>;
+  }): Promise<GmailContentAttestation>;
+}
+
+interface GmailContentAttestation {
+  eventId: string;
+  sourceAccountId: string;
+  messageId: string;
+  content: GmailMessageContent;
+  signature: string;
 }
 
 export type GmailAIEnrichmentResult =
@@ -207,7 +215,7 @@ export class AIContextPolicyError extends Error {
   }
 }
 
-export interface GmailAIContextBuilderOptions {
+interface GmailAIContextBuilderOptions {
   /** Exact literal values removed from headers/body. Empty values are rejected. */
   secrets?: readonly string[];
 }
@@ -215,6 +223,7 @@ export interface GmailAIContextBuilderOptions {
 export interface GmailAIEngineOptions extends GmailAIContextBuilderOptions {
   db: D1Database;
   messageLoader: GmailMessageLoader;
+  contentAttestationSecret: string;
   ai?: WorkersAiBinding;
   now?: () => string;
 }
@@ -286,7 +295,7 @@ const SYSTEM_PROMPT =
   'use UNKNOWN when no specific signal applies.';
 
 /** The serializer's sole call shape; the branded bundle is produced only by GmailAIEngine. */
-export class GmailAIContextBuilder {
+class GmailAIContextBuilder {
   readonly #secrets: readonly string[];
 
   constructor(options: GmailAIContextBuilderOptions = {}) {
@@ -454,6 +463,19 @@ function createTrustedBundle(
   }) as GmailEvidenceBundle;
 }
 
+function canonicalContentAttestation(
+  attestation: Omit<GmailContentAttestation, 'signature'>,
+): string {
+  return [
+    attestation.eventId,
+    attestation.sourceAccountId,
+    attestation.messageId,
+    JSON.stringify(attestation.content),
+  ]
+    .map((part) => `${part.length}:${part}`)
+    .join('');
+}
+
 function parseProviderEnvelope(value: unknown): ProviderEnvelope {
   if (typeof value !== 'object' || value === null) {
     throw new AIContextPolicyError('Workers AI returned a malformed response envelope');
@@ -555,11 +577,16 @@ export class GmailAIEngine {
   readonly #messageLoader: GmailMessageLoader;
   readonly #ai: WorkersAiBinding | undefined;
   readonly #now: () => string;
+  readonly #contentAttestationSecret: string;
   readonly #builder: GmailAIContextBuilder;
 
   constructor(options: GmailAIEngineOptions) {
     this.#db = options.db;
     this.#messageLoader = options.messageLoader;
+    if (options.contentAttestationSecret.length === 0) {
+      throw new AIContextPolicyError('Gmail content attestation secret must not be empty');
+    }
+    this.#contentAttestationSecret = options.contentAttestationSecret;
     this.#ai = options.ai;
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#builder = new GmailAIContextBuilder(
@@ -576,13 +603,25 @@ export class GmailAIEngine {
       throw new AIContextPolicyError('Processing lease was lost before fetch');
 
     const now = this.#now();
-    const content = await this.#messageLoader.loadMessage({
+    const attestation = await this.#messageLoader.loadMessage({
       sourceAccountId: event.sourceAccountId,
       messageId: event.contentLocatorRef,
       ...(leaseLost === undefined ? {} : { signal: leaseLost }),
     });
     if (leaseLost?.aborted) throw new AIContextPolicyError('Processing lease was lost before AI');
-    const bundle = createTrustedBundle(event, content, now);
+    if (
+      attestation.eventId !== event.eventId ||
+      attestation.sourceAccountId !== event.sourceAccountId ||
+      attestation.messageId !== event.contentLocatorRef ||
+      !(await verifyHmacSignature(
+        this.#contentAttestationSecret,
+        canonicalContentAttestation(attestation),
+        attestation.signature,
+      ))
+    ) {
+      throw new AIContextPolicyError('Gmail content attestation failed');
+    }
+    const bundle = createTrustedBundle(event, attestation.content, now);
     const request = this.#builder.build(bundle);
     const requestBytes = new TextEncoder().encode(JSON.stringify(request)).byteLength;
     const estimate = estimateWorkersAiNeurons(requestBytes);

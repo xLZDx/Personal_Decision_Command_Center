@@ -58,17 +58,18 @@ superseded by the round-1 remediation entry immediately above; retain this secti
 state that the independent reviewers assessed, not as the current design.
 
 **External preflight completed against primary sources:** the selected callable model is
-`@cf/meta/llama-3.3-70b-instruct-fp8-fast`; Cloudflare currently lists it as hosted, 24K context, and
+`@cf/meta/llama-3.1-8b-instruct-fast`; Cloudflare currently lists it as hosted, 128K context, and
 JSON-Mode-capable. Cloudflare's current Customer Content statement, free 10,000-Neuron/day
-allocation/reset, pricing table, and Meta's Llama 3.3 Community License/AUP were re-fetched live.
+allocation/reset, pricing table, and Meta's Llama 3.1 Community License/AUP were re-fetched live.
 The dated evidence and production re-check rule are in
 `packages/policy/WORKERS_AI_MODEL_TERMS.md`.
 
-**HARD_ZERO decision:** the exact callable model id is present verbatim in Cloudflare's pricing
-table. The implementation reserves/reconciles using its published rates (26,668 input / 204,805
-output Neurons per million tokens), caps the entire
+**Conservative HARD_ZERO decision:** Cloudflare's callable `...instruct-fast` model name and the
+pricing table's cheaper `...instruct-fp8-fast` label are not identical, so the implementation does
+not assume they are billing aliases. It reserves/reconciles using the higher published non-fast
+Llama 3.1 8B rates (25,608 input / 75,147 output Neurons per million tokens), caps the entire
 serialized request at 16,000 UTF-8 bytes, adds 2,048 provider-template tokens, and reserves the
-full 256-token output. The maximum admitted request deterministically reserves 534 Neurons before
+full 256-token output. The maximum admitted request deterministically reserves 482 Neurons before
 the provider call. Missing/partial provider usage leaves the conservative reservation untouched.
 
 **AI boundary implemented:** new `@pdos/policy` exports the sole
