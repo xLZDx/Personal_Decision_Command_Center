@@ -91,6 +91,12 @@ export type {
 
 export { importKek, encryptRefreshToken, decryptRefreshToken } from './gmail/crypto.js';
 export type { EncryptedRefreshToken, RefreshTokenAad } from './gmail/crypto.js';
+export { parseTelegramDeterministically } from './telegram/parser.js';
+export type {
+  TelegramDeterministicSignal,
+  TelegramParserInput,
+  TelegramSignalKind,
+} from './telegram/parser.js';
 
 export {
   generateRandomToken,

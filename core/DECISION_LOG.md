@@ -3,6 +3,14 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: Telegram deterministic parser primitive
+
+Added `parseTelegramDeterministically`, a source-local fixed-rule parser for approval, blocker,
+waiting, deliverable, explicit deadline, and business-identifier patterns. Every derived value is
+stamped `RULE`, `DENY`, and the originating Telegram event provenance; no model, embeddings, or
+cross-channel context are accepted. This is the first G4 implementation slice; TDLib session,
+connected-at boundary, local spool, and ECDH gateway remain subsequent slices.
+
 ## 2026-09-14 — G3 checkpoint 16 APPROVED: signed gateway exposure and cancellation hardened
 
 External GPT-PM checkpoint-16 review round 1 found 1 BLOCKER (uncommitted `workers_dev=false`) and
