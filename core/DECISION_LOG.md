@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4 preparation: connector operations runbooks
+
+Replaced placeholder Telegram outage, content-gateway key-rotation, and connector-compromise
+runbooks with implementation-independent operator procedures. They preserve the encrypted local
+spool, forbid inbound-port workarounds and secret/plaintext logging, define bounded key overlap,
+and require idempotent reconciliation after recovery.
+
 ## 2026-09-14 — G4 preparation: bounded spool retry and reconnect soak
 
 Replaced fixed retry delay with bounded exponential backoff plus jitter (defaults 2 seconds to
