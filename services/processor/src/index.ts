@@ -75,7 +75,11 @@ function makeConfiguredProcessor(env: ProcessorEnv) {
 
   const gmailProcessor = aiConfigured
     ? createConfiguredGmailProcessor(env)
-    : createGmailEventProcessor({ db: env.DB, engine: new NoAIProvider({ db: env.DB }) });
+    : createGmailEventProcessor({
+        db: env.DB,
+        engine: new NoAIProvider({ db: env.DB }),
+        compatibilityMode: env.PROCESSOR_G2_COMPAT_MODE === 'true',
+      });
 
   // QueuePayload intentionally carries only an event pointer. Re-read source from D1 before
   // dispatch so enabling Gmail AI cannot accidentally route Telegram events into Gmail policy.

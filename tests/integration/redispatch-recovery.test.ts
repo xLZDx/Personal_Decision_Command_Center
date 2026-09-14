@@ -139,7 +139,7 @@ describe('redispatch recovery end to end (GPT-PM MAJOR, G2 gate review round 2)'
     });
 
     // Feed the ONE successfully-sent message into the real Queue consumer.
-    const processorEnv: ProcessorEnv = { DB: db };
+    const processorEnv: ProcessorEnv = { DB: db, PROCESSOR_G2_COMPAT_MODE: 'true' };
     const batch = {
       messages: [
         {

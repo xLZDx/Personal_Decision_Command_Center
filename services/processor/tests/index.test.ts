@@ -67,7 +67,7 @@ describe('queue handler', () => {
       ackAll: vi.fn(),
     };
 
-    const env: ProcessorEnv = { DB: db };
+    const env: ProcessorEnv = { DB: db, PROCESSOR_G2_COMPAT_MODE: 'true' };
     await handler.queue!(batch as never, env);
 
     expect(ack1).toHaveBeenCalledTimes(1);
@@ -108,7 +108,7 @@ describe('queue handler', () => {
       ackAll: vi.fn(),
     };
 
-    const env: ProcessorEnv = { DB: db };
+    const env: ProcessorEnv = { DB: db, PROCESSOR_G2_COMPAT_MODE: 'true' };
     await handler.queue!(batch as never, env);
 
     expect(ack).toHaveBeenCalledTimes(1);
@@ -118,5 +118,32 @@ describe('queue handler', () => {
       .bind(EV_1)
       .first<{ state: string }>();
     expect(event?.state).toBe('ACCEPTED');
+  });
+
+  it('fails closed when G3 mode meets a database missing the enrichment migration', async () => {
+    const db = createTestD1(loadG2Schema());
+    const accounts = await seedBaselineAccounts(db);
+    await seedEvent(db, accounts, { eventId: EV_1, state: 'ACCEPTED' });
+    await seedOutbox(db, EV_1, { state: 'DISPATCHED', dispatchedAt: '2026-09-13T00:00:00.000Z' });
+    const ack = vi.fn();
+    await handler.queue!(
+      {
+        messages: [
+          {
+            id: 'm-g3-missing-table',
+            timestamp: new Date(),
+            body: { event_id: EV_1, operation: 'PROCESS_EVENT', schema_version: SCHEMA_VERSION },
+            attempts: 1,
+            retry: vi.fn(),
+            ack,
+          },
+        ],
+      } as never,
+      { DB: db },
+    );
+    expect(ack).toHaveBeenCalledOnce();
+    expect(
+      await db.prepare('SELECT state FROM ingest_events WHERE event_id = ?').bind(EV_1).first(),
+    ).toEqual({ state: 'RETRYABLE_FAILED' });
   });
 });

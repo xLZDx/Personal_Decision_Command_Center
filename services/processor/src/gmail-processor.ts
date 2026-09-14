@@ -8,6 +8,7 @@ export interface GmailEventProcessorOptions {
   db: D1Database;
   engine: Pick<GmailAIEngine, 'enrich'>;
   now?: () => string;
+  compatibilityMode?: boolean;
 }
 
 /**
@@ -30,7 +31,11 @@ export function createGmailEventProcessor(options: GmailEventProcessorOptions): 
     } catch (error) {
       // G2-only deployments predate migration 0002. Keep their source-neutral noop semantics
       // until the Gmail enrichment table is present; G3 production always has this table.
-      if (error instanceof Error && /no such table/i.test(error.message)) {
+      if (
+        options.compatibilityMode &&
+        error instanceof Error &&
+        /no such table/i.test(error.message)
+      ) {
         return { outcome: 'SUCCESS' };
       }
       throw error;

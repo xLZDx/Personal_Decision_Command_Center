@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 14: explicit legacy schema mode
+
+The prior compatibility fallback is now gated by `PROCESSOR_G2_COMPAT_MODE=true`, intended only
+for pre-G3 staging/tests. In normal G3 mode a missing `gmail_source_enrichments` table throws and
+the event remains retryable, preventing a failed migration from silently marking Gmail events
+processed. Regression coverage proves both intentional legacy completion and fail-closed G3 mode.
+
 ## 2026-09-14 — G3 checkpoint 13: preserve G2-only processor compatibility
 
 The processor's new step-0 enrichment lookup now recognizes a pre-G3 database that lacks

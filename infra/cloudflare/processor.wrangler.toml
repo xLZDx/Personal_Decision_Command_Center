@@ -42,5 +42,7 @@ MAX_PROCESSING_ATTEMPTS = "5"
 # routinely race a still-healthy processor rather than only a genuinely stuck one.
 LEASE_DURATION_MS = "120000"
 PROCESSOR_VERSION = "processor-v1"
+# Legacy-only G2 test/staging mode; keep unset in any G3 deployment.
+#PROCESSOR_G2_COMPAT_MODE = "true"
 # GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK is a non-secret deployment variable; the matching private
 # key is held only by the gmail-connector Worker and is never committed here.

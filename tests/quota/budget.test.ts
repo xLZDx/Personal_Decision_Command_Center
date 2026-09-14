@@ -228,7 +228,7 @@ async function runBudgetSimulation(eventCount: number): Promise<BudgetResult> {
   }
   expect(queuedMessages).toHaveLength(eventCount);
 
-  const processorEnv: ProcessorEnv = { DB: db };
+  const processorEnv: ProcessorEnv = { DB: db, PROCESSOR_G2_COMPAT_MODE: 'true' };
   const batch = {
     // Each message being handed to the consumer at all is the "read"/pull side of the queue op
     // triad; each message's own `ack()` call below is the "delete" side.
