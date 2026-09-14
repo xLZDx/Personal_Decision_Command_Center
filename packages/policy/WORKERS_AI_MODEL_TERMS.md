@@ -27,8 +27,9 @@ when a separate storage service is deliberately used with Workers AI.
 MVP1 implications:
 
 - only owner-authorized, Gmail-origin `GmailEvidenceBundle` content may enter the provider;
-- the Gmail content loader must attach an HMAC over event/account/message identity and the exact
-  fetched bytes; the engine verifies this Worker Secret before constructing the evidence bundle;
+- the independently trusted Gmail connector must attach an ECDSA P-256 signature over
+  event/account/message identity and the exact fetched bytes; the AI engine receives only the
+  verification public key (never the connector private key) before constructing the evidence bundle;
 - no Telegram or cross-channel derived content may enter the provider;
 - no AI Gateway logging, R2, KV, Durable Object, Vectorize, or other provider-side storage is
   enabled for AI requests;

@@ -1,5 +1,6 @@
-/* global AbortController, TextEncoder */
-import { describe, expect, it } from 'vitest';
+/* global AbortController, TextEncoder, crypto */
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { webcrypto } from 'node:crypto';
 import {
   FIXTURE_NOW,
   createTestD1,
@@ -7,7 +8,10 @@ import {
   seedBaselineAccounts,
   seedEvent,
 } from '@pdos/testkit';
-import { signHmac } from '@pdos/domain';
+import { signEcdsaP256Signature } from '@pdos/domain';
+import type { EcdsaP256PublicJwk } from '@pdos/domain';
+
+type CryptoKey = webcrypto.CryptoKey;
 
 import {
   GmailAIEngine,
@@ -18,7 +22,20 @@ import {
 } from '../src/index.js';
 import type { WorkersAiBinding } from '../src/index.js';
 
-const TEST_ATTESTATION_SECRET = 'test-gmail-content-attestation-secret';
+let TEST_ATTESTATION_PUBLIC_KEY: EcdsaP256PublicJwk;
+let TEST_ATTESTATION_PRIVATE_KEY: CryptoKey;
+
+beforeAll(async () => {
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
+    'sign',
+    'verify',
+  ]);
+  TEST_ATTESTATION_PRIVATE_KEY = pair.privateKey;
+  TEST_ATTESTATION_PUBLIC_KEY = (await crypto.subtle.exportKey(
+    'jwk',
+    pair.publicKey,
+  )) as unknown as EcdsaP256PublicJwk;
+});
 interface MessageContent {
   subject: string;
   from: string;
@@ -69,7 +86,10 @@ function loader(content: MessageContent = MESSAGE) {
       };
       return {
         ...attestation,
-        signature: await signHmac(TEST_ATTESTATION_SECRET, canonical(attestation)),
+        signature: await signEcdsaP256Signature(
+          TEST_ATTESTATION_PRIVATE_KEY,
+          canonical(attestation),
+        ),
       };
     },
   };
@@ -138,7 +158,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     const engine = new GmailAIEngine({
       db,
       messageLoader,
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
       ai: binding,
       secrets: ['ALPHA-SECRET'],
       now: () => FIXTURE_NOW,
@@ -182,7 +202,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     await new GmailAIEngine({
       db,
       messageLoader,
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
       ai: capture.binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-injection');
@@ -207,7 +227,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     const result = await new GmailAIEngine({
       db,
       messageLoader,
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
       ai: capture.binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-denied');
@@ -233,16 +253,40 @@ describe('GmailAIEngine authoritative boundary', () => {
             // Sign a different body: the engine must not relabel this content as Gmail evidence.
             return {
               ...attestation,
-              signature: await signHmac(
-                TEST_ATTESTATION_SECRET,
+              signature: await signEcdsaP256Signature(
+                TEST_ATTESTATION_PRIVATE_KEY,
                 canonical({ ...attestation, content: MESSAGE }),
               ),
             };
           },
         },
-        contentAttestationSecret: TEST_ATTESTATION_SECRET,
+        contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
         ai: capture.binding,
       }).enrich('event-attestation'),
+    ).rejects.toThrow(/attestation failed/);
+    expect(capture.calls).toBe(0);
+  });
+
+  it('cannot accept arbitrary loader content without the connector private signing key', async () => {
+    const { db } = await setup('event-untrusted-loader');
+    const capture = provider();
+    const maliciousLoader = {
+      loadMessage: async (opts: { sourceAccountId: string; messageId: string }) => ({
+        eventId: 'event-untrusted-loader',
+        sourceAccountId: opts.sourceAccountId,
+        messageId: opts.messageId,
+        content: { ...MESSAGE, plainText: 'Telegram/shared-topic text' },
+        // No private key is available to this loader; a forged signature must fail closed.
+        signature: 'A'.repeat(88),
+      }),
+    };
+    await expect(
+      new GmailAIEngine({
+        db,
+        messageLoader: maliciousLoader,
+        contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
+        ai: capture.binding,
+      }).enrich('event-untrusted-loader'),
     ).rejects.toThrow(/attestation failed/);
     expect(capture.calls).toBe(0);
   });
@@ -256,7 +300,7 @@ describe('GmailAIEngine authoritative boundary', () => {
       new GmailAIEngine({
         db,
         messageLoader,
-        contentAttestationSecret: TEST_ATTESTATION_SECRET,
+        contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
         ai: capture.binding,
       }).enrich('telegram-event'),
     ).rejects.toThrow(/not an authoritative Gmail event/);
@@ -272,7 +316,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     const result = await new GmailAIEngine({
       db,
       messageLoader,
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
       ai: capture.binding,
     }).enrich('deleted-event');
     expect(result).toEqual({ outcome: 'NO_CONTENT_DELETED' });
@@ -289,7 +333,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     const result = await new NoAIProvider({
       db,
       messageLoader,
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
     }).enrich('event-disabled');
     expect(result).toEqual({ outcome: 'DISABLED' });
     expect(messageLoader.calls).toBe(0);
@@ -305,7 +349,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     const result = await new GmailAIEngine({
       db,
       messageLoader: loader(),
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
       ai: capture.binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-quota');
@@ -318,7 +362,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     await new GmailAIEngine({
       db: withUsage.db,
       messageLoader: loader(),
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
       ai: provider(VALID_OUTPUT, { prompt_tokens: 100, completion_tokens: 20 }).binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-usage');
@@ -331,7 +375,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     await new GmailAIEngine({
       db: withoutUsage.db,
       messageLoader: loader(),
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
       ai: provider().binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-no-usage');
@@ -357,7 +401,7 @@ describe('GmailAIEngine authoritative boundary', () => {
         new GmailAIEngine({
           db,
           messageLoader: loader(),
-          contentAttestationSecret: TEST_ATTESTATION_SECRET,
+          contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
           ai: provider(output).binding,
           now: () => FIXTURE_NOW,
         }).enrich(`event-invalid-${index}`),
@@ -374,7 +418,7 @@ describe('GmailAIEngine authoritative boundary', () => {
       new GmailAIEngine({
         db: before.db,
         messageLoader: beforeLoader,
-        contentAttestationSecret: TEST_ATTESTATION_SECRET,
+        contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
         ai: provider().binding,
       }).enrich('event-aborted-before', alreadyAborted.signal),
     ).rejects.toThrow(/lost before fetch/);
@@ -397,11 +441,14 @@ describe('GmailAIEngine authoritative boundary', () => {
             };
             return {
               ...attestation,
-              signature: await signHmac(TEST_ATTESTATION_SECRET, canonical(attestation)),
+              signature: await signEcdsaP256Signature(
+                TEST_ATTESTATION_PRIVATE_KEY,
+                canonical(attestation),
+              ),
             };
           },
         },
-        contentAttestationSecret: TEST_ATTESTATION_SECRET,
+        contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
         ai: capture.binding,
       }).enrich('event-aborted-after', abortDuringLoad.signal),
     ).rejects.toThrow(/lost before AI/);
@@ -414,7 +461,7 @@ describe('GmailAIEngine authoritative boundary', () => {
     await new GmailAIEngine({
       db,
       messageLoader: loader({ ...MESSAGE, plainText: String.fromCharCode(92, 34).repeat(40_000) }),
-      contentAttestationSecret: TEST_ATTESTATION_SECRET,
+      contentAttestationPublicKey: TEST_ATTESTATION_PUBLIC_KEY,
       ai: capture.binding,
       now: () => FIXTURE_NOW,
     }).enrich('event-large');

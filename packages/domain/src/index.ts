@@ -35,6 +35,8 @@ export {
   sha256Hex,
   isTimestampWithinWindow,
 } from './auth/hmac.js';
+export { verifyEcdsaP256Signature, signEcdsaP256Signature } from './auth/ecdsa.js';
+export type { EcdsaP256PublicJwk } from './auth/ecdsa.js';
 export { reserveNonce, cleanupExpiredNonces } from './auth/nonce.js';
 export type { ReserveNonceOptions } from './auth/nonce.js';
 export { lookupSigningKeyStatus } from './auth/keys.js';

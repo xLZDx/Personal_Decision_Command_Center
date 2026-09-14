@@ -5,6 +5,16 @@ Newest entries at the top.
 
 ## 2026-09-14 — G3 checkpoint 7 round 1: AI boundary BLOCKER remediation implemented
 
+## 2026-09-14 — G3 checkpoint 8: separate Gmail content signing from AI verification
+
+The final checkpoint-7 review found that an HMAC secret supplied alongside an arbitrary loader let
+that same composition self-attest any bytes. The attestation boundary now uses ECDSA P-256: the
+connector/content gateway retains the private signing key, while `GmailAIEngine` accepts only a
+verification public JWK and verifies the canonical event/account/message/content payload. A
+malicious loader without the private key is covered by a regression test and cannot reach Workers
+AI. The existing ingest HMAC remains the connector-to-ingest request-authentication mechanism;
+content attestation is a separate key pair and capability.
+
 **External GPT-PM round 1:** `VERDICT: BLOCKER`, 1 BLOCKER / 1 MAJOR / 1 MINOR, correlated review
 of `8013585...49dc735` (`reviewInputHash
 ab3cd60f3ea049d76d7418581e244b28fe2d42e6eddc6234cabd980d9943cd8d`, `reviewRequestId

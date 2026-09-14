@@ -6,7 +6,12 @@ import {
   enumProvenanceValueSchema,
   provenanceValueSchema,
 } from '@pdos/contracts';
-import { reconcileGmailAiNeurons, reserveGmailAiNeurons, verifyHmacSignature } from '@pdos/domain';
+import {
+  reconcileGmailAiNeurons,
+  reserveGmailAiNeurons,
+  verifyEcdsaP256Signature,
+} from '@pdos/domain';
+import type { EcdsaP256PublicJwk } from '@pdos/domain';
 import {
   ProvenanceNodeSchema,
   SourcePolicyRecordSchema,
@@ -223,7 +228,8 @@ interface GmailAIContextBuilderOptions {
 export interface GmailAIEngineOptions extends GmailAIContextBuilderOptions {
   db: D1Database;
   messageLoader: GmailMessageLoader;
-  contentAttestationSecret: string;
+  /** Verification-only connector key. The private signing key never enters this package. */
+  contentAttestationPublicKey: EcdsaP256PublicJwk;
   ai?: WorkersAiBinding;
   now?: () => string;
 }
@@ -577,16 +583,13 @@ export class GmailAIEngine {
   readonly #messageLoader: GmailMessageLoader;
   readonly #ai: WorkersAiBinding | undefined;
   readonly #now: () => string;
-  readonly #contentAttestationSecret: string;
+  readonly #contentAttestationPublicKey: EcdsaP256PublicJwk;
   readonly #builder: GmailAIContextBuilder;
 
   constructor(options: GmailAIEngineOptions) {
     this.#db = options.db;
     this.#messageLoader = options.messageLoader;
-    if (options.contentAttestationSecret.length === 0) {
-      throw new AIContextPolicyError('Gmail content attestation secret must not be empty');
-    }
-    this.#contentAttestationSecret = options.contentAttestationSecret;
+    this.#contentAttestationPublicKey = options.contentAttestationPublicKey;
     this.#ai = options.ai;
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#builder = new GmailAIContextBuilder(
@@ -613,8 +616,8 @@ export class GmailAIEngine {
       attestation.eventId !== event.eventId ||
       attestation.sourceAccountId !== event.sourceAccountId ||
       attestation.messageId !== event.contentLocatorRef ||
-      !(await verifyHmacSignature(
-        this.#contentAttestationSecret,
+      !(await verifyEcdsaP256Signature(
+        this.#contentAttestationPublicKey,
         canonicalContentAttestation(attestation),
         attestation.signature,
       ))
