@@ -36,9 +36,9 @@ operator/governance evidence that cannot be honestly manufactured by the coding 
 5. Retention/backup first isolated restore, live quotas, operator acceptance and protected
    gate-manifest approvals require external governance execution.
 
-The operator-executable procedure for the remaining device/account evidence is
-`docs/runbooks/MVP1_REAL_DEVICE_ACCOUNT_TEST.md`; it deliberately excludes credentials from the
-coding-agent boundary.
+The operator-executable procedures for deployment and remaining device/account evidence are
+`docs/runbooks/TELEGRAM_STAGING_DEPLOY.md` and `docs/runbooks/MVP1_REAL_DEVICE_ACCOUNT_TEST.md`;
+they deliberately exclude credentials from the coding-agent boundary.
 
 ## Final local verification
 
