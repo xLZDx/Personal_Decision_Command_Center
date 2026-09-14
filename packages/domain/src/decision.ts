@@ -15,7 +15,7 @@ export const DecisionSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    if (value.aiPolicy === 'DENY' && value.telegramEvidenceIds.length > 0) {
+    if (value.telegramEvidenceIds.length > 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['telegramEvidenceIds'],
@@ -30,12 +30,22 @@ export function validateDecision(input: unknown): Decision {
   return DecisionSchema.parse(input);
 }
 
-export const COMMITMENT_STATES = ['OPEN', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'] as const;
+export const COMMITMENT_STATES = [
+  'OPEN',
+  'IN_PROGRESS',
+  'DUE_SOON',
+  'OVERDUE',
+  'BLOCKED',
+  'DONE',
+  'CANCELLED',
+] as const;
 export type CommitmentState = (typeof COMMITMENT_STATES)[number];
 const commitmentTransitions: Record<CommitmentState, readonly CommitmentState[]> = {
-  OPEN: ['IN_PROGRESS', 'CANCELLED'],
-  IN_PROGRESS: ['BLOCKED', 'DONE', 'CANCELLED'],
-  BLOCKED: ['IN_PROGRESS', 'CANCELLED'],
+  OPEN: ['IN_PROGRESS', 'DUE_SOON', 'CANCELLED'],
+  IN_PROGRESS: ['DUE_SOON', 'OVERDUE', 'BLOCKED', 'DONE', 'CANCELLED'],
+  DUE_SOON: ['IN_PROGRESS', 'OVERDUE', 'DONE', 'CANCELLED'],
+  OVERDUE: ['IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'],
+  BLOCKED: ['IN_PROGRESS', 'DUE_SOON', 'OVERDUE', 'CANCELLED'],
   DONE: [],
   CANCELLED: [],
 };

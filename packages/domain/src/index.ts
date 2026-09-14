@@ -126,6 +126,13 @@ export {
   MILESTONE_STATES,
 } from './decision.js';
 export type { Decision, CommitmentState, MilestoneState } from './decision.js';
+export {
+  createOpaquePushPayload,
+  decodeOpaquePushPayload,
+  requiresResumeSync,
+  MAX_OPAQUE_PUSH_BYTES,
+} from './push.js';
+export type { OpaquePushPayload } from './push.js';
 export { resolveIdentityDeterministically, IDENTITY_STATES } from './resolver/identity.js';
 export type {
   IdentityCandidate,
