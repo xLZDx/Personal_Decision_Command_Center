@@ -3,6 +3,17 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 10: lease-fenced Gmail enrichment processor wiring
+
+The Gmail AI boundary is now connected to the actual Queue processor lifecycle through
+`createGmailEventProcessor`. It performs durable step-0 idempotency, calls the source-local engine
+with the live lease-loss signal, persists COMPLETE/NO_CONTENT_DELETED results through the exact
+lease-token-fenced `persistEnrichment` primitive, and completes AI-disabled/policy-denied/quota
+degrade outcomes without fabricating enrichment. Queue wiring activates this processor only when
+the Workers AI binding, connector content-gateway service binding, and public attestation JWK are
+all explicitly provisioned; otherwise it retains the safe noop composition. No credentials or
+production bindings were added. Full suite: 533 tests passing.
+
 ## 2026-09-14 — G3 checkpoint 9: authoritative event ID passed to signer
 
 Checkpoint 8 review found that `GmailMessageLoader` did not receive the authoritative PDOS event ID,
