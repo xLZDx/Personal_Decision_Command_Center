@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G5 preparation: exact identity mapping boundary
+
+Added deterministic identity resolution keyed only by exact `(source, source_identity)` mappings.
+Confirmed/suggested/rejected states and evidence IDs are preserved; absent or conflicting mappings
+return `UNKNOWN`. Display names and message text are not accepted, preventing accidental
+irreversible merges from name similarity.
+
 ## 2026-09-14 — G4 preparation: TDLib adapter seam
 
 Added a narrow TDLib update-source adapter that forwards authorization state and normalized message

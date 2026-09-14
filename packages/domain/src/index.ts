@@ -101,6 +101,13 @@ export { classifyTelegramIntent, TELEGRAM_INTENT_CLASSES } from './telegram/inte
 export type { TelegramIntentClass, TelegramIntentResult } from './telegram/intent.js';
 export { resolveTopicDeterministically } from './resolver/topic.js';
 export type { TopicCandidate, TopicResolution, TopicResolutionResult } from './resolver/topic.js';
+export { resolveIdentityDeterministically, IDENTITY_STATES } from './resolver/identity.js';
+export type {
+  IdentityCandidate,
+  IdentityMapping,
+  IdentityResolution,
+  IdentityState,
+} from './resolver/identity.js';
 export {
   generateTelegramEcdhKeyPair,
   exportTelegramEcdhPublicJwk,
