@@ -97,6 +97,8 @@ export type {
   TelegramParserInput,
   TelegramSignalKind,
 } from './telegram/parser.js';
+export { resolveTopicDeterministically } from './resolver/topic.js';
+export type { TopicCandidate, TopicResolution, TopicResolutionResult } from './resolver/topic.js';
 
 export {
   generateRandomToken,

@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G5 preparation: deterministic topic resolver primitive
+
+Added a metadata-only resolver implementing the frozen MVP1 scoring order: confirmed project/stream,
+namespaced business identifier, confirmed participant, deterministic intent, and time proximity.
+Explicit KEEP_SEPARATE/project-conflict barriers override scores; explicit user MERGE wins; no
+matching evidence returns first-class `UNKNOWN`. No source body or AI feedback path is accepted.
+
 ## 2026-09-14 — G4 preparation: Telegram deterministic parser primitive
 
 Added `parseTelegramDeterministically`, a source-local fixed-rule parser for approval, blocker,
