@@ -3,6 +3,15 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G3 checkpoint 16 APPROVED: signed gateway exposure and cancellation hardened
+
+External GPT-PM checkpoint-16 review round 1 found 1 BLOCKER (uncommitted `workers_dev=false`) and
+round 2 on exact head `923cf38` returned `VERDICT: APPROVE`, 0 BLOCKER / 0 MAJOR / 0 MINOR
+(`reviewInputHash 3faedf5e30d8178212ec63df375faa5427c79544f64daef299279beccdb89ed7`, request
+`a6b046f0-23a6-49ae-85ea-005b3304f3e4`, reply `afe74ca3-c2f7-4329-bc0f-89f5c27da29c`). The
+service-binding-only deployment setting is committed and statically tested; downstream cancellation
+and workspace lock controls remain green.
+
 ## 2026-09-14 — G3 checkpoint 16: gateway exposure, cancellation, and workspace lock hardening
 
 The content gateway is now explicitly service-binding-only (`workers_dev = false`), forwards inbound
