@@ -1,0 +1,28 @@
+# Copy to a protected operator evidence store; do not commit filled values or credentials.
+gate: MVP1
+branch: gate/g3-implementation
+commit: REPLACE_WITH_VERIFIED_COMMIT
+environment: isolated-staging
+operator: REPLACE_WITH_OPERATOR_ID
+deployment:
+  d1_database: REPLACE_WITH_D1_NAME
+  migrations_applied_through: '0015'
+  ingest_worker: REPLACE_WITH_WORKER_URL
+  tunnel_gateway: REPLACE_WITH_WORKER_URL
+  tdlib_binary_version: REPLACE_WITH_PINNED_VERSION
+  tdlib_binary_checksum: REPLACE_WITH_SHA256
+accounts:
+  telegram_account_fingerprint: REPLACE_WITH_REDACTED_FINGERPRINT
+  gmail_account_fingerprint: REPLACE_WITH_REDACTED_FINGERPRINT
+devices:
+  android: REPLACE_WITH_SERIAL_AND_SCREENSHOT_HASH
+  iphone: REPLACE_WITH_DEVICE_HASH
+evidence:
+  telegram_reconnect_burst: REPLACE_WITH_ARTIFACT_HASH
+  gmail_cursor_recovery: REPLACE_WITH_ARTIFACT_HASH
+  pwa_push_sync: REPLACE_WITH_ARTIFACT_HASH
+  isolated_restore: REPLACE_WITH_ARTIFACT_HASH
+  g9_metrics: REPLACE_WITH_ARTIFACT_HASH
+approval:
+  operator: PENDING
+  gpt_pm: PENDING

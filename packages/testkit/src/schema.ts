@@ -76,3 +76,27 @@ export function loadG3Schema(): string {
     `${readFileSync(path0009, 'utf8')}\n${readFileSync(path0010, 'utf8')}`
   );
 }
+
+/** Canonical local schema for MVP1 integration tests, matching staging migration order 0001–0015. */
+export function loadMvp1Schema(): string {
+  const files = [
+    '0001_ingest_outbox.sql',
+    '0002_gmail_connector.sql',
+    '0003_gmail_oauth_disconnect_lock.sql',
+    '0004_gmail_oauth_lifecycle_lock.sql',
+    '0005_gmail_connections_unique_email.sql',
+    '0006_gmail_history_sync_progress.sql',
+    '0007_ingest_events_occurred_at_quality.sql',
+    '0008_gmail_history_sync_progress_rebuild.sql',
+    '0009_gmail_api_budget_counters_ceiling_check.sql',
+    '0010_gmail_ai_neuron_reservation_ledger.sql',
+    '0011_resolver_state.sql',
+    '0012_g6_state_and_telegram_replay.sql',
+    '0013_g5_core_entities.sql',
+    '0014_g5_integrity_triggers.sql',
+    '0015_g6_integrity_triggers.sql',
+  ];
+  return files
+    .map((file) => readFileSync(fileURLToPath(new URL(`../../../infra/migrations/${file}`, import.meta.url)), 'utf8'))
+    .join('\n');
+}

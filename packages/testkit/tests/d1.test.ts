@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { createTestD1 } from '../src/d1.js';
-import { loadG2Schema } from '../src/schema.js';
+import { loadG2Schema, loadMvp1Schema } from '../src/schema.js';
 import { seedBaselineAccounts, seedEvent, seedOutbox } from '../src/fixtures.js';
 
 describe('createTestD1', () => {
   it('applies the real G2 schema without error', () => {
     expect(() => createTestD1(loadG2Schema())).not.toThrow();
+  });
+
+  it('applies the complete MVP1 migration chain without error', () => {
+    expect(() => createTestD1(loadMvp1Schema())).not.toThrow();
   });
 
   it('enforces foreign keys (D1-confirmed default behavior)', async () => {

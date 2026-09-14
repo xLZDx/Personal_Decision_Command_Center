@@ -1,0 +1,14 @@
+# Access-protected hop for the private Cloudflare Tunnel → Worker → Content Gateway chain.
+# The Tunnel connector must send CF-Access-Client-Id/Secret issued by an Access service token.
+name = "pdos-tunnel-gateway"
+main = "services/tunnel-gateway/src/index.ts"
+compatibility_date = "2026-09-10"
+workers_dev = false
+
+[[services]]
+binding = "CONTENT_GATEWAY"
+service = "pdos-gmail-connector"
+
+# Provision both values out-of-band:
+# wrangler secret put ACCESS_CLIENT_ID --config infra/cloudflare/tunnel-gateway.wrangler.toml
+# wrangler secret put ACCESS_CLIENT_SECRET --config infra/cloudflare/tunnel-gateway.wrangler.toml

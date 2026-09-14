@@ -1,3 +1,4 @@
+/* global setTimeout */
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -92,6 +93,30 @@ describe('TelegramConnectorRuntime', () => {
     release();
     expect((await first).outcome).toBe('ACKED');
     expect((await second).outcome).toBe('EMPTY');
+    spool.close();
+  });
+
+  it('wires an injected TDLib source through session, spool and drain lifecycle', async () => {
+    let authorize!: (state: 'WAITING' | 'READY' | 'OFFLINE' | 'CLOSED') => void;
+    let message!: (update: { event: NormalizedEvent; initialCache: boolean }) => void;
+    const delivered: NormalizedEvent[] = [];
+    const spool = new TelegramSpool(join(tmpdir(), `pdos-tg-runtime-${randomUUID()}.sqlite`), { random: () => 0 });
+    const runtime = new TelegramConnectorRuntime({
+      spool,
+      deliver: async (value) => { delivered.push(value); },
+      now: () => '2026-09-14T10:00:00.000Z',
+      tdlibSource: {
+        onAuthorizationState(listener) { authorize = listener; return () => undefined; },
+        onMessage(listener) { message = listener; return () => undefined; },
+      },
+    });
+    runtime.start();
+    authorize('READY');
+    message({ event: event('2026-09-14T10:01:00.000Z'), initialCache: false });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect((await runtime.drainOnce()).outcome).toBe('ACKED');
+    expect(delivered).toHaveLength(1);
+    runtime.stop();
     spool.close();
   });
 });

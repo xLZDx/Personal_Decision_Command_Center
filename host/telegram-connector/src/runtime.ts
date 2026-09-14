@@ -3,6 +3,7 @@ import type { NormalizedEvent } from '@pdos/contracts';
 
 import { TelegramSession, type TelegramSessionEvent } from './session.js';
 import { TelegramSpool, type SpoolItem } from './spool.js';
+import { TelegramTdlibAdapter, type TelegramTdlibUpdateSource } from './tdlib-adapter.js';
 
 export interface TelegramConnectorRuntimeOptions {
   spool: TelegramSpool;
@@ -10,6 +11,10 @@ export interface TelegramConnectorRuntimeOptions {
   now?: () => string;
   isPermanentError?: (error: unknown) => boolean;
   drainIntervalMs?: number;
+  tdlibSource?: TelegramTdlibUpdateSource;
+  normalizeMessage?: (update: TelegramSessionEvent) => TelegramSessionEvent;
+  onTdlibError?: (error: unknown) => void;
+  maxPendingUpdates?: number;
 }
 
 export type TelegramDrainOutcome =
@@ -30,6 +35,7 @@ export class TelegramConnectorRuntime {
   readonly #now: () => string;
   readonly #isPermanentError: (error: unknown) => boolean;
   readonly #session: TelegramSession;
+  readonly #adapter: TelegramTdlibAdapter | null;
   #drainTail: Promise<void> = Promise.resolve();
   #drainTimer: ReturnType<typeof setInterval> | null = null;
   readonly #drainIntervalMs: number;
@@ -49,6 +55,22 @@ export class TelegramConnectorRuntime {
         this.#spool.enqueue(event, this.#now());
       },
     });
+    this.#adapter = options.tdlibSource
+      ? new TelegramTdlibAdapter({
+          source: options.tdlibSource,
+          session: this.#session,
+          normalizeMessage: options.normalizeMessage ?? ((update) => update),
+          onError: options.onTdlibError ?? (() => undefined),
+          onOverflow: async (update) => {
+            // Overflow has already passed the session eligibility check; route it through the
+            // same durable emit path as normal updates so spool is the recovery source of truth.
+            await this.#session.onMessage(update);
+          },
+          ...(options.maxPendingUpdates === undefined
+            ? {}
+            : { maxPendingUpdates: options.maxPendingUpdates }),
+        })
+      : null;
   }
 
   session(): TelegramSession {
@@ -61,12 +83,14 @@ export class TelegramConnectorRuntime {
 
   start(): void {
     if (this.#drainTimer !== null) return;
+    this.#adapter?.start();
     this.#drainTimer = setInterval(() => {
       void this.drainOnce().catch(() => undefined);
     }, this.#drainIntervalMs);
   }
 
   stop(): void {
+    this.#adapter?.stop();
     if (this.#drainTimer !== null) {
       clearInterval(this.#drainTimer);
       this.#drainTimer = null;

@@ -1,11 +1,10 @@
 {
-  "name": "@pdos/telegram-connector-host",
+  "name": "@pdos/tunnel-gateway",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "dependencies": {
-    "@pdos/contracts": "*",
-    "@pdos/domain": "*"
+    "@cloudflare/workers-types": "*"
   }
 }

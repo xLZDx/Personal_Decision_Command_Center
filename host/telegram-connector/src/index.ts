@@ -15,3 +15,7 @@ export type {
   TelegramTdlibAdapterOptions,
   TelegramTdlibUpdateSource,
 } from './tdlib-adapter.js';
+export { TelegramTdlibProcessClient } from './tdlib-client.js';
+export type { TelegramTdlibProcessClientOptions } from './tdlib-client.js';
+export { createTelegramIngestDeliver } from './ingest-deliver.js';
+export type { TelegramIngestDeliverOptions } from './ingest-deliver.js';
