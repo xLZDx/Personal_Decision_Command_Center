@@ -133,6 +133,16 @@ export {
   MAX_OPAQUE_PUSH_BYTES,
 } from './push.js';
 export type { OpaquePushPayload } from './push.js';
+export {
+  OperationalSnapshotSchema,
+  validateOperationalSnapshot,
+  shouldRetainRecord,
+} from './ops.js';
+export type { OperationalSnapshot } from './ops.js';
+export { BackupManifestSchema, validateBackupManifest, assertBackupIntegrity } from './backup.js';
+export type { BackupManifest } from './backup.js';
+export { evaluateShadow, calibrateAutoAttachThreshold } from './evaluation.js';
+export type { ShadowPrediction, ShadowEvaluation, CalibrationPoint } from './evaluation.js';
 export { resolveIdentityDeterministically, IDENTITY_STATES } from './resolver/identity.js';
 export type {
   IdentityCandidate,
