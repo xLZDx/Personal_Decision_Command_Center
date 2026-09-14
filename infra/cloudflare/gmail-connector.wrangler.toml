@@ -3,6 +3,7 @@
 name = "pdos-gmail-connector"
 main = "src/index.ts"
 compatibility_date = "2026-09-10"
+workers_dev = false
 
 [[services]]
 binding = "GMAIL_API"

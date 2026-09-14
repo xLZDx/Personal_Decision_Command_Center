@@ -1,5 +1,6 @@
 /* global crypto, Request, Response, AbortSignal, AbortController, setTimeout */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { readFile } from 'node:fs/promises';
 import { verifyEcdsaP256Signature } from '@pdos/domain';
 
 import { handleContentGatewayRequest } from '../src/index.js';
@@ -106,5 +107,13 @@ describe('Gmail content gateway', () => {
     controller.abort();
     expect((await responsePromise).status).toBe(400);
     expect(downstreamSignal?.aborted).toBe(true);
+  });
+
+  it('keeps the content gateway off the public workers.dev route', async () => {
+    const wrangler = await readFile(
+      new URL('../../../infra/cloudflare/gmail-connector.wrangler.toml', import.meta.url),
+      'utf8',
+    );
+    expect(wrangler).toMatch(/(^|\n)workers_dev\s*=\s*false(?:\n|$)/);
   });
 });
