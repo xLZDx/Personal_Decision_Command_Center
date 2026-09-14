@@ -7,18 +7,28 @@ describe('resolveTopicDeterministically', () => {
     const result = resolveTopicDeterministically(
       {
         projectId: 'erp',
+        projectConfirmed: true,
         streamId: 'release',
+        streamConfirmed: true,
         businessIdentifier: 'ERP::Gate-4.2',
+        businessIdentifierConfirmed: true,
         confirmedParticipant: 'p1',
+        participantConfirmed: true,
         intentClass: 'ACTION_REQUIRED',
+        intentConfirmed: true,
         occurredAt: '2026-09-14T10:00:00.000Z',
       },
       {
         projectId: 'erp',
+        projectConfirmed: true,
         streamId: 'release',
+        streamConfirmed: true,
         businessIdentifier: 'ERP::Gate-4.2',
+        businessIdentifierConfirmed: true,
         confirmedParticipant: 'p1',
+        participantConfirmed: true,
         intentClass: 'ACTION_REQUIRED',
+        intentConfirmed: true,
         occurredAt: '2026-09-14T11:00:00.000Z',
       },
     );
@@ -41,14 +51,20 @@ describe('resolveTopicDeterministically', () => {
       resolveTopicDeterministically(
         {
           projectId: 'project-a',
+          projectConfirmed: true,
           streamId: 'release',
+          streamConfirmed: true,
           businessIdentifier: 'ERP::Gate-4.2',
+          businessIdentifierConfirmed: true,
           explicitMerge: true,
         },
         {
           projectId: 'project-b',
+          projectConfirmed: true,
           streamId: 'release',
+          streamConfirmed: true,
           businessIdentifier: 'ERP::Gate-4.2',
+          businessIdentifierConfirmed: true,
         },
       ).resolution,
     ).toBe('SEPARATE');

@@ -1,3 +1,4 @@
+/* global crypto */
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -15,6 +16,7 @@ describe('Telegram content ECDH/HKDF/AES-GCM envelope', () => {
   it('round-trips plaintext with a fresh nonce and binds request metadata as AAD', async () => {
     const gateway = await generateTelegramEcdhKeyPair();
     const client = await generateTelegramEcdhKeyPair();
+    await expect(crypto.subtle.exportKey('jwk', gateway.privateKey)).rejects.toThrow();
     const gatewayPublicJwk = await exportTelegramEcdhPublicJwk(gateway.publicKey);
     const clientPublicJwk = await exportTelegramEcdhPublicJwk(client.publicKey);
     const envelope = await encryptTelegramContent({
@@ -129,5 +131,15 @@ describe('Telegram content ECDH/HKDF/AES-GCM envelope', () => {
         replayGuard: new TelegramContentReplayGuard(),
       }),
     ).rejects.toThrow(/operation|decrypt|auth/i);
+    await expect(
+      decryptTelegramContent({
+        clientPrivateKey: client.privateKey,
+        gatewayPublicJwk,
+        expectedKeyId: 'gateway-k1',
+        envelope: { ...envelope, ciphertext: 'A'.repeat(100_000) },
+        now: NOW,
+        replayGuard: new TelegramContentReplayGuard(),
+      }),
+    ).rejects.toThrow(/ciphertext|base64/);
   });
 });

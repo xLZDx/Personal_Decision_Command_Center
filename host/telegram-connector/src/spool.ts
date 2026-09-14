@@ -69,17 +69,20 @@ export class TelegramSpool {
     `);
     try {
       this.#db.exec('ALTER TABLE telegram_spool ADD COLUMN lease_token TEXT');
-    } catch {
+    } catch (error) {
+      if (!(error instanceof Error && /duplicate column/i.test(error.message))) throw error;
       // Existing databases created by this module already have the lease columns.
     }
     try {
       this.#db.exec('ALTER TABLE telegram_spool ADD COLUMN lease_until TEXT');
-    } catch {
+    } catch (error) {
+      if (!(error instanceof Error && /duplicate column/i.test(error.message))) throw error;
       // Existing databases created by this module already have the lease columns.
     }
   }
 
   enqueue(event: NormalizedEvent, now: string): boolean {
+    assertTimestamp(now);
     const parsed = NormalizedEventSchema.parse(event);
     const result = this.#db
       .prepare(
@@ -92,6 +95,7 @@ export class TelegramSpool {
   }
 
   claimReady(now: string): SpoolItem | null {
+    assertTimestamp(now);
     const leaseToken = randomUUID();
     const leaseUntil = new Date(Date.parse(now) + 30_000).toISOString();
     const row = this.#db
@@ -128,15 +132,28 @@ export class TelegramSpool {
     };
   }
 
-  ack(id: number, leaseToken: string): void {
-    this.#db
+  ack(id: number, leaseToken: string): boolean {
+    const result = this.#db
       .prepare(
         "UPDATE telegram_spool SET state = 'ACKED', lease_token = NULL, lease_until = NULL WHERE id = ? AND lease_token = ?",
       )
       .run(id, leaseToken);
+    return Number(result.changes) === 1;
+  }
+
+  renew(id: number, leaseToken: string, now: string): boolean {
+    assertTimestamp(now);
+    const leaseUntil = new Date(Date.parse(now) + 30_000).toISOString();
+    const result = this.#db
+      .prepare(
+        "UPDATE telegram_spool SET lease_until = ? WHERE id = ? AND lease_token = ? AND state IN ('PENDING', 'FAILED_RETRYABLE')",
+      )
+      .run(leaseUntil, id, leaseToken);
+    return Number(result.changes) === 1;
   }
 
   fail(id: number, now: string, permanent: boolean, leaseToken: string): void {
+    assertTimestamp(now);
     const nextAttempt = this.#db
       .prepare('SELECT attempts FROM telegram_spool WHERE id = ? AND lease_token = ?')
       .get(id, leaseToken) as { attempts: number } | undefined;
@@ -150,8 +167,8 @@ export class TelegramSpool {
     this.#db
       .prepare(
         `UPDATE telegram_spool
-         SET state = ?, attempts = attempts + 1, next_attempt_at = ?
-           , lease_token = NULL, lease_until = NULL
+         SET state = ?, attempts = attempts + 1, next_attempt_at = ?,
+             lease_token = NULL, lease_until = NULL
          WHERE id = ? AND lease_token = ?`,
       )
       .run(permanent ? 'FAILED_PERMANENT' : 'FAILED_RETRYABLE', next, id, leaseToken);
@@ -160,4 +177,8 @@ export class TelegramSpool {
   close(): void {
     this.#db.close();
   }
+}
+
+function assertTimestamp(value: string): void {
+  if (!Number.isFinite(Date.parse(value))) throw new Error('Telegram spool timestamp is invalid');
 }

@@ -8,6 +8,11 @@ const encoder = new TextEncoder();
 const IV_BYTES = 12;
 const NONCE_BYTES = 16;
 const MAX_EXPIRY_MS = 60_000;
+export const MAX_TELEGRAM_CIPHERTEXT_BYTES = 64 * 1024;
+export const MAX_TELEGRAM_PLAINTEXT_BYTES = 64 * 1024;
+export const MAX_TELEGRAM_KEY_ID_CHARS = 128;
+export const MAX_TELEGRAM_REQUEST_ID_CHARS = 256;
+export const MAX_TELEGRAM_SOURCE_REF_CHARS = 512;
 
 export interface TelegramEcdhPublicJwk {
   kty: 'EC';
@@ -75,6 +80,10 @@ function base64ToBytes(value: string): Uint8Array {
   return bytes;
 }
 
+function assertBoundedText(value: string, name: string, max: number): void {
+  if (value.length === 0 || value.length > max) throw new Error(`Telegram ${name} exceeds limit`);
+}
+
 function aadBytes(aad: TelegramContentAad): Uint8Array {
   return encoder.encode(
     [aad.keyId, aad.requestId, aad.sourceRef, String(aad.schemaVersion), aad.expiresAt, aad.nonce]
@@ -122,9 +131,18 @@ async function deriveAesKey(
 }
 
 export async function generateTelegramEcdhKeyPair(): Promise<CryptoKeyPair> {
-  return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
+  const generated = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
     'deriveBits',
-  ]) as Promise<CryptoKeyPair>;
+  ])) as CryptoKeyPair;
+  const privateJwk = await crypto.subtle.exportKey('jwk', generated.privateKey);
+  const privateKey = await crypto.subtle.importKey(
+    'jwk',
+    privateJwk,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    ['deriveBits'],
+  );
+  return { publicKey: generated.publicKey, privateKey };
 }
 
 export async function exportTelegramEcdhPublicJwk(
@@ -141,6 +159,12 @@ export async function encryptTelegramContent(
   options: EncryptTelegramContentOptions,
 ): Promise<TelegramContentEnvelope> {
   const now = options.now ?? new Date().toISOString();
+  assertBoundedText(options.keyId, 'keyId', MAX_TELEGRAM_KEY_ID_CHARS);
+  assertBoundedText(options.requestId, 'requestId', MAX_TELEGRAM_REQUEST_ID_CHARS);
+  assertBoundedText(options.sourceRef, 'sourceRef', MAX_TELEGRAM_SOURCE_REF_CHARS);
+  if (new TextEncoder().encode(options.plaintext).length > MAX_TELEGRAM_PLAINTEXT_BYTES) {
+    throw new Error('Telegram plaintext exceeds limit');
+  }
   if (options.keyId.length === 0) throw new Error('Telegram content keyId is required');
   validateExpiry(options.expiresAt, now);
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
@@ -190,12 +214,21 @@ export async function decryptTelegramContent(
   options: DecryptTelegramContentOptions,
 ): Promise<string> {
   const now = options.now ?? new Date().toISOString();
+  assertBoundedText(options.envelope.keyId, 'keyId', MAX_TELEGRAM_KEY_ID_CHARS);
+  assertBoundedText(options.envelope.requestId, 'requestId', MAX_TELEGRAM_REQUEST_ID_CHARS);
+  assertBoundedText(options.envelope.sourceRef, 'sourceRef', MAX_TELEGRAM_SOURCE_REF_CHARS);
   validateExpiry(options.envelope.expiresAt, now);
   if (options.envelope.keyId !== options.expectedKeyId) {
     throw new Error('Telegram content keyId mismatch');
   }
   const nonce = base64ToBytes(options.envelope.nonce);
   if (nonce.length !== NONCE_BYTES) throw new Error('Invalid Telegram content nonce');
+  const iv = base64ToBytes(options.envelope.iv);
+  if (iv.length !== IV_BYTES) throw new Error('Invalid Telegram content IV');
+  const ciphertext = base64ToBytes(options.envelope.ciphertext);
+  if (ciphertext.length > MAX_TELEGRAM_CIPHERTEXT_BYTES) {
+    throw new Error('Telegram ciphertext exceeds limit');
+  }
   const aad: TelegramContentAad = {
     keyId: options.envelope.keyId,
     requestId: options.envelope.requestId,
@@ -208,12 +241,15 @@ export async function decryptTelegramContent(
   const plaintext = await crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
-      iv: base64ToBytes(options.envelope.iv),
+      iv,
       additionalData: aadBytes(aad),
     },
     key,
-    base64ToBytes(options.envelope.ciphertext),
+    ciphertext,
   );
+  if (plaintext.byteLength > MAX_TELEGRAM_PLAINTEXT_BYTES) {
+    throw new Error('Telegram plaintext exceeds limit');
+  }
   if (!options.replayGuard.accept(options.envelope.nonce, options.envelope.expiresAt, now)) {
     throw new Error('Telegram content request replayed');
   }

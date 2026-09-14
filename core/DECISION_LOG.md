@@ -3,6 +3,17 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4/G5/G6 remediation pass 2
+
+Implemented the remaining boundedness and durability fixes from the GPT consensus: lease renewal
+heartbeats and stale-ACK fencing in the Telegram runtime, stable READY session boundaries,
+bounded TDLib callback backlog, strict migration-error handling, and a D1-backed G5 resolver store
+for source identities, topic assignments, and append-only merge/split audit metadata. Formal gate
+closure remains operator/GPT-PM governed; this entry records implementation evidence only.
+
+**Evidence:** `infra/migrations/0011_resolver_state.sql`, `packages/domain/src/resolver/store.ts`,
+`host/telegram-connector/src/{runtime,session,spool,tdlib-adapter}.ts`, and passing tests.
+
 ## 2026-09-14 — G4/G5/G6 GPT reviewer consensus: NEEDS REVISION
 
 Three independent GPT reviewers (architecture, security/privacy, and QA) reviewed exact head

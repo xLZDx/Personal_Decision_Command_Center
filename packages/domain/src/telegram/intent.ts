@@ -1,4 +1,5 @@
 import type { StringProvenanceValue } from '@pdos/contracts';
+import { assertTelegramParserInput } from './parser.js';
 
 export const TELEGRAM_INTENT_CLASSES = [
   'DECISION_REQUIRED',
@@ -25,6 +26,7 @@ export function classifyTelegramIntent(input: {
   text: string;
   now: string;
 }): TelegramIntentResult {
+  assertTelegramParserInput(input);
   const rules: readonly [TelegramIntentClass, RegExp][] = [
     ['BLOCKER', /\b(?:blocked|blocker|blocking)\b/i],
     ['DEADLINE', /\b(?:by|due)\s+\d{4}-\d{2}-\d{2}\b/i],

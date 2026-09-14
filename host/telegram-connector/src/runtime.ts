@@ -1,3 +1,4 @@
+/* global setInterval, clearInterval */
 import type { NormalizedEvent } from '@pdos/contracts';
 
 import { TelegramSession, type TelegramSessionEvent } from './session.js';
@@ -13,6 +14,7 @@ export interface TelegramConnectorRuntimeOptions {
 export type TelegramDrainOutcome =
   | { outcome: 'EMPTY' }
   | { outcome: 'ACKED'; item: SpoolItem }
+  | { outcome: 'LEASE_LOST'; item: SpoolItem }
   | { outcome: 'FAILED_RETRYABLE'; item: SpoolItem; error: unknown }
   | { outcome: 'FAILED_PERMANENT'; item: SpoolItem; error: unknown };
 
@@ -63,8 +65,21 @@ export class TelegramConnectorRuntime {
     const item = this.#spool.claimReady(this.#now());
     if (item === null) return { outcome: 'EMPTY' };
     try {
-      await this.#deliver(item.event);
-      this.#spool.ack(item.id, item.leaseToken);
+      const heartbeat = setInterval(() => {
+        try {
+          this.#spool.renew(item.id, item.leaseToken, this.#now());
+        } catch {
+          // Delivery result remains authoritative; a subsequent claim will recover the item.
+        }
+      }, 10_000);
+      try {
+        await this.#deliver(item.event);
+      } finally {
+        clearInterval(heartbeat);
+      }
+      if (!this.#spool.ack(item.id, item.leaseToken)) {
+        return { outcome: 'LEASE_LOST', item };
+      }
       return { outcome: 'ACKED', item };
     } catch (error) {
       const permanent = this.#isPermanentError(error);

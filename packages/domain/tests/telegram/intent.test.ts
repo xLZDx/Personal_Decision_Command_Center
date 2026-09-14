@@ -23,4 +23,14 @@ describe('classifyTelegramIntent', () => {
       }),
     ).toEqual({ intent: 'FYI', evidence: [] });
   });
+
+  it('bounds direct classifier calls before regex work', () => {
+    expect(() =>
+      classifyTelegramIntent({
+        eventId: 'tg-3',
+        text: 'x'.repeat(4_001),
+        now: '2026-09-14T00:00:00.000Z',
+      }),
+    ).toThrow(/exceeds/);
+  });
 });

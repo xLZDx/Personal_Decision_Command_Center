@@ -10,8 +10,11 @@ describe('assignTopicDeterministically', () => {
         source: 'telegram',
         candidate: {
           projectId: 'erp',
+          projectConfirmed: true,
           streamId: 'release',
+          streamConfirmed: true,
           businessIdentifier: 'ERP::Gate-4.2',
+          businessIdentifierConfirmed: true,
         },
       },
       {
@@ -19,8 +22,11 @@ describe('assignTopicDeterministically', () => {
         source: 'gmail',
         candidate: {
           projectId: 'erp',
+          projectConfirmed: true,
           streamId: 'release',
+          streamConfirmed: true,
           businessIdentifier: 'ERP::Gate-4.2',
+          businessIdentifierConfirmed: true,
         },
       },
     );

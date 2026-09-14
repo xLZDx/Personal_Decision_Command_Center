@@ -58,6 +58,18 @@ describe('TelegramSession', () => {
     expect(session.health().state).toBe('OFFLINE');
   });
 
+  it('does not move the connection boundary on duplicate READY notifications', () => {
+    let tick = 0;
+    const session = new TelegramSession({
+      now: () => `2026-09-14T10:0${tick++}:00.000Z`,
+      emit: async () => undefined,
+    });
+    session.onAuthorizationState('READY');
+    const first = session.health().connectedAt;
+    session.onAuthorizationState('READY');
+    expect(session.health().connectedAt).toBe(first);
+  });
+
   it('starts a fresh boundary after a reconnect beyond the six-hour soak window', async () => {
     const emitted: NormalizedEvent[] = [];
     let current = '2026-09-14T10:00:00.000Z';

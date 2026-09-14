@@ -97,7 +97,11 @@ export type {
   TelegramParserInput,
   TelegramSignalKind,
 } from './telegram/parser.js';
-export { MAX_TELEGRAM_INPUT_CHARS, MAX_TELEGRAM_SIGNALS } from './telegram/parser.js';
+export {
+  assertTelegramParserInput,
+  MAX_TELEGRAM_INPUT_CHARS,
+  MAX_TELEGRAM_SIGNALS,
+} from './telegram/parser.js';
 export { classifyTelegramIntent, TELEGRAM_INTENT_CLASSES } from './telegram/intent.js';
 export type { TelegramIntentClass, TelegramIntentResult } from './telegram/intent.js';
 export { buildTelegramDeterministicEnrichment } from './telegram/enrichment.js';
@@ -106,6 +110,12 @@ export { resolveTopicDeterministically } from './resolver/topic.js';
 export type { TopicCandidate, TopicResolution, TopicResolutionResult } from './resolver/topic.js';
 export { assignTopicDeterministically } from './resolver/assignment.js';
 export type { TopicAssignmentAudit, TopicAssignmentEvidence } from './resolver/assignment.js';
+export { persistTopicAssignment, persistIdentityMapping } from './resolver/store.js';
+export type {
+  PersistTopicAssignmentInput,
+  PersistTopicAssignmentResult,
+  PersistIdentityMappingInput,
+} from './resolver/store.js';
 export { resolveIdentityDeterministically, IDENTITY_STATES } from './resolver/identity.js';
 export type {
   IdentityCandidate,
@@ -119,6 +129,13 @@ export {
   encryptTelegramContent,
   decryptTelegramContent,
   TelegramContentReplayGuard,
+} from './telegram/crypto.js';
+export {
+  MAX_TELEGRAM_CIPHERTEXT_BYTES,
+  MAX_TELEGRAM_PLAINTEXT_BYTES,
+  MAX_TELEGRAM_KEY_ID_CHARS,
+  MAX_TELEGRAM_REQUEST_ID_CHARS,
+  MAX_TELEGRAM_SOURCE_REF_CHARS,
 } from './telegram/crypto.js';
 export type {
   TelegramEcdhPublicJwk,

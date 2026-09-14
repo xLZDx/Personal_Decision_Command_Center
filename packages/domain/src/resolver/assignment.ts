@@ -16,10 +16,15 @@ const NamespacedIdentifierSchema = z
 const TopicCandidateSchema = z
   .object({
     projectId: z.string().min(1).max(256).optional(),
+    projectConfirmed: z.boolean().optional(),
     streamId: z.string().min(1).max(256).optional(),
+    streamConfirmed: z.boolean().optional(),
     businessIdentifier: NamespacedIdentifierSchema.optional(),
+    businessIdentifierConfirmed: z.boolean().optional(),
     confirmedParticipant: z.string().min(1).max(256).optional(),
+    participantConfirmed: z.boolean().optional(),
     intentClass: z.string().min(1).max(128).optional(),
+    intentConfirmed: z.boolean().optional(),
     occurredAt: z.string().datetime({ offset: true }).optional(),
     confirmedProjectConflict: z.boolean().optional(),
     keepSeparate: z.boolean().optional(),

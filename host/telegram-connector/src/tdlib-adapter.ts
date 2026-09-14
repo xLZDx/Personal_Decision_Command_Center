@@ -14,6 +14,7 @@ export interface TelegramTdlibAdapterOptions {
   session: TelegramSession;
   normalizeMessage: (update: TelegramSessionEvent) => TelegramSessionEvent;
   onError: (error: unknown) => void;
+  maxPendingUpdates?: number;
 }
 
 /**
@@ -25,13 +26,20 @@ export class TelegramTdlibAdapter {
   readonly #session: TelegramSession;
   readonly #normalizeMessage: (update: TelegramSessionEvent) => TelegramSessionEvent;
   readonly #onError: (error: unknown) => void;
+  readonly #maxPendingUpdates: number;
   #unsubscribe: (() => void) | null = null;
+  #pendingUpdates = 0;
+  #updateTail: Promise<void> = Promise.resolve();
 
   constructor(options: TelegramTdlibAdapterOptions) {
     this.#source = options.source;
     this.#session = options.session;
     this.#normalizeMessage = options.normalizeMessage;
     this.#onError = options.onError;
+    this.#maxPendingUpdates = options.maxPendingUpdates ?? 256;
+    if (!Number.isInteger(this.#maxPendingUpdates) || this.#maxPendingUpdates < 1) {
+      throw new Error('maxPendingUpdates must be a positive integer');
+    }
   }
 
   start(): void {
@@ -40,10 +48,33 @@ export class TelegramTdlibAdapter {
       this.#session.onAuthorizationState(state);
     });
     const stopMessages = this.#source.onMessage((update) => {
-      void Promise.resolve()
+      if (this.#pendingUpdates >= this.#maxPendingUpdates) {
+        try {
+          this.#onError(new Error('Telegram TDLib update backlog exceeded'));
+        } catch {
+          // Error sinks are advisory and must not escape the TDLib callback.
+        }
+        return;
+      }
+      this.#pendingUpdates += 1;
+      const run = this.#updateTail
         .then(() => this.#normalizeMessage(update))
         .then((normalized) => this.#session.onMessage(normalized))
-        .catch((error: unknown) => this.#onError(error));
+        .catch((error: unknown) => {
+          try {
+            this.#onError(error);
+          } catch {
+            // Error sinks must not create a second unhandled rejection in the adapter callback.
+          }
+        });
+      this.#updateTail = run.then(
+        () => {
+          this.#pendingUpdates -= 1;
+        },
+        () => {
+          this.#pendingUpdates -= 1;
+        },
+      );
     });
     this.#unsubscribe = () => {
       stopAuthorization();

@@ -84,10 +84,22 @@ describe('TelegramSpool', () => {
     expect(second.claimReady(now)).toBeNull();
     const secondClaim = second.claimReady('2026-09-14T00:00:31.000Z')!;
     expect(secondClaim.leaseToken).not.toBe(firstClaim.leaseToken);
-    first.ack(firstClaim.id, firstClaim.leaseToken);
+    expect(first.ack(firstClaim.id, firstClaim.leaseToken)).toBe(false);
     expect(second.claimReady('2026-09-14T00:00:31.000Z')).toBeNull();
-    second.ack(secondClaim.id, secondClaim.leaseToken);
+    expect(second.ack(secondClaim.id, secondClaim.leaseToken)).toBe(true);
     first.close();
     second.close();
+  });
+
+  it('renews an active lease and rejects stale renewal tokens', () => {
+    const path = join(tmpdir(), `pdos-tg-${randomUUID()}.sqlite`);
+    const spool = new TelegramSpool(path);
+    const now = '2026-09-14T00:00:00.000Z';
+    spool.enqueue(event('00000000-0000-4000-8000-000000000025'), now);
+    const item = spool.claimReady(now)!;
+    expect(spool.renew(item.id, item.leaseToken, '2026-09-14T00:00:20.000Z')).toBe(true);
+    expect(spool.claimReady('2026-09-14T00:00:31.000Z')).toBeNull();
+    expect(spool.renew(item.id, 'stale-token', '2026-09-14T00:01:00.000Z')).toBe(false);
+    spool.close();
   });
 });

@@ -19,6 +19,16 @@ describe('parseTelegramDeterministically', () => {
     expect(result.every((signal) => signal.value.provenance[0] === 'telegram-event-1')).toBe(true);
   });
 
+  it('extracts namespaced project identifiers used by the resolver', () => {
+    expect(
+      parseTelegramDeterministically({
+        eventId: 'telegram-event-4',
+        text: 'ERP::Gate-4.2 is ready',
+        now: '2026-09-14T00:00:00.000Z',
+      }).find((signal) => signal.kind === 'BUSINESS_IDENTIFIER')?.value.value,
+    ).toBe('ERP::Gate-4.2');
+  });
+
   it('does not infer semantics from arbitrary prose', () => {
     expect(
       parseTelegramDeterministically({
