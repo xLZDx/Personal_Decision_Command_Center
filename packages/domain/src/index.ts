@@ -101,6 +101,8 @@ export { classifyTelegramIntent, TELEGRAM_INTENT_CLASSES } from './telegram/inte
 export type { TelegramIntentClass, TelegramIntentResult } from './telegram/intent.js';
 export { resolveTopicDeterministically } from './resolver/topic.js';
 export type { TopicCandidate, TopicResolution, TopicResolutionResult } from './resolver/topic.js';
+export { assignTopicDeterministically } from './resolver/assignment.js';
+export type { TopicAssignmentAudit, TopicAssignmentEvidence } from './resolver/assignment.js';
 export { resolveIdentityDeterministically, IDENTITY_STATES } from './resolver/identity.js';
 export type {
   IdentityCandidate,

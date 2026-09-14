@@ -3,6 +3,13 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G5 preparation: auditable topic-assignment boundary
+
+Added a runtime-checked assignment wrapper around the deterministic topic resolver. It accepts
+only bounded metadata, rejects extra raw-content fields, preserves the contributing event IDs and
+source set, and exposes whether a result is cross-channel. Resolution remains hard-barrier-first
+with UNKNOWN when evidence is insufficient.
+
 ## 2026-09-14 — G5 preparation: exact identity mapping boundary
 
 Added deterministic identity resolution keyed only by exact `(source, source_identity)` mappings.
