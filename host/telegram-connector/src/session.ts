@@ -1,4 +1,4 @@
-import type { NormalizedEvent } from '@pdos/contracts';
+import { NormalizedEventSchema, type NormalizedEvent } from '@pdos/contracts';
 
 export type TelegramHealthState = 'DISCONNECTED' | 'AUTHENTICATING' | 'READY' | 'OFFLINE';
 
@@ -54,12 +54,14 @@ export class TelegramSession {
 
   async onMessage(update: TelegramSessionEvent): Promise<boolean> {
     if (this.#health.state !== 'READY' || this.#health.connectedAt === null) return false;
+    // Keep the public host seam closed even when TypeScript callers are bypassed at runtime.
+    const normalized = NormalizedEventSchema.parse(update.event);
     const connectedAt = this.#health.connectedAt;
-    if (update.initialCache || Date.parse(update.event.occurred_at) < Date.parse(connectedAt)) {
+    if (update.initialCache || Date.parse(normalized.occurred_at) < Date.parse(connectedAt)) {
       return false;
     }
     this.#health = { ...this.#health, lastUpdateAt: this.#now() };
-    await this.#emit(update.event);
+    await this.#emit(normalized);
     return true;
   }
 

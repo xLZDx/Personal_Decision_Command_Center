@@ -137,4 +137,51 @@ describe('TelegramTdlibAdapter', () => {
     expect(errors).toHaveLength(1);
     retryAdapter.stop();
   });
+
+  it('cancels updates that are queued behind a stop boundary', async () => {
+    let message!: (update: { event: NormalizedEvent; initialCache: boolean }) => void;
+    let authorize!: (state: 'WAITING' | 'READY' | 'OFFLINE' | 'CLOSED') => void;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const emitted: NormalizedEvent[] = [];
+    const session = new TelegramSession({
+      emit: async (value) => {
+        emitted.push(value);
+        await gate;
+      },
+    });
+    const adapter = new TelegramTdlibAdapter({
+      source: {
+        onAuthorizationState(listener) {
+          authorize = listener;
+          return () => undefined;
+        },
+        onMessage(listener) {
+          message = listener;
+          return () => undefined;
+        },
+      },
+      session,
+      normalizeMessage: (update) => update,
+      onError: () => undefined,
+    });
+    adapter.start();
+    authorize('READY');
+    message({ event, initialCache: false });
+    await Promise.resolve();
+    message({
+      event: {
+        ...event,
+        event_id: '00000000-0000-4000-8000-000000000052',
+        source_event_id: 'tg-message-52',
+      },
+      initialCache: false,
+    });
+    adapter.stop();
+    release();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(emitted).toHaveLength(1);
+  });
 });

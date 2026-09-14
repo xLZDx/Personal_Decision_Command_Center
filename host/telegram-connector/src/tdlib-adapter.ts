@@ -30,6 +30,7 @@ export class TelegramTdlibAdapter {
   #unsubscribe: (() => void) | null = null;
   #pendingUpdates = 0;
   #updateTail: Promise<void> = Promise.resolve();
+  #epoch = 0;
 
   constructor(options: TelegramTdlibAdapterOptions) {
     this.#source = options.source;
@@ -44,6 +45,7 @@ export class TelegramTdlibAdapter {
 
   start(): void {
     if (this.#unsubscribe !== null) return;
+    const epoch = ++this.#epoch;
     const stopAuthorization = this.#source.onAuthorizationState((state) => {
       this.#session.onAuthorizationState(state);
     });
@@ -58,8 +60,14 @@ export class TelegramTdlibAdapter {
       }
       this.#pendingUpdates += 1;
       const run = this.#updateTail
-        .then(() => this.#normalizeMessage(update))
-        .then((normalized) => this.#session.onMessage(normalized))
+        .then(() => {
+          if (epoch !== this.#epoch) return null;
+          return this.#normalizeMessage(update);
+        })
+        .then((normalized) => {
+          if (normalized === null || epoch !== this.#epoch) return;
+          return this.#session.onMessage(normalized);
+        })
         .catch((error: unknown) => {
           try {
             this.#onError(error);
@@ -84,6 +92,7 @@ export class TelegramTdlibAdapter {
   }
 
   stop(): void {
+    this.#epoch += 1;
     this.#unsubscribe?.();
   }
 
