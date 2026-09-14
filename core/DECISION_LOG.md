@@ -3,6 +3,14 @@
 Durable decisions and evidence future gates need. Not for routine narration (global CLAUDE.md §8).
 Newest entries at the top.
 
+## 2026-09-14 — G4/G5/G6 GPT reviewer consensus: NEEDS REVISION
+
+Three independent GPT reviewers (architecture, security/privacy, and QA) reviewed exact head
+`0612b2a` after the first remediation pass. Consensus is **REJECT for formal G4–G6 closure**:
+the pure primitives and seams are useful preparation, but production TDLib persistence, D1-backed
+G5 merge/split/audit state, and the complete ADR-007 auth/replay chain are still absent. The full
+report, including resolved findings and next tests, is in `core/G4_G5_G6_GPT_REVIEW_2026-09-14.md`.
+
 ## 2026-09-14 — G4/G5/G6 remediation before external review
 
 Addressed the first independent review findings: differing project IDs now hard-stop topic
