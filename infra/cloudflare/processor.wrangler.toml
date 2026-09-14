@@ -19,6 +19,15 @@ binding = "DB"
 database_name = "pdos-g2"
 database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
 
+# Optional owner-enabled AI composition. Keep these absent until the connector and public-key
+# material are provisioned and the G3/G10 operator gates are explicitly closed.
+#[ai]
+#binding = "WORKERS_AI"
+
+#[[services]]
+#binding = "GMAIL_CONTENT_GATEWAY"
+#service = "pdos-gmail-connector"
+
 [[queues.consumers]]
 queue = "pdos-ingest-dispatch"
 max_batch_size = 1
@@ -33,3 +42,5 @@ MAX_PROCESSING_ATTEMPTS = "5"
 # routinely race a still-healthy processor rather than only a genuinely stuck one.
 LEASE_DURATION_MS = "120000"
 PROCESSOR_VERSION = "processor-v1"
+# GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK is a non-secret deployment variable; the matching private
+# key is held only by the gmail-connector Worker and is never committed here.

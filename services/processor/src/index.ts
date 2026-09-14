@@ -1,14 +1,19 @@
-/* global crypto */
+/* global crypto, AbortSignal */
 import type { ExportedHandler, MessageBatch } from '@cloudflare/workers-types';
 import { QueuePayloadSchema, type QueuePayload } from '@pdos/contracts';
+import type { EcdsaP256PublicJwk } from '@pdos/domain';
 
 import { processMessage } from './handler.js';
+import { GmailAIEngine } from '@pdos/policy';
+import { createGmailEventProcessor } from './gmail-processor.js';
 import type { ProcessorEnv } from './env.js';
 
 export { processMessage } from './handler.js';
 export type { ProcessMessageOptions, ProcessMessageResult } from './handler.js';
 export { noopProcessor } from './processor.js';
 export type { ClaimedEvent, EventProcessor, ProcessOutcome } from './processor.js';
+export { createGmailEventProcessor } from './gmail-processor.js';
+export type { GmailEventProcessorOptions } from './gmail-processor.js';
 export type { ProcessorEnv } from './env.js';
 
 /**
@@ -31,6 +36,7 @@ export type { ProcessorEnv } from './env.js';
  */
 async function queue(batch: MessageBatch<QueuePayload>, env: ProcessorEnv): Promise<void> {
   const now = new Date().toISOString();
+  const process = makeConfiguredGmailProcessor(env, now);
   for (const message of batch.messages) {
     const parsed = QueuePayloadSchema.safeParse(message.body);
     if (!parsed.success) {
@@ -49,9 +55,61 @@ async function queue(batch: MessageBatch<QueuePayload>, env: ProcessorEnv): Prom
         ? { maxAttempts: Number(env.MAX_PROCESSING_ATTEMPTS) }
         : {}),
       ...(env.PROCESSOR_VERSION !== undefined ? { processorVersion: env.PROCESSOR_VERSION } : {}),
+      ...(process === undefined ? {} : { process }),
     });
     message.ack();
   }
+}
+
+function makeConfiguredGmailProcessor(env: ProcessorEnv, now: string) {
+  if (!env.GMAIL_CONTENT_GATEWAY || !env.WORKERS_AI || !env.GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK) {
+    return undefined;
+  }
+  const gateway = env.GMAIL_CONTENT_GATEWAY;
+  let publicKey: EcdsaP256PublicJwk;
+  try {
+    publicKey = JSON.parse(env.GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK) as EcdsaP256PublicJwk;
+  } catch {
+    throw new Error('GMAIL_CONTENT_ATTESTATION_PUBLIC_JWK must be valid JSON');
+  }
+  const messageLoader = {
+    async loadMessage(opts: {
+      eventId: string;
+      sourceAccountId: string;
+      messageId: string;
+      signal?: AbortSignal;
+    }) {
+      const response = await gateway.fetch('https://gmail-content.internal/message', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          eventId: opts.eventId,
+          sourceAccountId: opts.sourceAccountId,
+          messageId: opts.messageId,
+        }),
+      });
+      if (!response.ok) throw new Error(`Gmail content gateway returned HTTP ${response.status}`);
+      return (await response.json()) as {
+        eventId: string;
+        sourceAccountId: string;
+        messageId: string;
+        content: { subject: string; from: string; sentAt: string; plainText: string };
+        signature: string;
+      };
+    },
+  };
+  const secrets = env.GMAIL_REDACTION_SECRETS_JSON
+    ? (JSON.parse(env.GMAIL_REDACTION_SECRETS_JSON) as readonly string[])
+    : undefined;
+  const engine = new GmailAIEngine({
+    db: env.DB,
+    messageLoader,
+    contentAttestationPublicKey: publicKey,
+    ai: env.WORKERS_AI,
+    now: () => now,
+    ...(secrets === undefined ? {} : { secrets }),
+  });
+  return createGmailEventProcessor({ db: env.DB, engine, now: () => now });
 }
 
 export default {
