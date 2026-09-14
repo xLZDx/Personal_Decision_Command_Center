@@ -1,4 +1,4 @@
-/* global crypto, Request, Response, AbortSignal, AbortController, setTimeout */
+/* global crypto, Request, Response, URL, AbortSignal, AbortController, setTimeout */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { verifyEcdsaP256Signature } from '@pdos/domain';
