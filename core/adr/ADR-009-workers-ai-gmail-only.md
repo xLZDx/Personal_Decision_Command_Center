@@ -1,44 +1,49 @@
-# ADR-009: Gmail-Only AI Provider / Data-Use Decision
+# ADR-009: Workers AI Provider / Original Gmail-Only Data-Use Decision
 
-**Status:** ADOPTED at G0 closure, 2026-09-10 (G0 output K). GPT-PM VERDICT: APPROVE, 0 BLOCKER /
-0 MAJOR. Approval anchor: G0 evidence commit `71ab1cf`. GPT-PM also cited a blob hash for
-`governance/plans/G0_PLAN.md` that belongs to a later commit; see `governance/G0_CLOSURE_REPORT.md`.
-G0 item C re-verified the Workers AI Customer Content statement verbatim and recorded the free
-allocation of 10,000 Neurons/day, which TDD §65 did not carry
-(`docs/architecture/EXTERNAL_ASSUMPTIONS.md` C). The per-model license/terms check before any
-production Gmail content reaches AI remains owed at G3.
-**Source:** `docs/architecture/TDD.md` §24, §25.
+**Status:** PARTIALLY SUPERSEDED by `ADR-012-telegram-ai-context-policy.md`.
+
+**Originally adopted:** G0 closure, 2026-09-10.
+
+The provider/model/quota/privacy parts of this ADR remain relevant. The old architectural claim that MVP1 AI is permanently Gmail-only is superseded by ADR-012 plus `docs/architecture/TDD_INVARIANT_AMENDMENTS.md`.
 
 ## Context
 
-AI is optional in MVP1 and only ever processes Gmail-source-local evidence (see `ADR-005`). This
-ADR records the provider choice and the data-use terms it currently rests on, so the choice is
-revisited explicitly if the terms change rather than silently assumed.
+At G0 the project deliberately chose the safest known policy: AI was optional and processed only Gmail-source-local evidence. That was a conservative product policy, not a timeless property of the provider abstraction.
 
-## Decision
+Later policy reconciliation established a more precise source-neutral rule: AI input eligibility is evaluated per value/context from current SourcePolicy + provenance + purpose + consent/authorization. Telegram is deny-by-default, not permanently deny-by-source-name.
 
-- AI is provider-abstracted (`AIProvider`: `WorkersAIProvider` | `NoAIProvider` | future
-  `LocalProvider`); no domain service imports a provider SDK directly.
-- Default/reference provider: Cloudflare Workers AI, reachable via REST API from outside Workers.
-  As of the TDD's verification date, Cloudflare documents that Workers AI Customer Content is not
-  used to train models made available on Workers AI and is not used to improve Cloudflare or
-  third-party services without explicit consent.
-- This does not remove the requirement to review, at G0 and again before any production Gmail
-  content is sent to AI: the selected model's own license, the selected model provider's terms,
-  the retention/privacy configuration, and the Gmail source policy's own permission to submit
-  content to AI.
-- AI may be disabled entirely (`NoAIProvider`); the system must still operate fully without it —
-  Gmail decision detection degrades to deterministic/rule-based extraction only.
+## Provider decision retained
+
+- AI remains provider-abstracted; no domain service should import a provider SDK directly.
+- Cloudflare Workers AI remains the reference provider unless a later gate changes it.
+- Before production content is sent to any model, re-verify the selected model's license/provider terms, retention/privacy configuration, source-policy permission, and HARD_ZERO quota constraints.
+- AI may be disabled entirely; core collection/routing/decision behavior must continue in a deterministic degraded mode.
+
+## AI access boundary — superseded wording
+
+The historical wording “`AIContextBuilder` accepts only `GmailEvidenceBundle`” is no longer the target architecture.
+
+The target architecture is the policy-authorized evidence/context builder defined by ADR-012 and amended INV-05/26:
+
+- every submitted source-derived value must carry provenance;
+- every contributing provenance ancestor must be currently authorized for the exact purpose/context;
+- any deny/unknown/expired/revoked/incompatible scope fails the whole call closed;
+- arbitrary `Topic`, `Stream`, `Person`, source message or generic serializable objects cannot bypass the builder.
+
+`GmailEvidenceBundle` remains a safe **current runtime subset** until a separately reviewed runtime gate changes code. Do not interpret this ADR as proof that Telegram AI is already implemented.
 
 ## Consequences
 
-- `packages/policy` records the model/terms snapshot as an ADR-linked artifact, not tribal
-  knowledge; a model/provider change requires updating this ADR.
-- `AIContextBuilder` (see `ADR-005`) is the only caller of `AIProvider` — this ADR does not grant
-  any other code path AI access.
+- Provider terms and source-policy terms are separate checks; a provider being safe for customer content does not authorize a source to be submitted.
+- Mixed-source context may become eligible only when every submitted value independently passes policy.
+- A source-name allow/deny shortcut is not sufficient for future connectors.
 
-## Verification owed at gate time (G0/G3)
+## Verification owed at gate time
 
-Live re-fetch of Workers AI Customer Content policy and the selected model's license/terms before
-any production Gmail content is sent to AI; AI-disabled mode functional test; AI-quota-exhausted
-degrade-safely test.
+Before any production AI path is added or widened:
+
+- re-fetch Workers AI Customer Content policy and selected model terms;
+- re-fetch the relevant source provider terms;
+- verify policy-authorized input construction and fail-closed provenance walk;
+- test AI-disabled and quota-exhausted behavior;
+- for Telegram, satisfy the ADR-012 consent/context test matrix before enabling an ALLOW path.
