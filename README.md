@@ -5,45 +5,49 @@ new events from Gmail and personal Telegram, normalizes and associates them with
 people/projects/streams/topics, tracks commitments and decisions, and shows one prioritized
 "what needs my attention now" surface with full evidence drill-down.
 
-Full architecture: [`docs/architecture/TDD.md`](docs/architecture/TDD.md) (binding baseline,
-v0.3 FINAL), read together with [`docs/architecture/TDD_ERRATA.md`](docs/architecture/TDD_ERRATA.md),
-which is normative and outranks it on concrete details.
-Project governance contract for Claude Code sessions: [`CLAUDE.md`](CLAUDE.md);
-tool-agnostic version for any other coding agent: [`AGENTS.md`](AGENTS.md).
-Current status and gate plan: [`core/PLAN_MASTER_GATES.md`](core/PLAN_MASTER_GATES.md).
+## Architecture reading order
 
-## Status
+The frozen v0.3 TDD is the historical baseline, but it is no longer sufficient by itself.
+Read current architecture in this order:
 
-**G0 closed; G1 (toolchain, CI, governance enforcement) remediated.** See
-[`core/PLAN_MASTER_GATES.md`](core/PLAN_MASTER_GATES.md) for the authoritative per-gate status,
-which changes faster than this line does. No connector, service, or PWA code exists yet — that
-begins at G2+, each gate individually authorized. See
-[`core/DECISION_LOG.md`](core/DECISION_LOG.md) for what has actually been decided.
+1. [`docs/architecture/TDD_INVARIANT_AMENDMENTS.md`](docs/architecture/TDD_INVARIANT_AMENDMENTS.md)
+   — adopted invariant changes, including the current Telegram AI policy;
+2. [`docs/architecture/TDD_ERRATA.md`](docs/architecture/TDD_ERRATA.md)
+   — normative non-invariant corrections;
+3. [`docs/architecture/TDD.md`](docs/architecture/TDD.md)
+   — frozen v0.3 baseline for everything not superseded;
+4. current ADRs under [`core/adr/`](core/adr/), where a newer ADR may explicitly supersede an older decision.
+
+**Important:** v0.3's absolute "Telegram-derived data never enters AI / Gmail-only AI forever" wording is historical and superseded by
+[`ADR-012`](core/adr/ADR-012-telegram-ai-context-policy.md) plus the invariant amendments. Current
+policy is fail-closed and context/purpose/consent scoped, not source-name-only.
+
+Project governance contract for Claude Code sessions: [`CLAUDE.md`](CLAUDE.md); tool-agnostic
+version: [`AGENTS.md`](AGENTS.md). Current gate state: [`core/PLAN_MASTER_GATES.md`](core/PLAN_MASTER_GATES.md).
 
 ## Scope (MVP1)
 
-Exactly two sources: Gmail + personal Telegram. See
-[`core/MVP1_SCOPE_LOCK.md`](core/MVP1_SCOPE_LOCK.md) — this is a hard boundary, not a starting
-point to expand from casually.
+Exactly two implemented MVP1 sources: Gmail + personal Telegram. See
+[`core/MVP1_SCOPE_LOCK.md`](core/MVP1_SCOPE_LOCK.md). This implementation-scope limit is separate
+from source policy: a Telegram source may be AI_DENY or policy-eligible depending on the exact
+ingress mode/context/consent rules; source count and AI eligibility are different concerns.
 
 ## Repository layout
 
-```
-CLAUDE.md        Claude Code entry point (project governance contract)
-AGENTS.md        tool-agnostic version of the same contract, for any other coding agent
-core/            product/scope/gate/decision/risk/policy/DoD governance docs + ADRs
-docs/            architecture (TDD, data model, provenance, threat model, connectors, observability),
-                 product (MVP1, post-MVP, user flows), runbooks
-apps/pwa/        the PWA client (empty — G7)
-services/        api, ingest, processor, resolver, decision, notification, reporting,
-                 content-request-broker (empty — G2+)
-connectors/      gmail, telegram-tdlib (empty — G3/G4)
-host/            content-gateway, backup-agent, optional-http-pull-consumer (empty — G4/G8)
-packages/        contracts, domain, policy, provenance, telemetry, testkit (empty — G1+)
-infra/           cloudflare, connector-host, migrations (empty — G1+)
-tests/           unit, contract, integration, e2e, policy, security, resilience, quota, fixtures
-governance/      plans, reviews, gate-manifests (operator-owned), operator-approvals (operator-owned)
-scripts/         verify, quota, probes, backup, restore, ops
-.claude/agents/  the ten review roles (arch-01 .. red-01)
-.claude/skills/  project-local gate workflow skill
+```text
+CLAUDE.md        Claude Code entry point / project governance contract
+AGENTS.md        tool-agnostic operating contract
+core/            product/scope/gate/decision/risk/policy/DoD docs + ADRs
+docs/            architecture, product and runbooks
+apps/pwa/        PWA client
+services/        api, ingest, processor, resolver, decision, notification, reporting, content broker
+connectors/      source connectors
+host/            connector-host services/content gateway/backup helpers
+packages/        contracts, domain, policy, provenance, telemetry, testkit
+infra/           cloud/platform/migrations
+ tests/           unit/contract/integration/e2e/policy/security/resilience/quota fixtures
+governance/      plans, reviews, gate manifests, approvals
+scripts/         verification/quota/probes/backup/restore/ops
+.claude/agents/  specialist review roles
+.claude/skills/  project-local skills
 ```
