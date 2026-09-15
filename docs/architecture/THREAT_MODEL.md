@@ -1,21 +1,14 @@
 # Threat Model
 
-**Status:** G0 output N — **REVIEWED AND ADOPTED at G0 closure, 2026-09-10.** The independent
-review was performed by GPT-PM in fresh context, acting as the SEC/PRIV reviewer, which satisfies
-the "at least one substantive review is fresh-context independent from the implementer context"
-requirement (`../../core/DEFINITION_OF_DONE.md` item 21) for G0. Its verdict: no new
-BLOCKER/MAJOR, and specifically that the Telegram→AI boundary is closed tightly enough — the only
-MVP1 AI input is Gmail-only pre-merge evidence, and combined Gmail+Telegram state never returns to
-AI.
+**Status:** G0 baseline reviewed/adopted 2026-09-10; Telegram-AI policy boundary updated by `ADR-012-telegram-ai-context-policy.md` and `TDD_INVARIANT_AMENDMENTS.md`.
 
-Re-review is owed at any source-policy change, quarterly, and whenever a gate adds a new trust
-boundary (`../../core/SOURCE_POLICY.md`). The per-gate verification table at the end of this file
-is what each later gate is measured against — adoption here is not a claim that those tests have
-run.
+The old G0 claim that the only safe MVP1 AI input is permanently Gmail-only is historical. The current security property is stronger and more general: **no source-derived value reaches AI unless the fail-closed SourcePolicy + provenance evaluator authorizes that exact value/context/purpose.** Telegram remains deny-by-default where required consent/authorization is absent or unprovable.
 
-## Threat catalogue (TDD §37)
+Re-review is owed at any source-policy change, any widening of AI scope, quarterly for mutable provider terms, and whenever a gate adds a new trust boundary.
 
-```
+## Threat catalogue
+
+```text
 stolen phone/browser session
 OAuth token compromise
 Telegram session theft
@@ -31,42 +24,71 @@ supply-chain compromise
 backup theft
 operator error
 policy bypass through derived state
+consent fabrication / consent-scope escalation
+consent revocation not taking effect
+provider-ingress confusion (TDLib vs Bot vs Business chatbot)
 ```
 
 ## Controls mapped to threats
 
-| Threat                                             | Primary control                                                                                                                                                                                                                                  | Where enforced                                                             |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| Stolen phone/browser session                       | Short-lived authenticated session, re-auth for sensitive changes                                                                                                                                                                                 | `services/api`, PWA session layer (§38)                                    |
-| OAuth token compromise (Gmail)                     | PKCE, encrypted refresh-token storage, key-encryption secret outside D1 as Worker Secret, never client-readable/logged/in URLs, revocable, least privilege                                                                                       | `connectors/gmail` (§39)                                                   |
-| Telegram session theft                             | Connector-host disk encryption where feasible, root/service-user only permissions, no session material in repo/backups unencrypted, revocation runbook                                                                                           | `connectors/telegram-tdlib`, `host/` (§40)                                 |
-| Connector-host compromise                          | Treated as source-account incident; session revocation runbook                                                                                                                                                                                   | `host/`, `docs/runbooks/CONNECTOR_KEY_COMPROMISE.md`                       |
-| Malicious inbound email/message / prompt injection | Source content is untrusted data, never trusted instruction (INV-25); AI has no tools/credentials/policy-mutation rights; schema-validated output; human-facing AI fields are plain-text, length-capped, no links unless independently generated | `packages/policy`, `services/decision` (§44)                               |
-| Webhook spoofing (Gmail Pub/Sub)                   | OIDC/JWT identity + audience verification; unsigned/unexpected pushes rejected                                                                                                                                                                   | `connectors/gmail` (§12)                                                   |
-| Replay attack (Telegram content requests)          | Fresh nonce per request, <=60s expiry, AES-GCM associated data binds request_id/source_ref/schema_version, replay rejected                                                                                                                       | `services/content-request-broker`, `host/content-gateway` (§33.3, ADR-007) |
-| Queue replay / duplicate action execution          | Idempotency key `(source_account_id, source_event_id, event_type, source_version_if_needed)`; idempotent consumer                                                                                                                                | `services/ingest`, `services/processor` (§14, INV-08)                      |
-| XSS/CSRF                                           | Strict CSP, no unsafe-eval/inline, HttpOnly/Secure/SameSite cookies, CSRF protection, Referrer-Policy, Permissions-Policy, X-Content-Type-Options, Trusted Types where practical                                                                 | `apps/pwa` (§43)                                                           |
-| Supply-chain compromise                            | TDLib version/checksum pinned; dependency scan in CI; least-privilege API tokens (no Global API keys)                                                                                                                                            | CI (`.github/workflows`), `ADR-003`                                        |
-| Backup theft                                       | Local compress + authenticated encryption before R2 upload; backup key/passphrase kept outside R2; operator-held recovery/escrow procedure                                                                                                       | `host/backup-agent` (§53)                                                  |
-| Operator error                                     | Gate manifests/operator-approvals as protected paths; decision log; restore-tested backups                                                                                                                                                       | `governance/`, `docs/runbooks/RESTORE.md`                                  |
-| Policy bypass through derived state                | Provenance DAG + fail-closed composition rule; `Topic`/`Stream`/`Person` objects are type/schema-blocked from the AI API, not just policy-blocked                                                                                                | `packages/provenance`, `packages/policy` (ADR-005)                         |
+| Threat | Primary control |
+| --- | --- |
+| Stolen session | short-lived authenticated sessions; re-auth for sensitive changes |
+| Gmail OAuth compromise | PKCE, encrypted refresh token storage, least privilege, revocation |
+| Telegram session theft | connector-host hardening, restricted session material, revocation runbook |
+| Connector-host compromise | treat as source-account incident; revoke credentials/session |
+| Malicious source / prompt injection | source content is untrusted data; AI has no connector credentials or policy-mutation rights; schema-validated output; safe rendering |
+| Webhook spoofing | provider authentication verification (e.g. Gmail Pub/Sub OIDC/JWT) |
+| Telegram content-request replay | short-lived nonce, authenticated request, AEAD-bound request metadata, replay rejection |
+| Queue replay / duplicate processing | source-stable idempotency + idempotent consumer |
+| XSS/CSRF | CSP, safe cookies, CSRF controls, safe rendering/security headers |
+| Supply-chain compromise | pinned/checksummed dependencies, CI scanning, least-privilege tokens |
+| Backup theft | authenticated encryption before remote storage; keys separated |
+| Operator error | gate governance, decision log, restore-tested backups |
+| Policy bypass through derived state | provenance DAG + trusted policy-authorized AI input builder; no generic Topic/object bypass |
+| Consent fabrication | consent records are trusted application state, not model/source claims; source content cannot create/expand consent |
+| Consent-scope escalation | explicit chat/content/context + purpose scope; non-transferable between contexts/purposes |
+| Revocation lag | revocation/expiry checked immediately before AI authorization; subsequent calls fail closed |
+| Ingress-mode confusion | SourcePolicy distinguishes personal TDLib, Bot/Mini-App and Business-chatbot semantics instead of one Telegram boolean |
 
-## Accepted residual risks (not mitigated further, documented deliberately)
+## Telegram AI-specific security model
 
-- **Push timing side-channel (INV-31, R7):** FCM/APNs can observe that a push occurred and when,
-  even though payload content is opaque (`ADR-008`). INFO severity, not blocking.
-- **App-switcher OS snapshot (§43):** operating systems may show app-switcher snapshots of the PWA;
-  accepted platform risk, optionally mitigated by blurring sensitive views on visibility change.
-- **Catastrophic connector-host disk loss before central ACK (§15):** events not yet durably ACKed
-  centrally may be unrecoverable from source history alone; mitigated, not eliminated, by TDLib
-  reconnect/source-difference recovery testing.
+Telegram provenance is not a permanent deny bit and is never removed.
 
-## Verification owed at gate time
+At an AI boundary it triggers policy evaluation under ADR-012:
 
-Pub/Sub OIDC/JWT authentication test; connector replay-protection test; connector key-rotation
-test (or exercised in staging); Cloudflare Tunnel `ContentRequest` full auth-chain test; Telegram
-ECDH/HKDF/AES-GCM envelope test (expired/replayed nonce rejected); CSP/security-header
-verification; raw-content-logging-clean test; opaque-push-payload test; AI human-facing field
-plain-text/length-cap test; prompt-injection test suite; TDLib dependency/checksum verification;
-backup encryption/recovery-key procedure test; gate-manifest/operator-approval integrity CI check.
-See `docs/architecture/TDD.md` §74 (Security DoD) for the full binding list.
+```text
+personal TDLib without required scoped consent        DENY
+unknown/expired/revoked consent                       DENY
+bot/mini-app direct interaction with valid scoped consent  potentially ALLOW
+business-chatbot context with valid scope/authorization    potentially ALLOW
+mixed Gmail+Telegram where every submitted ancestor ALLOW  potentially ALLOW
+one denied/unknown/incompatible ancestor              whole call DENY
+```
+
+'Potentially ALLOW' still requires all other provider/model/HARD_ZERO/security policies to pass.
+
+The existence of a Telegram Bot, Mini App or Business-chatbot feature is never accepted as proof of blanket AI permission.
+
+## Residual risks
+
+- Push timing side-channel remains even with opaque payloads.
+- OS app-switcher snapshots may reveal rendered UI content.
+- Connector-host catastrophic loss before central ACK may lose not-yet-acked source events.
+- Provider terms can change without notice; dated primary-source re-verification is therefore a required operational control.
+
+## Verification owed at the runtime policy-migration gate
+
+In addition to existing security tests, independently prove:
+
+- policy-authorized AI builder has no generic object bypass;
+- personal TDLib chat without required consent is denied;
+- valid scoped Bot/Mini-App/Business context can be authorized only through trusted policy state;
+- chat/purpose scope cannot leak to another chat/purpose;
+- revocation/expiry blocks the next AI call;
+- mixed context with one deny/unknown node fails the entire call;
+- provenance stripping/relabeling is detected/prevented;
+- source payload/model output cannot mutate consent/SourcePolicy;
+- current normalized-event guard migration does not make connector-controlled `ai_policy=ALLOW` authoritative;
+- provider/model quota and AI-disabled degradation remain safe;
+- raw source content logging/storage rules do not regress.
