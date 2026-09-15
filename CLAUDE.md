@@ -5,9 +5,8 @@ GO/push/evidence/git contract in `~/.claude/CLAUDE.md` or the workspace containe
 `D:\Repo\CLAUDE.md` — both still apply. `AGENTS.md` carries the same contract in tool-agnostic
 form for any other coding agent; keep the two in sync when either changes.
 This file adds the governance model that is **specific and binding for this repository only**,
-established in `Personal_Decision_OS_v0.3_Implementation_Pack/Personal_Decision_OS_Claude_Implementation_Kickoff_v0.3.md`
-(the kickoff prompt) and `docs/architecture/TDD.md` (the adopted TDD v0.3 FINAL, binding architecture
-baseline).
+established in the implementation kickoff, the adopted TDD v0.3 baseline, and later formally
+adopted invariant amendments/ADRs.
 
 ## 1. Roles
 
@@ -43,9 +42,13 @@ Claude MUST NOT:
   other PR now, no separate operator-only step;
 - silently expand MVP1 scope or add a source outside the fixed MVP1 list below;
 - weaken/delete tests to obtain green, or mark a reviewer finding closed without evidence;
-- change `SourcePolicy`/`RetentionPolicy`/security invariants without an ADR;
+- change `SourcePolicy`/`RetentionPolicy`/security invariants without an ADR plus independent review
+  plus operator approval;
 - introduce paid dependencies/fallbacks (`HARD_ZERO`, see `core/adr/ADR-010-hard-zero-cost.md`);
-- send Telegram-derived data to AI in any form (see INV-03/04/05/26 in `docs/architecture/TDD.md` §5, §7);
+- send any source-derived value to AI without the current fail-closed SourcePolicy + provenance
+  authorization for that exact purpose/context. Telegram is **not** a permanent source-name deny,
+  but Telegram AI is deny-by-default unless the applicable ingress-mode/consent/authorization
+  requirements in `core/adr/ADR-012-telegram-ai-context-policy.md` are proven;
 - hide failed tests or quota violations.
 
 ## 3. Fixed MVP1 scope
@@ -68,10 +71,9 @@ Completion of one gate does NOT authorize the next. Each gate has its own bindin
 and needs its own plan + GO before implementation, exactly like the global GO contract — this section
 narrows _scope_ (one gate, not "MVP1"), it does not relax the global mechanism.
 
-**Current state: G0 CLOSED (2026-09-10); G1 remediated, closure findings being resolved
-(2026-09-12).** See `core/PLAN_MASTER_GATES.md` for the authoritative per-gate status table and
-`core/DECISION_LOG.md` for what has actually been decided/closed so far — this line is a pointer,
-not the source of truth, and is the kind of line that goes stale; check the table if in doubt.
+See `core/PLAN_MASTER_GATES.md` for the authoritative per-gate status table and
+`core/DECISION_LOG.md` for what has actually been decided/closed so far. Do not trust a stale
+status sentence in a narrative document over those sources.
 
 ## 5. Review roles
 
@@ -87,14 +89,24 @@ Implementer cannot downgrade severity. See `docs/architecture/TDD.md` §60.
 
 ## 6. Non-negotiable architecture invariants
 
-The 31 invariants (INV-01..INV-31) in `docs/architecture/TDD.md` §5 cannot be changed without an ADR
-plus independent review plus operator approval. The ones most likely to be violated by an
-unreviewed shortcut, worth repeating here:
+The architecture invariants in `docs/architecture/TDD.md` §5 are binding **as amended by**
+`docs/architecture/TDD_INVARIANT_AMENDMENTS.md`. An invariant change requires an ADR plus
+independent review plus operator approval.
 
-- Telegram raw or Telegram-derived content **never** enters any AI call, in any form, at any
-  granularity — including enum assignments, aggregates, counts, and cross-channel Topic/Stream/Person
-  state derived even partly from Telegram (INV-03/04/05/26). MVP1 AI accepts exactly one input type:
-  `GmailEvidenceBundle`, built _before_ cross-channel merge.
+The ones most likely to be violated by an unreviewed shortcut:
+
+- Every source-derived value/assignment retains provenance. Telegram provenance is never stripped
+  or relabelled to obtain AI permission (INV-04 retained).
+- AI accepts only a policy-authorized evidence/context bundle produced by fail-closed provenance +
+  SourcePolicy evaluation. Arbitrary `Topic`/`Stream`/`Person`/generic objects cannot bypass that
+  boundary (amended INV-05).
+- Telegram AI is **context/purpose/consent scoped**: personal TDLib/private-chat data is AI_DENY by
+  default; an ALLOW path requires the applicable current Telegram ingress-mode, consent/
+  authorization and provider-policy conditions to be proven. Bot/Mini-App/Business-chatbot support
+  does not imply blanket permission (amended INV-03, ADR-012).
+- Mixed Gmail+Telegram context is not automatically denied. It may enter AI only if every submitted
+  provenance ancestor is currently AI_ALLOW for the exact purpose/context with compatible scopes;
+  any deny/unknown/expired/revoked/incompatible node fails the whole call closed (amended INV-26).
 - No pre-connection Telegram backfill; only events with `occurred_at >= connected_at` are centrally
   emitted (INV-02/local TDLib cache may exist client-side, see TDD §11).
 - Push payload is opaque — no sender/title/question/deadline/source-derived text (INV-11).
@@ -111,13 +123,20 @@ that gate's own component DoD. A green test suite alone never closes a gate.
 
 ## 8. Source of truth ordering
 
-Repository (code + `docs/architecture/TDD.md`) > `core/DECISION_LOG.md` > `governance/plans/` roadmap.
-Where a document contradicts executable behavior or a newer decision, investigate which is stale,
-fix the stale artifact, and record the correction in the decision log — never silently keep a design
-known to be wrong because an older doc still describes it.
+Repository executable behavior + the current binding architecture set outrank stale narrative
+copies. For architecture, read in this order:
 
-**`docs/architecture/TDD_ERRATA.md` outranks `TDD.md` and must be read with it.** The TDD is frozen,
-so it cannot self-correct; the errata file is where a gate's findings against a concrete detail —
-a path, a file name, a figure — are recorded normatively. It may not amend INV-01..INV-31, and an
-entry may be added only by a gate carrying an explicit GPT-PM ruling, quoted in the entry. Read it
-before treating any specific detail of the TDD as binding.
+1. `docs/architecture/TDD_INVARIANT_AMENDMENTS.md` for adopted invariant changes;
+2. `docs/architecture/TDD_ERRATA.md` for adopted non-invariant concrete corrections;
+3. frozen `docs/architecture/TDD.md` for everything not superseded above;
+4. adopted ADRs, with a newer ADR explicitly superseding an older ADR on the named decision;
+5. `core/DECISION_LOG.md` for the decision/audit record;
+6. `governance/plans/` as roadmap/plan evidence, not architecture authority.
+
+Where a document contradicts executable behavior or a newer adopted decision, investigate which is
+stale, fix or clearly mark the stale live artifact, and record the correction in the decision log.
+Do not silently preserve a design known to be superseded merely because an older frozen/historical
+file still contains it.
+
+`TDD_ERRATA.md` still may not amend invariants. Invariant changes belong in
+`TDD_INVARIANT_AMENDMENTS.md` and require the ADR/review/operator-approval process above.
