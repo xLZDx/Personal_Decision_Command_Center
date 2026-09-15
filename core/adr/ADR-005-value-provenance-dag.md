@@ -1,64 +1,93 @@
-# ADR-005: Value/Assignment Provenance DAG + Gmail-Only Pre-Aggregation AI Boundary
+# ADR-005: Value/Assignment Provenance DAG
 
-**Status:** ADOPTED at G0 closure, 2026-09-10 (G0 output H). GPT-PM VERDICT: APPROVE, 0 BLOCKER /
-0 MAJOR. Approval anchor: G0 evidence commit `71ab1cf`. GPT-PM also cited a blob hash for
-`governance/plans/G0_PLAN.md` that belongs to a later commit; see `governance/G0_CLOSURE_REPORT.md`.
-Resolves NM2 (the v0.2 adversarial review's enum/aggregate/existential Telegram-leakage MAJOR).
-**Source:** `docs/architecture/TDD.md` §7, §7.1, §7.2, §8, §24.
+**Status:** ADOPTED; AI-boundary portion PARTIALLY SUPERSEDED by `ADR-012-telegram-ai-context-policy.md` and `docs/architecture/TDD_INVARIANT_AMENDMENTS.md`.
+
+**Originally adopted:** G0 closure, 2026-09-10.
 
 ## Context
 
-Datatype-level taint (raw Telegram text never reaches AI) is not sufficient. The v0.2 review
-(NM2) showed a Telegram-derived intent enum, a Telegram-advanced `updated_at`, or the mere
-membership of a combined Topic (which Gmail messages ended up next to which Telegram messages)
-can each leak Telegram-originated information into an AI context even when no Telegram string is
-literally present. The review required choosing and documenting one of two variants explicitly.
+Datatype-level taint is not sufficient. A source-derived intent enum, timestamp change, aggregate, membership relationship or assignment can carry source information even when no raw source string is present.
 
-## Decision
+That finding remains fully valid.
 
-**Variant A (adopted):** the MVP1 AI context is built _exclusively_ from Gmail-evidence-scoped
-objects. No Topic/Stream/Person/shared-state field, and no aggregate derived from cross-channel
-membership, ever enters an AI request — regardless of whether every individual field looks
-Gmail-only in isolation.
+What changed later is the policy decision attached to Telegram provenance: Telegram ancestry no longer means permanent source-name `AI_DENY`; it means the AI boundary must evaluate the current Telegram policy, purpose, consent/authorization and context for that exact value/call.
 
-Concretely:
+## Decision — retained provenance DAG
 
-- Every value **and every semantic assignment** caused by source content is provenance-bearing;
-  datatype is irrelevant (`ProvenanceValue<T>` wrapper, TDD §7).
-- The only accepted MVP1 AI input type is `GmailEvidenceBundle`, built from Gmail source evidence
-  **before** cross-channel topic resolution (TDD §24.1). There is no overload accepting `Topic`,
-  `Stream`, `Person`, `Decision`, `CrossChannelContext`, or a generic `DerivedValue[]`.
-  `AIContextBuilder.build(GmailEvidenceBundle) -> AIRequest` is the only entry point.
-  Runtime `assert_ai_safe()` additionally traverses provenance and fails closed.
-- After the deterministic cross-channel resolver combines Gmail and Telegram evidence into one
-  Topic/Decision, that combined state is **never** sent back to AI in MVP1 (TDD §24.2). A future
-  AI summary/recommendation over a combined topic is explicitly POST-MVP and needs its own
-  source-policy/compliance review.
-- Composition rule: `ai_safe(value) = all provenance ancestors are AI_ALLOW`. Unknown/mixed
-  ancestry = `AI_DENY` (fail closed).
+- Every source-derived value **and semantic assignment** is provenance-bearing. Datatype is irrelevant.
+- Provenance ancestry must survive derivation, aggregation and cross-source composition.
+- Unknown ancestry and cycles fail closed at security/policy boundaries.
+- Provenance may not be stripped, rewritten or replaced with a system-owned label merely to make a value AI-eligible.
+- `packages/provenance` / `packages/policy` must keep the ancestry walk testable and explicit.
 
-This is stricter than Variant B (allowing Telegram-tainted enum/state/date fields into context as
-an accepted bounded leak) — Variant A removes the existential membership-selection channel
-entirely by construction rather than documenting it as accepted residual risk.
+## AI-boundary decision — superseded model
 
-## Consequences
+The historical v0.3 model accepted only `GmailEvidenceBundle` and rejected every combined Topic/Telegram-influenced state by construction.
 
-- `intent_class`, `updated_at`/`occurred_at` when advanced by a Telegram event, and combined-topic
-  participant/evidence counts are never passed to the AI serializer, full stop — no "system
-  constant, so it's fine" exception, because the _assignment_ still carries provenance even when
-  the value itself is a plain enum.
-- Gmail AI enrichment must run and produce `GmailSourceEnrichment` **before** the cross-channel
-  resolver runs (mandatory processing order, TDD §7.1).
-- `packages/provenance` and `packages/policy` must implement the DAG and the fail-closed
-  composition rule as testable primitives, not documentation.
+That **source-name-specific restriction is superseded**.
 
-## Verification owed at gate time (G2 primitives, G6 AI integration)
+The target input boundary is now:
 
-Mandatory automated tests (TDD §70), each an independent assertion, not one umbrella test:
-raw Telegram -> AI BLOCKED; Telegram-derived string/number/datetime/boolean/display-name/enum
-assignment/count-aggregate/routing-hint -> AI BLOCKED; nested/mixed/unknown ancestry -> AI BLOCKED;
-`Topic`/`Stream`/`Person`/shared-identity object -> AI API TYPE/SCHEMA BLOCKED (not just policy-
-blocked — the type system itself must reject it); `GmailEvidenceBundle` with Gmail-only eligible
-ancestry -> ALLOWED; Gmail AI enrichment provably occurs before cross-channel resolution; combined
-Gmail+Telegram Topic never serialized into an AI request; AI serializer cannot bypass the
-provenance gate via any code path.
+```text
+PolicyAuthorizedEvidenceContext
+  <- constructed only after fail-closed SourcePolicy + provenance evaluation
+```
+
+The exact runtime type name is intentionally deferred to the implementing gate.
+
+The builder must still reject arbitrary `Topic`, `Stream`, `Person`, `Decision`, generic `Serializable`, source messages or unverified derived-value arrays as direct inputs.
+
+For every source-derived value included in an AI request, policy must prove current authorization for:
+
+- source/ingress mode;
+- exact purpose;
+- exact chat/content/context scope where relevant;
+- required consent/authorization state;
+- provider-terms snapshot;
+- compatible provenance scopes across the whole request.
+
+Composition rule:
+
+```text
+ai_safe_for(request) =
+  every submitted source-derived provenance ancestor is current ALLOW
+  for this exact purpose/context
+  AND all scopes are compatible
+
+any DENY | unknown | expired | revoked | incompatible | unresolved => whole request DENY
+```
+
+Mixed Gmail+Telegram ancestry is therefore neither automatically denied nor automatically allowed.
+
+## Telegram-specific consequence
+
+Telegram-derived values retain Telegram provenance under amended INV-04.
+
+At the AI boundary, that provenance triggers ADR-012 policy evaluation rather than unconditional permanent denial.
+
+Personal TDLib/private-chat evidence remains deny-by-default unless the required relevant-user, context-bounded consent can be proven. Bot/Mini-App/Business-chatbot contexts may become eligible only when their applicable consent/disclosure/authorization requirements are satisfied.
+
+## Processing order
+
+Source-local enrichment may still run before cross-channel merge where that is the safest/cheapest implementation path. However, the architecture no longer claims that *all* AI must permanently precede cross-channel resolution.
+
+A future mixed-source AI path is permitted only through the policy-authorized builder and requires its own reviewed runtime gate.
+
+## Verification owed at implementation time
+
+At minimum test independently:
+
+- provenance survives string/number/datetime/boolean/enum/assignment/aggregate derivations;
+- unknown/cyclic ancestry fails closed;
+- arbitrary Topic/Stream/Person/shared objects cannot bypass the authorized builder;
+- personal Telegram context without required consent => DENY;
+- valid scoped Telegram consent/authorization can make the exact permitted context eligible;
+- chat A consent cannot authorize chat B;
+- purpose A consent cannot authorize purpose B;
+- mixed Gmail+Telegram with all contributing nodes allowed => eligible;
+- one denied/unknown/expired/revoked node => whole request DENY;
+- provenance stripping cannot manufacture ALLOW;
+- consent revocation affects subsequent calls;
+- serializer/provider callers cannot bypass policy evaluation.
+
+Historical G0/G2 tests that assert unconditional Telegram=>BLOCKED represent the old policy and must be revised only under the separately approved runtime migration gate; do not silently weaken them in a documentation-only change.
