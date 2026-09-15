@@ -1,72 +1,57 @@
 ---
 name: pdos-gates
-description: "Personal Decision OS's project-specific gate workflow (G0-G10, ten review roles, per-gate Definition of Done). Read this before starting, implementing, or closing any gate in this repository -- it layers on top of the global GO contract and rosetta, it does not replace either."
+description: "Personal Decision OS project-specific gate workflow (G0-G10, review roles, per-gate DoD). Read before starting, implementing, or closing a gate."
 ---
 
 # Personal Decision OS — Gate Workflow
 
-This project runs the global CLAUDE.md GO contract (`Plan -> GO -> Build -> Verify -> local Commit
--> Stop/report -> separate Push-GO -> Push`) and, where a Rosetta plan applies, its
-`Plan -> GO -> Act -> Validate -> Document` phases — **plus** a project-specific gate layer defined
-in `docs/architecture/TDD.md` §56-61 and the kickoff prompt
-(`governance/reviews/00-claude-implementation-kickoff-v0.3.md`). Read `CLAUDE.md` in this repo
-first; it is the short version of everything below.
+This project layers its gate model on top of the global GO/Rosetta contracts. Read repository `CLAUDE.md` first.
+
+Architecture reading order is now:
+
+1. `docs/architecture/TDD_INVARIANT_AMENDMENTS.md` for adopted invariant changes;
+2. `docs/architecture/TDD_ERRATA.md` for adopted non-invariant corrections;
+3. frozen `docs/architecture/TDD.md` for everything not superseded;
+4. adopted ADRs, where newer ADRs may explicitly supersede older decisions.
+
+Do not resurrect a frozen/historical policy statement when a current amendment supersedes it.
 
 ## 1. Know which gate you are in
 
-Check `core/PLAN_MASTER_GATES.md`. **Completion of one gate never authorizes the next** — this is
-stricter than the general "continue to the next gate automatically" guidance in global CLAUDE.md
-§17, because this project's own kickoff prompt says so explicitly ("Do not begin G1 work in the
-same gate") and no operator instruction has widened that yet.
+Check `core/PLAN_MASTER_GATES.md`. Completion of one gate never authorizes the next.
 
-## 2. Claude is IMPLEMENTER, not final approver
+## 2. Implementer is not final approver
 
-See `CLAUDE.md` §2. You may inspect, prepare evidence, write a gate plan, and draft ADR text at
-any time without a GO. You implement a gate only after that gate's own GO. You never self-approve
-a gate, edit `governance/gate-manifests/**` or `governance/operator-approvals/**`, or mark a
-reviewer finding closed without evidence.
+You may inspect, prepare evidence, write a gate plan and draft ADR text without GO. Implement only after that gate's explicit GO. Never self-approve or bypass protected governance state.
 
 ## 3. Per-gate flow
 
-```
+```text
 Recon -> Plan -> Plan review -> GO -> Implementation -> Test/verification ->
 Implementer self-check -> Independent review(s) -> Remediation -> Re-verification ->
-Final verdict -> Closure report -> Operator merge/push
+Final verdict -> Closure report -> merge/push under the active authority rules
 ```
-
-Write the plan into `governance/plans/<gate>_PLAN.md` (see `governance/plans/G0_PLAN.md` for the
-shape). For G0 specifically, close with the exact `G0 PLAN REVIEW REQUEST` format from the
-kickoff prompt.
 
 ## 4. Review roles
 
-Ten roles exist as project-local subagents in `.claude/agents/`: `arch-01`, `sec-01`, `priv-01`,
-`data-01`, `rel-01`, `ai-01`, `qa-01`, `ux-01`, `gov-01`, `red-01`. Select the minimal relevant
-set for the gate's actual surface (global CLAUDE.md §6 still governs selection) — a Gmail-connector
-gate needs `sec-01`/`priv-01`/`rel-01`/`data-01` at minimum, not necessarily `ux-01`. `gov-01` runs
-at every gate's close. `red-01` runs only after every other selected role has already returned
-APPROVE — it is the last check, not a parallel one.
+Project roles: `arch-01`, `sec-01`, `priv-01`, `data-01`, `rel-01`, `ai-01`, `qa-01`, `ux-01`, `gov-01`, `red-01`.
 
-Severity: `BLOCKER`/`MAJOR`/`MINOR`/`INFO`. ≥1 unresolved BLOCKER or MAJOR ⇒ REJECT. Implementer
-cannot downgrade severity (`docs/architecture/TDD.md` §60).
+Select the minimum relevant set. `gov-01` participates at gate close; `red-01` is the final adversarial sweep after other selected roles approve.
+
+Severity: `BLOCKER` / `MAJOR` / `MINOR` / `INFO`. Any unresolved BLOCKER/MAJOR rejects the gate.
 
 ## 5. Definition of Done
 
-`core/DEFINITION_OF_DONE.md` (universal, 31 items) plus the gate's own component DoD in
-`docs/architecture/TDD.md` §68-82. A green test suite alone never closes a gate — check that each
-test would actually fail if the guarded behavior were removed before citing it as evidence.
+Use `core/DEFINITION_OF_DONE.md` plus the active gate's DoD. Green tests alone do not close a gate; cited tests must actually fail when the guarded behavior is removed.
 
-## 6. The invariants that most often get silently violated by a shortcut
+## 6. Invariants most likely to be violated by shortcuts
 
-`docs/architecture/TDD.md` §5, INV-01..31. The three worth re-reading before touching AI,
-Telegram, or the queue consumer specifically: INV-03/04/05/26 (no Telegram content or
-Telegram-influenced assignment ever reaches AI, even via a combined-topic aggregate), INV-27 (the
-Queue consumer is bound by the same ~10ms Free-Worker CPU budget as any Worker — see
-`core/adr/ADR-011-queue-consumer-runtime.md`), INV-28 (a gate manifest an implementer edited in
-their own branch has no authority).
+- Source-derived values/assignments retain provenance. Do not strip Telegram provenance to manufacture AI permission.
+- AI input must pass fail-closed SourcePolicy + provenance authorization for the exact purpose/context. Telegram is **deny-by-default but not permanently denied by source name**; see ADR-012 and the invariant amendments.
+- Mixed Gmail+Telegram context is permitted only when every submitted source-derived ancestor is current ALLOW for the same purpose/context; any deny/unknown/expired/revoked/incompatible node denies the whole call.
+- The conservative Queue consumer CPU rule remains binding under INV-27/ADR-011.
+- A gate manifest edited outside its protected adoption/amendment process has no authority (INV-28).
 
 ## 7. Decision log
 
-Record durable decisions (not routine narration) in `core/DECISION_LOG.md` as they happen — a
-decision that exists only in chat history is not visible to the next session or to `red-01`/
-`gov-01`.
+Record durable decisions in `core/DECISION_LOG.md`. A decision that exists only in chat history is not visible to future reviewers.
