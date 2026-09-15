@@ -1,73 +1,123 @@
 # Source Policy
 
-Source: `docs/architecture/TDD.md` §6, §24-25, §3-4. Policy-sensitive file — changes require ADR +
-independent review + operator approval (project `CLAUDE.md` §2, §6).
+Source: `docs/architecture/TDD.md`, `docs/architecture/TDD_INVARIANT_AMENDMENTS.md`, and the adopted ADRs. Policy-sensitive file — changes require ADR + independent review + operator approval.
 
-## Telegram
+## Core rule
 
-**Verified live 2026-09-10** (G0 item B — see `docs/architecture/EXTERNAL_ASSUMPTIONS.md` for
-URLs, content hashes and full quotes). The prohibition is **broader** than this file originally
-summarized. Content Licensing and AI Scraping Terms, verbatim:
+Source provenance is always preserved, but source name alone is not the AI authorization decision.
 
-> "For clarity, Telegram firmly prohibits the scraping, indexing, harvesting, aggregation or use
-> of data obtained from its platform to train, fine-tune, validate or otherwise engage in the
-> development, enhancement, benchmarking or deployment of artificial intelligence, machine
-> learning models and similar technologies."
+AI eligibility is evaluated at runtime from:
 
-Note the verbs beyond "train/fine-tune": **scraping, indexing, harvesting, validate,
-benchmarking**. Consequences the narrower reading would have missed — a vector/embedding **index**
-over Telegram content is prohibited even with no model training; using Telegram content as an
-**evaluation/benchmark set** is prohibited; **aggregation** for these purposes is prohibited
-independently of any model.
+- source + ingress mode;
+- exact content/chat/context scope;
+- processing purpose;
+- current provider-terms snapshot;
+- consent/authorization state required for that ingress mode/purpose;
+- provenance ancestry of every submitted value;
+- revocation/expiry state.
 
-API Terms §1.5 carries the same prohibition and additionally binds API use to the Content
-Licensing terms. API Terms §1.3/§1.4 require a client not to break expected Telegram behavior —
-relevant to G4: do not implement a "ghost mode"/don't-mark-as-read feature, which §1.4 names
-explicitly as forbidden tampering.
+Unknown, incompatible, expired, revoked or unprovable authorization fails closed to `AI_DENY`.
 
-A consent exception exists in the Content Licensing terms but requires explicit, informed,
-continued consent from **all relevant users** (i.e. counterparties, not just the operator) per
-chat/context. MVP1 deliberately does not rely on it — recorded so the exception is visibly
-considered and declined rather than unmentioned.
+The normative Telegram AI policy is `core/adr/ADR-012-telegram-ai-context-policy.md` plus `docs/architecture/TDD_INVARIANT_AMENDMENTS.md`.
 
-Neither document carries a version number or `Last-Modified` header, so "current text" is pinned
-by fetch date plus SHA-256 of extracted text (recorded in `EXTERNAL_ASSUMPTIONS.md`). Re-fetch
-quarterly and before any change to AI scope.
+## Telegram — current policy
 
+Primary sources must be re-fetched before implementing or widening a Telegram AI path:
+
+- `https://core.telegram.org/api/terms`
+- `https://telegram.org/tos/content-licensing`
+- `https://telegram.org/tos/bot-developers`
+- `https://telegram.org/privacy`
+
+Current Telegram terms prohibit broad AI/ML use of Telegram-obtained data absent the applicable exception/consent conditions, while also supporting legitimate Clients/Bots/Mini Apps and Telegram Business chatbot integrations. The engineering policy therefore does **not** use either obsolete extreme:
+
+- NOT `Telegram => permanent AI_DENY`;
+- NOT `Telegram => blanket AI_ALLOW`.
+
+Instead Telegram AI eligibility is context/purpose/consent scoped and fail-closed.
+
+### Personal TDLib/private-chat path
+
+```text
+normal receive/display                         ALLOWED DESIGN PATH
+on-demand original drill-down                 ALLOWED DESIGN PATH
+deterministic routing                         ALLOWED SUBJECT TO CURRENT TERMS/POLICY
+AI without required scoped consent            DENY
+AI with provable applicable scoped consent    ELIGIBLE FOR POLICY ALLOW
 ```
-Telegram realtime client receive         ALLOWED DESIGN PATH
-Telegram normal display                  ALLOWED DESIGN PATH
-Telegram on-demand original drill-down    ALLOWED DESIGN PATH
-Telegram deterministic routing            PERMITTED ASSUMPTION; revalidate at G0 and periodically
-Telegram raw -> LLM                       FORBIDDEN
-Telegram raw -> embeddings                FORBIDDEN
-Telegram-derived values -> LLM            FORBIDDEN
-Telegram-derived values in AI prompts     FORBIDDEN
-Telegram historical AI index              FORBIDDEN
-```
 
-Per global CLAUDE.md §23: this policy is enforced because the operator has read and adopted these
-terms as part of the TDD's own governance baseline (not because a reviewer asserted it unread) —
-if any future reviewer finding claims a NEW prohibition not already in this file, verify the
-primary source before treating it as binding; do not invent additional restrictions.
+Personal account ownership alone is not sufficient proof that every relevant participant in an ordinary private chat has provided the consent required by the current Telegram AI/content-licensing terms.
+
+### Bot / Mini App / Business chatbot paths
+
+Direct user interaction with a Bot/Mini App/Business chatbot is not automatically AI_ALLOW, but may become eligible when the application:
+
+- clearly discloses the intended processing;
+- captures the required explicit/active/revocable/context-bounded consent or authorization;
+- limits use to the disclosed service purpose;
+- satisfies third-party API disclosure/authorization requirements where applicable;
+- retains auditable consent + scope evidence;
+- honors revocation/deletion obligations.
+
+### Historical indexes / embeddings / datasets
+
+MVP1 does not require Telegram embeddings or a broad Telegram AI index.
+
+Do not build Telegram scraping, broad historical AI indexing, training/fine-tuning, benchmark/validation datasets or embeddings merely because a scoped inference call can be allowed. Those are separate purposes and remain DENY until their own permission/consent basis is proven and independently reviewed.
 
 ## Gmail
 
-Gmail source policy may allow AI (Workers AI, Gmail-source-local only). Cloudflare Workers AI
-Customer Content is documented as not used to train models or improve services without explicit
-consent (as of the TDD's verification date) — this must be re-verified at G0/ADR-009 before
-production Gmail content is sent to AI, along with the selected model's own license/provider terms.
+Gmail AI may be allowed when Gmail source policy, model/provider terms, retention/privacy settings and the selected provider configuration permit it.
 
-## MVP1 AI boundary (binding — see INV-03/04/05/26)
+Gmail provenance does not bypass the same fail-closed policy discipline; it is simply a different source-policy branch.
 
-The only AI input type in MVP1 is `GmailEvidenceBundle`, built from Gmail source evidence **before**
-cross-channel topic resolution. It must not contain Topic/Stream/Person shared-state,
-cross-channel participants/counts/aggregates, or any Telegram-derived value or assignment. After
-the deterministic cross-channel resolver combines Gmail and Telegram into a Topic/Decision, that
-combined state is never sent back to AI in MVP1. A combined-topic AI summary/recommendation is
-explicitly POST-MVP and requires its own source-policy/compliance review.
+## Mixed-source AI boundary
 
-## Composition rule
+Mixed Gmail + Telegram state is **not automatically denied** merely because Telegram contributed.
 
-`ai_safe(value) = all provenance ancestors are AI_ALLOW`. Unknown/mixed ancestry = `AI_DENY`. See
-`docs/architecture/TDD.md` §7.2 for the mandatory automated test this rule implies.
+Before any mixed context is submitted to AI, every submitted source-derived value must pass provenance-aware policy evaluation for the exact purpose/context.
+
+```text
+ai_safe_for(context, purpose) =
+  every submitted source-derived provenance ancestor is currently ALLOW
+  for this purpose/context and all scopes are compatible
+```
+
+Any `DENY`, unknown ancestry, expired/revoked consent, incompatible scope or unresolved provenance denies the whole AI call.
+
+## AI input contract
+
+The old statement “MVP1 AI accepts exactly one input type: `GmailEvidenceBundle` forever” is superseded as architecture policy.
+
+`GmailEvidenceBundle` remains a safe current runtime subset until a separately reviewed gate changes code.
+
+The target boundary is a **policy-authorized evidence/context bundle** that can only be constructed after SourcePolicy + provenance validation. It must not accept arbitrary `Topic`, `Stream`, `Person`, generic serializable objects, source messages or unverified derived values.
+
+This document does not itself enable a new runtime path.
+
+## Provenance rule
+
+Every content-derived value/assignment retains source provenance regardless of datatype.
+
+Telegram provenance now means: “evaluate Telegram policy for this AI call”, not “permanent unconditional deny”.
+
+Never strip or relabel provenance to manufacture `ALLOW`.
+
+## Consent / authorization evidence
+
+A future Telegram AI `ALLOW` path must retain machine-checkable evidence sufficient to prove the active scope, conceptually including:
+
+- subject(s);
+- ingress mode;
+- exact chat/content/context scope;
+- purpose;
+- grant time;
+- continued-consent / expiry / revocation state;
+- provider-terms snapshot reference;
+- provenance/evidence references.
+
+A global “Telegram AI enabled” toggle is not proof for unrelated chats or purposes.
+
+## Source content remains untrusted
+
+No source message, email, Telegram update, bot payload or AI output may instruct the application to broaden policy, fabricate consent, remove provenance or bypass authorization.
